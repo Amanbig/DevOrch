@@ -242,8 +242,8 @@ class Agent:
                 args_str = json.dumps(call.arguments)
                 console.print(f"[bold magenta]🛠️  Tool Call:[/bold magenta] {call.name}({args_str})")
 
-                with console.status(f"[bold cyan]Executing {call.name}...", spinner="bouncingBar"):
-                    result = self.executor.execute(call.name, call.arguments)
+                # Execute without spinner - the spinner blocks input for permission prompts
+                result = self.executor.execute(call.name, call.arguments)
 
                 # Show a snippet of the result
                 snippet = str(result)[:200] + ("..." if len(str(result)) > 200 else "")

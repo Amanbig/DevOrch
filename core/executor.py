@@ -69,25 +69,39 @@ class ToolExecutor(Executor):
             console.print(f"  [dim]{reason}[/dim]")
 
         console.print()
-        console.print("  [dim]1.[/dim] Allow once")
-        console.print("  [dim]2.[/dim] Allow for this session")
-        console.print("  [dim]3.[/dim] Always allow (save to config)")
-        console.print("  [dim]4.[/dim] Deny")
+        console.print("  [green]y[/green]/[dim]1[/dim] - Allow once")
+        console.print("  [green]a[/green]/[dim]2[/dim] - Allow for this session")
+        console.print("  [green]s[/green]/[dim]3[/dim] - Always allow (save to config)")
+        console.print("  [red]n[/red]/[dim]4[/dim] - Deny")
         console.print()
 
         choice = Prompt.ask(
-            "Choose",
-            choices=["1", "2", "3", "4", "y", "n"],
-            default="1"
-        )
+            "[green]y[/green]/a/s/[red]n[/red]",
+            default="y"
+        ).lower().strip()
 
         choice_map = {
+            # Allow once
             "1": PermissionChoice.ALLOW_ONCE,
             "y": PermissionChoice.ALLOW_ONCE,
+            "yes": PermissionChoice.ALLOW_ONCE,
+            "allow": PermissionChoice.ALLOW_ONCE,
+            "": PermissionChoice.ALLOW_ONCE,
+            # Allow session
             "2": PermissionChoice.ALLOW_SESSION,
+            "a": PermissionChoice.ALLOW_SESSION,
+            "session": PermissionChoice.ALLOW_SESSION,
+            # Always allow
             "3": PermissionChoice.ALLOW_ALWAYS,
+            "s": PermissionChoice.ALLOW_ALWAYS,
+            "save": PermissionChoice.ALLOW_ALWAYS,
+            "always": PermissionChoice.ALLOW_ALWAYS,
+            # Deny
             "4": PermissionChoice.DENY,
             "n": PermissionChoice.DENY,
+            "no": PermissionChoice.DENY,
+            "deny": PermissionChoice.DENY,
+            "d": PermissionChoice.DENY,
         }
 
         return choice_map.get(choice, PermissionChoice.DENY)
