@@ -73,12 +73,26 @@ class MistralProvider(LLMProvider):
         tools: Optional[list] = None,
         stream: bool = False,
     ) -> LLMResponse:
-        # Format messages
+        # Format messages for Mistral API
         formatted_messages = []
         for msg in messages:
-            formatted_msg = {"role": msg.role, "content": msg.content}
             if msg.role == "tool":
-                formatted_msg["tool_call_id"] = getattr(msg, 'tool_call_id', msg.name)
+                # Mistral requires tool results with specific format
+                formatted_msg = {
+                    "role": "tool",
+                    "content": msg.content,
+                    "tool_call_id": msg.tool_call_id or msg.name,
+                    "name": msg.name,
+                }
+            elif msg.role == "assistant" and hasattr(msg, 'metadata') and msg.metadata and msg.metadata.get('tool_calls'):
+                # Preserve tool_calls in assistant messages
+                formatted_msg = {
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": msg.metadata['tool_calls']
+                }
+            else:
+                formatted_msg = {"role": msg.role, "content": msg.content}
             formatted_messages.append(formatted_msg)
 
         # Format tools

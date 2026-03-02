@@ -220,7 +220,23 @@ class Agent:
                     tools=tools_for_call,
                 )
 
-            # Save assistant message
+            # Save assistant message (include tool_calls in metadata for providers like Mistral)
+            if response.tool_calls:
+                # Store tool_calls info in metadata for conversation reconstruction
+                tool_calls_data = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments)
+                        }
+                    }
+                    for tc in response.tool_calls
+                ]
+                response.message.metadata = response.message.metadata or {}
+                response.message.metadata["tool_calls"] = tool_calls_data
+
             self._save_message(response.message)
 
             # In plan mode, check if this is a plan response
