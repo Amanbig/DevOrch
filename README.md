@@ -2,14 +2,19 @@
 
 A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
 
+![DevPilot Banner](https://img.shields.io/badge/DevPilot-AI%20Coding%20Assistant-blue)
+![Python](https://img.shields.io/badge/Python-3.10+-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
 ## Features
 
 - **Multi-Provider Support** - OpenAI, Anthropic, Google Gemini, Groq, Mistral, Together AI, OpenRouter, Ollama (local), and LM Studio
 - **Secure API Key Storage** - Uses system keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service)
 - **Session Persistence** - SQLite-based chat history with resume capability
 - **Tool Execution** - Shell commands, file operations, search, grep, and code editing
-- **Permission System** - Configurable allow/deny rules for tool execution
-- **Interactive Commands** - Full support for interactive CLI tools (npx, npm init, etc.)
+- **Interactive UI** - Arrow-key navigation for selections, syntax-highlighted output
+- **Permission System** - Configurable allow/deny rules with interactive prompts
+- **Interactive Commands** - Full support for interactive CLI tools (npx, npm create, etc.)
 - **Multiple Modes** - Plan mode, Auto mode, and Ask mode
 
 ## Installation
@@ -21,15 +26,12 @@ cd DevPilot
 
 # Install with pip
 pip install -e .
-
-# Or install dependencies directly
-pip install -r requirements.txt
 ```
 
 ## Quick Start
 
 ```bash
-# Start DevPilot (first run will prompt for provider setup)
+# Start DevPilot (first run will show interactive setup)
 devpilot
 
 # Or specify a provider
@@ -37,6 +39,27 @@ devpilot -p openai
 devpilot -p anthropic
 devpilot -p groq
 devpilot -p local  # Ollama
+```
+
+## Interactive Onboarding
+
+On first run, DevPilot guides you through setup with an interactive UI:
+
+```
+╭─────────────────────────────────────────────────╮
+│ Welcome to DevPilot!                            │
+│                                                 │
+│ Let's set up your AI provider to get started.  │
+╰─────────────────────────────────────────────────╯
+
+? Select your AI provider: (Use arrow keys)
+ ❯ OpenAI (GPT-4o, GPT-4, etc.)
+   Anthropic (Claude Sonnet, Opus, etc.)
+   Google Gemini (Gemini Pro, Flash, etc.)
+   Groq (Ultra-fast Llama, Mixtral)
+   ──────────────
+   Ollama - Local (No API key needed)
+   LM Studio - Local (No API key needed)
 ```
 
 ## Usage
@@ -55,18 +78,15 @@ devpilot --resume abc123    # Resume a previous session
 | Command | Description |
 |---------|-------------|
 | `/help` | Show available commands |
-| `/mode` | Show or change mode (plan/auto/ask) |
-| `/plan` | Switch to plan mode |
-| `/auto` | Switch to auto mode |
-| `/ask` | Switch to ask mode (default) |
-| `/clear` | Clear conversation history |
-| `/status` | Show current provider, model, and mode |
-| `/models` | List available models |
-| `/model <name>` | Switch to a different model |
+| `/mode` | Interactive mode selection (plan/auto/ask) |
+| `/model` | Interactive model selection |
+| `/provider` | Interactive provider switching |
+| `/models` | List available models for current provider |
 | `/providers` | List all available providers |
-| `/provider <name>` | Switch to a different provider |
+| `/status` | Show current provider, model, and mode |
 | `/session` | Show current session info |
 | `/history` | Show conversation history |
+| `/clear` | Clear conversation history |
 | `/compact` | Summarize and compact history |
 | `/save` | Save conversation to file |
 | `/undo` | Undo last message |
@@ -77,12 +97,53 @@ devpilot --resume abc123    # Resume a previous session
 - **AUTO** - Executes tools automatically (dangerous commands still blocked)
 - **PLAN** - Shows plan before executing, asks for approval
 
+Switch modes interactively:
+```
+? Select mode: (Use arrow keys)
+ ❯ PLAN - Shows plan before executing, asks for approval
+   AUTO - Executes tools automatically (trusted mode)
+   ASK - Asks before each tool execution (default)
+```
+
+## Tool Permissions
+
+DevPilot uses an interactive permission system with arrow-key navigation:
+
+```
+╭─────────── Permission Required ───────────╮
+│ Tool: shell                               │
+│ Command: npm create vite@latest           │
+╰───────────────────────────────────────────╯
+
+? Choose an action: (Use arrow keys)
+ ❯ Allow once
+   Allow for this session
+   Always allow (save to config)
+   Deny
+```
+
+## Tool Output Display
+
+Tool calls and results are displayed with syntax highlighting:
+
+```
+╭─────── Tool Call (shell) ───────╮
+│ npm create vite@latest my-app   │
+╰─────────────────────────────────╯
+
+╭─────────── Result ──────────────╮
+│ STDOUT:                         │
+│ Scaffolding project in ./my-app │
+│ Done!                           │
+╰─────────────────────────────────╯
+```
+
 ## Configuration
 
 ### API Keys
 
 ```bash
-# Store API key securely in system keychain
+# Store API key securely (also sets as default provider)
 devpilot set-key openai
 devpilot set-key anthropic
 devpilot set-key groq
@@ -136,32 +197,13 @@ devpilot permissions reset                   # Reset to defaults
 
 DevPilot has access to these tools:
 
-- **shell** - Execute shell commands (supports interactive commands)
-- **filesystem** - Read, write, and list files
-- **search** - Find files by name patterns
-- **grep** - Search for text patterns in files
-- **edit** - Make targeted edits to files
-
-## Tool Permissions
-
-When DevPilot wants to use a tool, you'll see a prompt:
-
-```
-DevPilot wants to use shell:
-  npx create-next-app@latest
-
-  y/1 - Allow once
-  a/2 - Allow for this session
-  s/3 - Always allow (save to config)
-  n/4 - Deny
-
-y/a/s/n [y]:
-```
-
-- Press **Enter** or **y** to allow once
-- Type **a** to allow for the current session
-- Type **s** to always allow (saves to config)
-- Type **n** to deny
+| Tool | Description |
+|------|-------------|
+| **shell** | Execute shell commands (supports interactive commands like `npm create`) |
+| **filesystem** | Read, write, and list files |
+| **search** | Find files by name patterns (glob) |
+| **grep** | Search for text patterns in files |
+| **edit** | Make targeted edits to existing files |
 
 ## Config Files
 
@@ -169,15 +211,19 @@ DevPilot stores configuration in `~/.devpilot/`:
 
 ```
 ~/.devpilot/
-  config.yaml       # Provider settings and default models
-  permissions.yaml  # Tool permission rules
-  sessions.db       # SQLite database for chat history
+├── config.yaml       # Provider settings and default models
+├── permissions.yaml  # Tool permission rules
+└── sessions.db       # SQLite database for chat history
 ```
 
 ## Requirements
 
 - Python 3.10+
-- Dependencies: typer, rich, pydantic, openai, anthropic, google-generativeai, httpx, keyring, prompt_toolkit, pyyaml
+- Dependencies:
+  - typer, rich, pydantic
+  - openai, anthropic, google-generativeai
+  - httpx, keyring, prompt_toolkit
+  - questionary, pyyaml
 
 ## License
 
