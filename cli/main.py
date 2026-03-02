@@ -8,6 +8,7 @@ from core.executor import ToolExecutor
 from core.sessions import SessionManager, DEFAULT_MESSAGE_LIMIT
 from providers import get_provider, PROVIDERS
 from config.settings import Settings, set_api_key, keyring_available, save_config
+from config.permissions import get_permissions, reset_permissions, PermissionLevel, PERMISSIONS_FILE
 from utils.logger import get_console, print_error, print_success, print_panel, print_warning, print_info
 
 from tools.shell import ShellTool
@@ -60,6 +61,9 @@ app = typer.Typer(
 )
 sessions_app = typer.Typer(help="Manage chat sessions")
 app.add_typer(sessions_app, name="sessions")
+
+permissions_app = typer.Typer(help="Manage tool permissions")
+app.add_typer(permissions_app, name="permissions")
 
 console = get_console()
 
@@ -294,11 +298,12 @@ def start_repl(
                 cmd = user_input[1:].strip().lower()
                 if cmd == "help":
                     console.print("\n[bold]Commands:[/bold]")
-                    console.print("  /help     - Show this help")
-                    console.print("  /clear    - Clear conversation history")
-                    console.print("  /session  - Show current session info")
-                    console.print("  /config   - Show configuration")
-                    console.print("  exit      - Exit DevPilot\n")
+                    console.print("  /help        - Show this help")
+                    console.print("  /clear       - Clear conversation history")
+                    console.print("  /session     - Show current session info")
+                    console.print("  /config      - Show configuration")
+                    console.print("  /permissions - Show permission settings")
+                    console.print("  exit         - Exit DevPilot\n")
                     continue
                 elif cmd == "clear":
                     agent.history = []
@@ -311,6 +316,15 @@ def start_repl(
                 elif cmd == "config":
                     print_info(f"Provider: {llm.name}")
                     print_info(f"Model: {llm.model}")
+                    continue
+                elif cmd == "permissions":
+                    perms = get_permissions()
+                    console.print("\n[bold]Tool Permissions:[/bold]")
+                    for tool_name, perm in perms.tools.items():
+                        console.print(f"  {tool_name}: {perm.level.value}")
+                    if perms.session_allowed:
+                        console.print(f"\n[green]Session allowed:[/green] {len(perms.session_allowed)} patterns")
+                    console.print()
                     continue
 
             result = agent.run(user_input, max_iterations=15)
@@ -601,6 +615,110 @@ def sessions_clear(
             deleted += 1
 
     print_success(f"Deleted {deleted} sessions.")
+
+
+# Permission commands
+@permissions_app.command("list")
+def permissions_list():
+    """
+    Show current permission settings.
+    """
+    permissions = get_permissions()
+
+    console.print("\n[bold]Tool Permissions[/bold]\n")
+
+    for tool_name, perm in permissions.tools.items():
+        level_color = {
+            PermissionLevel.ALLOW: "green",
+            PermissionLevel.DENY: "red",
+            PermissionLevel.ASK: "yellow"
+        }.get(perm.level, "white")
+
+        console.print(f"[bold]{tool_name}[/bold]: [{level_color}]{perm.level.value}[/{level_color}]")
+
+        if perm.allowed_patterns:
+            console.print(f"  [green]Allowed patterns:[/green] {len(perm.allowed_patterns)}")
+            for p in perm.allowed_patterns[:5]:
+                console.print(f"    - {p}")
+            if len(perm.allowed_patterns) > 5:
+                console.print(f"    [dim]... and {len(perm.allowed_patterns) - 5} more[/dim]")
+
+        if perm.denied_patterns:
+            console.print(f"  [red]Denied patterns:[/red] {len(perm.denied_patterns)}")
+            for p in perm.denied_patterns[:3]:
+                console.print(f"    - {p}")
+
+    # Session permissions
+    if permissions.session_allowed or permissions.session_denied:
+        console.print("\n[bold]Session Permissions (temporary)[/bold]")
+        if permissions.session_allowed:
+            console.print(f"  [green]Allowed:[/green] {', '.join(permissions.session_allowed)}")
+        if permissions.session_denied:
+            console.print(f"  [red]Denied:[/red] {', '.join(permissions.session_denied)}")
+
+    console.print(f"\n[dim]Config file: {PERMISSIONS_FILE}[/dim]")
+
+
+@permissions_app.command("allow")
+def permissions_allow(
+    tool: str = typer.Argument(..., help="Tool name (shell, filesystem)"),
+    pattern: str = typer.Argument(..., help="Command pattern to allow (e.g., 'git *')")
+):
+    """
+    Add a pattern to the allowed list for a tool.
+    """
+    permissions = get_permissions()
+    permissions.add_allowed_pattern(tool, pattern, session_only=False)
+    print_success(f"Added to allowed patterns for {tool}: {pattern}")
+
+
+@permissions_app.command("deny")
+def permissions_deny(
+    tool: str = typer.Argument(..., help="Tool name (shell, filesystem)"),
+    pattern: str = typer.Argument(..., help="Command pattern to deny")
+):
+    """
+    Add a pattern to the denied list for a tool.
+    """
+    permissions = get_permissions()
+    permissions.add_denied_pattern(tool, pattern, session_only=False)
+    print_success(f"Added to denied patterns for {tool}: {pattern}")
+
+
+@permissions_app.command("set")
+def permissions_set(
+    tool: str = typer.Argument(..., help="Tool name (shell, filesystem, search)"),
+    level: str = typer.Argument(..., help="Permission level (allow, deny, ask)")
+):
+    """
+    Set the default permission level for a tool.
+    """
+    try:
+        perm_level = PermissionLevel(level.lower())
+    except ValueError:
+        print_error(f"Invalid level: {level}. Use: allow, deny, or ask")
+        raise typer.Exit(1)
+
+    permissions = get_permissions()
+    permissions.set_tool_permission(tool, perm_level)
+    print_success(f"Set {tool} permission to: {perm_level.value}")
+
+
+@permissions_app.command("reset")
+def permissions_reset(
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation")
+):
+    """
+    Reset all permissions to defaults.
+    """
+    if not force:
+        confirm = typer.confirm("Reset all permissions to defaults?")
+        if not confirm:
+            print_warning("Cancelled.")
+            return
+
+    reset_permissions()
+    print_success("Permissions reset to defaults.")
 
 
 def main():
