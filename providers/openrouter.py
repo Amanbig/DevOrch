@@ -19,14 +19,14 @@ class OpenRouterProvider(LLMProvider):
     name = "openrouter"
 
     DEFAULT_MODELS = [
+        "anthropic/claude-sonnet-4",
         "anthropic/claude-3.5-sonnet",
-        "anthropic/claude-3-opus",
         "openai/gpt-4o",
-        "openai/gpt-4-turbo",
-        "meta-llama/llama-3.1-405b-instruct",
-        "meta-llama/llama-3.1-70b-instruct",
-        "mistralai/mistral-large",
-        "google/gemini-pro-1.5",
+        "openai/gpt-4o-mini",
+        "meta-llama/llama-3.3-70b-instruct",
+        "google/gemini-2.0-flash-001",
+        "mistralai/mistral-large-2411",
+        "deepseek/deepseek-chat-v3-0324",
     ]
 
     BASE_URL = "https://openrouter.ai/api/v1"
@@ -64,15 +64,28 @@ class OpenRouterProvider(LLMProvider):
 
             models = []
             for model in data.get("data", []):
+                model_id = model.get("id", "")
+                # Skip models that don't support chat or are deprecated
+                architecture = model.get("architecture", {})
+                if architecture.get("modality") == "text->image":
+                    continue  # Skip image generation models
+
                 models.append(ModelInfo(
-                    id=model.get("id"),
-                    name=model.get("name", model.get("id")),
+                    id=model_id,
+                    name=model.get("name", model_id),
                     context_length=model.get("context_length"),
                     description=model.get("description"),
                 ))
 
-            # Sort by name
-            models.sort(key=lambda m: m.name)
+            # Sort by name, prioritizing well-known providers
+            def sort_key(m):
+                priority_prefixes = ["openai/", "anthropic/", "google/", "meta-llama/", "mistralai/", "deepseek/"]
+                for i, prefix in enumerate(priority_prefixes):
+                    if m.id.startswith(prefix):
+                        return (i, m.name)
+                return (len(priority_prefixes), m.name)
+
+            models.sort(key=sort_key)
             return models if models else [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
 
         except Exception:
@@ -132,6 +145,15 @@ class OpenRouterProvider(LLMProvider):
             headers=self._get_headers(),
             json=payload
         )
+
+        # Handle errors with better messages
+        if response.status_code == 404:
+            raise Exception(f"Model '{self.model}' not found on OpenRouter. Try /model to select a different model.")
+        elif response.status_code == 401:
+            raise Exception("Invalid OpenRouter API key. Please check your API key.")
+        elif response.status_code == 402:
+            raise Exception("OpenRouter credits exhausted. Please add credits to your account.")
+
         response.raise_for_status()
         data = response.json()
 
