@@ -221,7 +221,7 @@ DevPilot stores configuration in `~/.devpilot/`:
 - Python 3.10+
 - Dependencies:
   - typer, rich, pydantic
-  - openai, anthropic, google-generativeai
+  - openai, anthropic, google-genai
   - httpx, keyring, prompt_toolkit
   - questionary, pyyaml
 

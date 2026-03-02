@@ -28,7 +28,7 @@ from core.executor import ToolExecutor
 from core.sessions import SessionManager, DEFAULT_MESSAGE_LIMIT
 from core.modes import ModeManager, AgentMode
 from providers import get_provider, PROVIDERS, PROVIDER_INFO, PROVIDER_ENV_VARS
-from config.settings import Settings, ProviderConfig, set_api_key, keyring_available, save_config
+from config.settings import Settings, ProviderConfig, set_api_key, keyring_available, save_config, CONFIG_FILE
 from config.permissions import get_permissions, reset_permissions, PermissionLevel, PERMISSIONS_FILE
 from utils.logger import get_console, print_error, print_success, print_panel, print_warning, print_info
 
@@ -79,11 +79,20 @@ SLASH_COMMANDS = {
     "/status": "Show current provider, model, and mode",
 }
 
-# Style for prompt_toolkit
+# Style for prompt_toolkit (including completion menu)
 PROMPT_STYLE = Style.from_dict({
     "prompt": "#00aa00 bold",
-    "command": "#0088ff",
+    "command": "#00aaff bold",
     "description": "#888888",
+    # Completion menu styling
+    "completion-menu": "bg:#1a1a2e",
+    "completion-menu.completion": "bg:#1a1a2e #e0e0e0",
+    "completion-menu.completion.current": "bg:#0066cc #ffffff bold",
+    "completion-menu.meta": "bg:#1a1a2e #666666 italic",
+    "completion-menu.meta.current": "bg:#0066cc #cccccc italic",
+    # Scrollbar
+    "scrollbar.background": "bg:#333344",
+    "scrollbar.button": "bg:#0066cc",
 })
 
 
@@ -174,7 +183,14 @@ console = get_console()
 
 
 def has_any_provider_configured(settings: Settings) -> bool:
-    """Check if any provider is configured (has API key or is local/lmstudio with model)."""
+    """Check if any provider is configured (has API key or is local/lmstudio with model).
+
+    Also checks if config file exists - if not, we need onboarding even if keys exist in keyring.
+    """
+    # If config file doesn't exist, run onboarding (even if keys exist in keyring)
+    if not CONFIG_FILE.exists():
+        return False
+
     # Check if any API-based provider has a key configured (keyring or env var)
     for name in PROVIDERS.keys():
         if name not in ("local", "lmstudio"):
