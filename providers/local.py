@@ -126,9 +126,21 @@ class LocalProvider(LLMProvider):
         # Format messages (same as OpenAI)
         formatted_messages = []
         for msg in messages:
-            formatted_msg = {"role": msg.role, "content": msg.content}
             if msg.role == "tool":
-                formatted_msg["tool_call_id"] = msg.tool_call_id or msg.name
+                formatted_msg = {
+                    "role": "tool",
+                    "content": msg.content,
+                    "tool_call_id": msg.tool_call_id or msg.name,
+                }
+            elif msg.role == "assistant" and msg.metadata and msg.metadata.get("tool_calls"):
+                # Preserve tool_calls in assistant messages
+                formatted_msg = {
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": msg.metadata["tool_calls"]
+                }
+            else:
+                formatted_msg = {"role": msg.role, "content": msg.content}
             formatted_messages.append(formatted_msg)
 
         # Format tools (same as OpenAI)
