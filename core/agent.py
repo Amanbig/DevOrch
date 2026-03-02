@@ -73,73 +73,121 @@ class Agent:
         self._context_summary = summary
 
     def _display_tool_call(self, call: ToolCall):
-        """Display a tool call in a nice formatted panel."""
-        # Format arguments nicely
-        args_formatted = json.dumps(call.arguments, indent=2)
+        """Display a tool call in a compact, user-friendly format."""
+        args = call.arguments
 
-        # Create content with tool name and arguments
-        content = Text()
-        content.append(call.name, style="bold cyan")
-        content.append("\n")
-
-        # For shell commands, show the command prominently
-        if call.name == "shell" and "command" in call.arguments:
-            cmd = call.arguments["command"]
-            content.append("\n")
-            # Use syntax highlighting for shell commands
+        # Build a clean summary based on tool type
+        if call.name == "shell":
+            cmd = args.get("command", "")
             syntax = Syntax(cmd, "bash", theme="monokai", line_numbers=False, word_wrap=True)
             console.print(Panel(
                 syntax,
-                title=f"[bold magenta]Tool Call[/bold magenta] [dim]({call.name})[/dim]",
+                title=f"[bold magenta]Shell[/bold magenta]",
                 border_style="magenta",
                 padding=(0, 1)
             ))
+
+        elif call.name == "filesystem":
+            action = args.get("action", "")
+            path = args.get("path", "")
+            content = args.get("content", "")
+
+            if action == "write":
+                lines = content.count('\n') + 1 if content else 0
+                summary = f"[cyan]write[/cyan] {lines} lines to [bold]{path}[/bold]"
+            elif action == "read":
+                summary = f"[cyan]read[/cyan] [bold]{path}[/bold]"
+            elif action == "list":
+                summary = f"[cyan]list[/cyan] [bold]{path}[/bold]"
+            else:
+                summary = f"[cyan]{action}[/cyan] [bold]{path}[/bold]"
+
+            console.print(f"  [dim]>[/dim] {summary}")
+
+        elif call.name == "search":
+            pattern = args.get("pattern", "")
+            path = args.get("path", ".")
+            console.print(f"  [dim]>[/dim] [cyan]search[/cyan] [bold]{pattern}[/bold] in {path}")
+
+        elif call.name == "grep":
+            pattern = args.get("pattern", "")
+            path = args.get("path", ".")
+            console.print(f"  [dim]>[/dim] [cyan]grep[/cyan] [bold]{pattern}[/bold] in {path}")
+
+        elif call.name == "edit":
+            path = args.get("path", "")
+            console.print(f"  [dim]>[/dim] [cyan]edit[/cyan] [bold]{path}[/bold]")
+
+        elif call.name == "task":
+            # Task tool - don't show anything, the task panel will display
+            pass
+
         else:
-            # For other tools, show formatted JSON arguments
-            syntax = Syntax(args_formatted, "json", theme="monokai", line_numbers=False)
-            console.print(Panel(
-                syntax,
-                title=f"[bold magenta]Tool Call[/bold magenta] [dim]({call.name})[/dim]",
-                border_style="magenta",
-                padding=(0, 1)
-            ))
+            # Generic fallback - show tool name and brief args
+            brief_args = {k: (v[:50] + "..." if isinstance(v, str) and len(v) > 50 else v)
+                         for k, v in args.items()}
+            console.print(f"  [dim]>[/dim] [cyan]{call.name}[/cyan] {brief_args}")
 
     def _display_tool_result(self, tool_name: str, result: str):
-        """Display tool result in a nice formatted panel."""
+        """Display tool result in a compact, user-friendly format."""
         result_str = str(result)
 
-        # Truncate very long results
-        max_display = 500
-        if len(result_str) > max_display:
-            display_result = result_str[:max_display] + f"\n\n[dim]... ({len(result_str) - max_display} more characters)[/dim]"
-        else:
-            display_result = result_str
+        # Skip display for task tool (it shows its own panel)
+        if tool_name == "task":
+            return
 
-        # Check if result looks like code/output
-        if result_str.startswith("STDOUT:") or result_str.startswith("STDERR:"):
-            # Shell output - use syntax highlighting
+        # For filesystem writes, just show success
+        if "Successfully wrote" in result_str or "Successfully created" in result_str:
+            console.print(f"    [green]✓[/green] [dim]{result_str}[/dim]")
+            return
+
+        # For successful file reads with long content, truncate
+        if tool_name == "filesystem" and len(result_str) > 200 and "Error" not in result_str:
+            lines = result_str.count('\n')
+            console.print(f"    [green]✓[/green] [dim]Read {lines} lines[/dim]")
+            return
+
+        # For search/grep results
+        if tool_name in ("search", "grep") and "Error" not in result_str:
+            matches = result_str.strip().split('\n')
+            count = len([m for m in matches if m.strip()])
+            if count > 5:
+                console.print(f"    [green]✓[/green] [dim]Found {count} matches[/dim]")
+                return
+
+        # Check for errors
+        if "Error:" in result_str or result_str.startswith("Error"):
             console.print(Panel(
-                Syntax(display_result, "text", theme="monokai", line_numbers=False, word_wrap=True),
-                title=f"[bold green]Result[/bold green]",
-                border_style="green",
-                padding=(0, 1)
-            ))
-        elif "Error:" in result_str:
-            # Error output
-            console.print(Panel(
-                Text(display_result, style="red"),
+                Text(result_str[:300], style="red"),
                 title=f"[bold red]Error[/bold red]",
                 border_style="red",
                 padding=(0, 1)
             ))
-        else:
-            # Normal result
+            return
+
+        # Shell output - show in panel
+        if result_str.startswith("STDOUT:") or result_str.startswith("STDERR:"):
+            # Truncate long output
+            max_display = 400
+            if len(result_str) > max_display:
+                display_result = result_str[:max_display] + f"\n[dim]... ({len(result_str) - max_display} more chars)[/dim]"
+            else:
+                display_result = result_str
+
             console.print(Panel(
-                display_result,
-                title=f"[bold green]Result[/bold green]",
+                Syntax(display_result, "text", theme="monokai", line_numbers=False, word_wrap=True),
+                title=f"[bold green]Output[/bold green]",
                 border_style="green",
                 padding=(0, 1)
             ))
+            return
+
+        # Brief result for simple operations
+        if len(result_str) < 100:
+            console.print(f"    [green]✓[/green] [dim]{result_str}[/dim]")
+        else:
+            # Truncate longer results
+            console.print(f"    [green]✓[/green] [dim]{result_str[:100]}...[/dim]")
 
     def _save_message(self, message: Message):
         """Save a message to history and session storage."""
