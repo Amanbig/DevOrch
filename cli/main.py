@@ -61,6 +61,7 @@ SLASH_COMMANDS = {
     "/history": "Show conversation history",
     "/undo": "Undo last message",
     "/save": "Save conversation to file",
+    "/status": "Show current provider, model, and mode",
 }
 
 # Style for prompt_toolkit
@@ -452,6 +453,14 @@ def start_repl(
                 elif cmd == "clear":
                     agent.history = []
                     print_success("Conversation cleared.")
+                    continue
+
+                elif cmd == "status":
+                    console.print(f"\n[bold]Status[/bold]")
+                    console.print(f"  [dim]Provider:[/dim] [cyan]{current_llm.name}[/cyan]")
+                    console.print(f"  [dim]Model:[/dim]    [cyan]{current_llm.model}[/cyan]")
+                    console.print(f"  [dim]Mode:[/dim]     {mode_manager.get_mode_display()}")
+                    console.print()
                     continue
 
                 elif cmd == "session":
