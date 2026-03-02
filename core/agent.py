@@ -157,13 +157,27 @@ class Agent:
             console.print(f"    [green]✓[/green] [dim]Read {lines} lines[/dim]")
             return
 
-        # For search/grep results
+        # For search/grep results (file search, not web search)
         if tool_name in ("search", "grep") and "Error" not in result_str:
             matches = result_str.strip().split('\n')
             count = len([m for m in matches if m.strip()])
             if count > 5:
                 console.print(f"    [green]✓[/green] [dim]Found {count} matches[/dim]")
                 return
+
+        # For websearch results, show them nicely
+        if tool_name == "websearch" and "Search results for:" in result_str:
+            # Show a brief summary, full results go to the AI
+            lines = result_str.strip().split('\n')
+            result_count = sum(1 for line in lines if line.strip().startswith(('1.', '2.', '3.', '4.', '5.')))
+            console.print(f"    [green]✓[/green] [dim]Found {result_count} web results[/dim]")
+            return
+
+        # For webfetch results
+        if tool_name == "webfetch" and "Content from" in result_str:
+            lines = result_str.count('\n')
+            console.print(f"    [green]✓[/green] [dim]Fetched page ({lines} lines)[/dim]")
+            return
 
         # Check for errors
         if "Error:" in result_str or result_str.startswith("Error"):
