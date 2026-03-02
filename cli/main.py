@@ -391,7 +391,49 @@ def start_repl(
                     for slash_cmd, desc in SLASH_COMMANDS.items():
                         console.print(f"  [cyan]{slash_cmd:<14}[/cyan] - {desc}")
                     console.print(f"  [cyan]{'exit':<14}[/cyan] - Exit DevPilot")
+                    console.print("\n[bold]Modes:[/bold]")
+                    console.print("  [yellow]PLAN[/yellow] - Shows plan before executing, asks for approval")
+                    console.print("  [green]AUTO[/green] - Executes tools automatically (trusted mode)")
+                    console.print("  [blue]ASK[/blue]  - Asks before each tool execution (default)")
                     console.print("\n[dim]Tip: Type / and use Tab for autocomplete[/dim]\n")
+                    continue
+
+                elif cmd == "mode":
+                    if cmd_arg:
+                        mode_name = cmd_arg.lower()
+                        if mode_name in ("plan", "auto", "ask"):
+                            mode_manager.mode = AgentMode(mode_name)
+                            print_success(f"Switched to {mode_name.upper()} mode")
+                            console.print(f"  [dim]{mode_manager.get_mode_description()}[/dim]")
+                        else:
+                            print_error(f"Unknown mode: {mode_name}")
+                            print_info("Available modes: plan, auto, ask")
+                    else:
+                        console.print(f"\n[bold]Current mode:[/bold] {mode_manager.get_mode_display()}")
+                        console.print(f"  {mode_manager.get_mode_description()}")
+                        console.print("\n[bold]Available modes:[/bold]")
+                        console.print("  [yellow]plan[/yellow] - Shows plan before executing, asks for approval")
+                        console.print("  [green]auto[/green] - Executes tools automatically (trusted mode)")
+                        console.print("  [blue]ask[/blue]  - Asks before each tool execution (default)")
+                        console.print("\n[dim]Usage: /mode <plan|auto|ask>[/dim]\n")
+                    continue
+
+                elif cmd == "plan":
+                    mode_manager.mode = AgentMode.PLAN
+                    print_success("Switched to PLAN mode")
+                    console.print("  [dim]I'll show you the plan before executing anything[/dim]")
+                    continue
+
+                elif cmd == "auto":
+                    mode_manager.mode = AgentMode.AUTO
+                    print_success("Switched to AUTO mode")
+                    console.print("  [dim]I'll execute tools automatically (dangerous commands still blocked)[/dim]")
+                    continue
+
+                elif cmd == "ask":
+                    mode_manager.mode = AgentMode.ASK
+                    print_success("Switched to ASK mode")
+                    console.print("  [dim]I'll ask before each tool execution[/dim]")
                     continue
 
                 elif cmd == "clear":
@@ -405,6 +447,7 @@ def start_repl(
                     print_info(f"Messages: {len(agent.history)}")
                     print_info(f"Provider: {current_llm.name}")
                     print_info(f"Model: {current_llm.model}")
+                    console.print(f"  [dim]Mode:[/dim] {mode_manager.get_mode_display()}")
                     console.print()
                     continue
 
