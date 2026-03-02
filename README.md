@@ -16,8 +16,8 @@ A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/devpilot.git
-cd devpilot
+git clone https://github.com/Amanbig/DevPilot.git
+cd DevPilot
 
 # Install with pip
 pip install -e .
