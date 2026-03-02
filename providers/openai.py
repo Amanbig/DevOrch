@@ -3,14 +3,44 @@ from typing import List, Optional
 from openai import OpenAI
 
 from schemas.message import Message, LLMResponse, ToolCall
-from providers.base import LLMProvider
+from providers.base import LLMProvider, ModelInfo
+
 
 class OpenAIProvider(LLMProvider):
     name = "openai"
 
+    DEFAULT_MODELS = [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4-turbo",
+        "gpt-4",
+        "gpt-3.5-turbo",
+        "o1-preview",
+        "o1-mini",
+    ]
+
     def __init__(self, model: str = "gpt-4o", api_key: Optional[str] = None):
         self.client = OpenAI(api_key=api_key)
         self.model = model
+
+    def list_models(self) -> List[ModelInfo]:
+        """Fetch available models from OpenAI API."""
+        try:
+            response = self.client.models.list()
+            models = []
+            # Filter to chat models
+            chat_prefixes = ('gpt-4', 'gpt-3.5', 'o1')
+            for model in response.data:
+                if any(model.id.startswith(p) for p in chat_prefixes):
+                    models.append(ModelInfo(
+                        id=model.id,
+                        name=model.id,
+                    ))
+            # Sort by name
+            models.sort(key=lambda m: m.id)
+            return models if models else [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
+        except Exception:
+            return [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
 
     def generate(
         self,
