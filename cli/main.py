@@ -702,6 +702,56 @@ def start_repl(
                             print_error(f"Unknown provider: {new_provider}")
                             console.print("[dim]Use /providers to see available providers[/dim]")
                         else:
+                            # Check if provider needs API key and doesn't have one
+                            needs_key = new_provider not in ("local", "lmstudio")
+                            has_key = bool(current_settings.get_api_key(new_provider))
+
+                            if needs_key and not has_key:
+                                # Prompt for API key
+                                env_var = PROVIDER_ENV_VARS.get(new_provider, f"{new_provider.upper()}_API_KEY")
+                                console.print(f"\n[bold]Setting up {new_provider}[/bold]")
+                                console.print(f"[dim]You can also set {env_var} environment variable[/dim]\n")
+
+                                try:
+                                    api_key = typer.prompt(f"Enter your {new_provider} API key", hide_input=True)
+                                    if api_key.strip():
+                                        # Store in keyring
+                                        if keyring_available():
+                                            set_api_key(new_provider, api_key.strip())
+                                            print_success("API key stored in keychain!")
+
+                                        # Update settings
+                                        if new_provider not in current_settings.providers:
+                                            current_settings.providers[new_provider] = ProviderConfig()
+                                        current_settings.providers[new_provider].api_key = api_key.strip()
+
+                                        # Offer model selection
+                                        try:
+                                            temp_llm = get_provider(new_provider, api_key=api_key.strip())
+                                            models = temp_llm.list_models()
+                                            if models:
+                                                console.print("\n[bold]Available models:[/bold]")
+                                                for i, m in enumerate(models[:8], 1):
+                                                    console.print(f"  {i}. [cyan]{m.id}[/cyan]")
+                                                console.print()
+                                                model_choice = typer.prompt("Select model (number or name)", default="1")
+                                                try:
+                                                    idx = int(model_choice) - 1
+                                                    if 0 <= idx < len(models):
+                                                        current_settings.providers[new_provider].default_model = models[idx].id
+                                                    else:
+                                                        current_settings.providers[new_provider].default_model = model_choice.strip()
+                                                except ValueError:
+                                                    current_settings.providers[new_provider].default_model = model_choice.strip()
+                                        except Exception:
+                                            pass  # Model selection is optional
+                                    else:
+                                        print_error("API key cannot be empty.")
+                                        continue
+                                except (KeyboardInterrupt, EOFError):
+                                    console.print("\nCancelled.")
+                                    continue
+
                             try:
                                 new_llm = create_provider(new_provider, None, current_settings)
                                 current_llm = new_llm
