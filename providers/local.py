@@ -27,17 +27,42 @@ class LocalProvider(LLMProvider):
 
     def __init__(
         self,
-        model: str = "llama3",
+        model: Optional[str] = None,
         base_url: str = "http://localhost:11434/v1",
         api_key: Optional[str] = None
     ):
+        self.base_url = base_url
+
         # Ollama's OpenAI-compatible endpoint
         self.client = OpenAI(
             base_url=base_url,
             api_key=api_key or "ollama"  # Placeholder, Ollama ignores this
         )
-        self.model = model
-        self.base_url = base_url
+
+        # Auto-detect model if not specified
+        if model:
+            self.model = model
+        else:
+            self.model = self._detect_default_model()
+
+    def _detect_default_model(self) -> str:
+        """Auto-detect the first available model from Ollama."""
+        try:
+            ollama_base = self.base_url.replace("/v1", "")
+            response = httpx.get(f"{ollama_base}/api/tags", timeout=5.0)
+            response.raise_for_status()
+            data = response.json()
+
+            models = data.get("models", [])
+            if models:
+                # Return the first available model
+                return models[0].get("name", "llama3")
+
+        except Exception:
+            pass
+
+        # Fallback to first default model
+        return self.DEFAULT_MODELS[0]
 
     def list_models(self) -> List[ModelInfo]:
         """Fetch models from local Ollama instance."""

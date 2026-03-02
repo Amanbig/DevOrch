@@ -511,7 +511,19 @@ def start_repl(
                 elif cmd == "model":
                     if cmd_arg:
                         try:
-                            new_llm = get_provider(current_llm.name, model=cmd_arg, api_key=current_settings.get_api_key(current_llm.name))
+                            # Build kwargs for provider (include base_url for local)
+                            provider_kwargs = {}
+                            if current_llm.name == "local":
+                                base_url = current_settings.get_base_url(current_llm.name)
+                                if base_url:
+                                    provider_kwargs["base_url"] = base_url
+
+                            new_llm = get_provider(
+                                current_llm.name,
+                                model=cmd_arg,
+                                api_key=current_settings.get_api_key(current_llm.name),
+                                **provider_kwargs
+                            )
                             current_llm = new_llm
                             agent.provider = new_llm
                             print_success(f"Switched to model: {cmd_arg}")
