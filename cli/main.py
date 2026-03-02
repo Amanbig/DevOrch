@@ -654,10 +654,13 @@ def start_repl(
                                 if base_url:
                                     provider_kwargs["base_url"] = base_url
 
+                            # Get API key - prefer current provider's key, then settings
+                            api_key = getattr(current_llm, 'api_key', None) or current_settings.get_api_key(current_llm.name)
+
                             new_llm = get_provider(
                                 current_llm.name,
                                 model=cmd_arg,
-                                api_key=current_settings.get_api_key(current_llm.name),
+                                api_key=api_key,
                                 **provider_kwargs
                             )
                             current_llm = new_llm
@@ -706,6 +709,9 @@ def start_repl(
                             needs_key = new_provider not in ("local", "lmstudio")
                             has_key = bool(current_settings.get_api_key(new_provider))
 
+                            entered_key = None
+                            selected_model = None
+
                             if needs_key and not has_key:
                                 # Prompt for API key
                                 env_var = PROVIDER_ENV_VARS.get(new_provider, f"{new_provider.upper()}_API_KEY")
@@ -715,19 +721,21 @@ def start_repl(
                                 try:
                                     api_key = typer.prompt(f"Enter your {new_provider} API key", hide_input=True)
                                     if api_key.strip():
+                                        entered_key = api_key.strip()
+
                                         # Store in keyring
                                         if keyring_available():
-                                            set_api_key(new_provider, api_key.strip())
+                                            set_api_key(new_provider, entered_key)
                                             print_success("API key stored in keychain!")
 
                                         # Update settings
                                         if new_provider not in current_settings.providers:
                                             current_settings.providers[new_provider] = ProviderConfig()
-                                        current_settings.providers[new_provider].api_key = api_key.strip()
+                                        current_settings.providers[new_provider].api_key = entered_key
 
                                         # Offer model selection
                                         try:
-                                            temp_llm = get_provider(new_provider, api_key=api_key.strip())
+                                            temp_llm = get_provider(new_provider, api_key=entered_key)
                                             models = temp_llm.list_models()
                                             if models:
                                                 console.print("\n[bold]Available models:[/bold]")
@@ -738,11 +746,12 @@ def start_repl(
                                                 try:
                                                     idx = int(model_choice) - 1
                                                     if 0 <= idx < len(models):
-                                                        current_settings.providers[new_provider].default_model = models[idx].id
+                                                        selected_model = models[idx].id
                                                     else:
-                                                        current_settings.providers[new_provider].default_model = model_choice.strip()
+                                                        selected_model = model_choice.strip()
                                                 except ValueError:
-                                                    current_settings.providers[new_provider].default_model = model_choice.strip()
+                                                    selected_model = model_choice.strip()
+                                                current_settings.providers[new_provider].default_model = selected_model
                                         except Exception:
                                             pass  # Model selection is optional
                                     else:
@@ -753,7 +762,15 @@ def start_repl(
                                     continue
 
                             try:
-                                new_llm = create_provider(new_provider, None, current_settings)
+                                # Use entered key directly if we just got it, otherwise use settings
+                                if entered_key:
+                                    new_llm = get_provider(
+                                        new_provider,
+                                        model=selected_model,
+                                        api_key=entered_key
+                                    )
+                                else:
+                                    new_llm = create_provider(new_provider, None, current_settings)
                                 current_llm = new_llm
                                 agent.provider = new_llm
 
