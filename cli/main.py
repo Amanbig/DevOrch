@@ -18,6 +18,31 @@ from core.planner import Planner
 from schemas.message import Message
 
 
+# ASCII Art Banner
+BANNER = r"""
+[bold blue]
+ ____             ____  _ _       _
+|  _ \  _____   _|  _ \(_) | ___ | |_
+| | | |/ _ \ \ / / |_) | | |/ _ \| __|
+| |_| |  __/\ V /|  __/| | | (_) | |_
+|____/ \___| \_/ |_|   |_|_|\___/ \__|
+[/bold blue]
+"""
+
+BANNER_SMALL = "[bold blue]DevPilot[/bold blue] - AI Coding Assistant"
+
+VERSION = "0.1.0"
+
+
+def print_banner(small: bool = False):
+    """Print the DevPilot banner."""
+    if small:
+        console.print(BANNER_SMALL)
+    else:
+        console.print(BANNER)
+        console.print(f"  [dim]v{VERSION} - Your AI Coding Assistant[/dim]\n")
+
+
 class SimplePlanner(Planner):
     def plan(self, history: List[Message]) -> List[Message]:
         system_prompt = Message(
@@ -49,8 +74,8 @@ def has_any_api_key(settings: Settings) -> bool:
 
 def run_onboarding() -> Optional[str]:
     """Run first-time setup. Returns the configured provider name or None."""
-    console.print("\n[bold blue]Welcome to DevPilot![/bold blue]")
-    console.print("Let's set up your AI provider.\n")
+    print_banner()
+    console.print("[bold]First time setup[/bold] - Let's configure your AI provider.\n")
 
     # Show available providers
     console.print("[bold]Available providers:[/bold]")
@@ -181,9 +206,13 @@ def start_repl(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     resume: Optional[str] = None,
-    message_limit: int = DEFAULT_MESSAGE_LIMIT
+    message_limit: int = DEFAULT_MESSAGE_LIMIT,
+    show_banner: bool = True
 ):
     """Start the interactive REPL session."""
+    if show_banner:
+        print_banner()
+
     settings = Settings.load()
     session_manager = SessionManager(message_limit=message_limit)
 
@@ -244,20 +273,14 @@ def start_repl(
     cwd = os.getcwd()
     cwd_short = os.path.basename(cwd) or cwd
 
-    print_panel(
-        f"[bold]DevPilot[/bold] - AI Coding Assistant\n"
-        f"Provider: [cyan]{llm.name}[/cyan] | Model: [cyan]{llm.model}[/cyan]\n"
-        f"Session: [dim]{session_manager.current_session_id}[/dim]\n"
-        f"Working directory: [dim]{cwd_short}[/dim]\n\n"
-        f"Type your message or [dim]'exit'[/dim] to quit.",
-        title="",
-        border_style="blue",
-        fit=True
-    )
+    # Show session info
+    console.print(f"  [dim]Provider:[/dim] [cyan]{llm.name}[/cyan]  [dim]Model:[/dim] [cyan]{llm.model}[/cyan]")
+    console.print(f"  [dim]Session:[/dim] {session_manager.current_session_id}  [dim]cwd:[/dim] {cwd_short}")
+    console.print(f"  [dim]Type[/dim] /help [dim]for commands,[/dim] exit [dim]to quit[/dim]\n")
 
     while True:
         try:
-            user_input = typer.prompt(f"[{cwd_short}]")
+            user_input = typer.prompt(f"{cwd_short}")
 
             if user_input.lower() in ("exit", "quit", "q"):
                 print_info(f"Session saved: {session_manager.current_session_id}")
