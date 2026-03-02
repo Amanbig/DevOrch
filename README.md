@@ -125,18 +125,25 @@ DevPilot uses an interactive permission system with arrow-key navigation:
 
 ## Tool Output Display
 
-Tool calls and results are displayed with syntax highlighting:
+Tool calls are displayed in a clean, compact format:
 
 ```
-╭─────── Tool Call (shell) ───────╮
-│ npm create vite@latest my-app   │
-╰─────────────────────────────────╯
+╭──────────── Shell ────────────╮
+│ npm create vite@latest my-app │
+╰───────────────────────────────╯
 
-╭─────────── Result ──────────────╮
-│ STDOUT:                         │
-│ Scaffolding project in ./my-app │
-│ Done!                           │
-╰─────────────────────────────────╯
+╭─────────── Output ────────────╮
+│ STDOUT:                       │
+│ Scaffolding project in ./my-  │
+│ app                           │
+│ Done!                         │
+╰───────────────────────────────╯
+
+  > write 45 lines to src/App.tsx
+    ✓ Successfully wrote 45 lines to src/App.tsx
+
+  > read package.json
+    ✓ Read 32 lines
 ```
 
 ## Configuration
