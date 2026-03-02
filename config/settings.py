@@ -9,8 +9,15 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
+try:
+    import keyring
+    KEYRING_AVAILABLE = True
+except ImportError:
+    KEYRING_AVAILABLE = False
+
 CONFIG_DIR = Path.home() / ".devpilot"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
+KEYRING_SERVICE = "devpilot"
 
 
 @dataclass
@@ -18,6 +25,7 @@ class ProviderConfig:
     api_key: Optional[str] = None
     default_model: str = ""
     base_url: Optional[str] = None
+    key_encrypted: bool = False  # True if key is stored in keyring
 
 
 @dataclass
@@ -27,7 +35,7 @@ class Settings:
 
     @classmethod
     def load(cls) -> "Settings":
-        """Load settings from config file, falling back to env vars."""
+        """Load settings from config file, keyring, and env vars."""
         settings = cls()
 
         # Load from YAML if exists and yaml is available
@@ -57,9 +65,21 @@ class Settings:
             if not settings.providers[provider].default_model:
                 settings.providers[provider].default_model = default_model
 
+            # Priority: 1. Keyring, 2. Env var, 3. Config file
+            # Try keyring first (encrypted storage)
+            if KEYRING_AVAILABLE and not settings.providers[provider].api_key:
+                try:
+                    key = keyring.get_password(KEYRING_SERVICE, provider)
+                    if key:
+                        settings.providers[provider].api_key = key
+                        settings.providers[provider].key_encrypted = True
+                except Exception:
+                    pass  # Keyring not available or failed
+
             # Override with environment variable if present
             if env_var and os.environ.get(env_var):
                 settings.providers[provider].api_key = os.environ[env_var]
+                settings.providers[provider].key_encrypted = False
 
         # Set default base_url for local provider
         if "local" in settings.providers and not settings.providers["local"].base_url:
@@ -82,14 +102,46 @@ class Settings:
         config = self.providers.get(provider)
         return config.base_url if config else None
 
+    def is_key_encrypted(self, provider: str) -> bool:
+        """Check if the API key is stored encrypted."""
+        config = self.providers.get(provider)
+        return config.key_encrypted if config else False
+
 
 def ensure_config_dir():
     """Create config directory if it doesn't exist."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def set_api_key(provider: str, api_key: str) -> bool:
+    """
+    Store an API key securely using keyring.
+    Returns True if stored encrypted, False if keyring unavailable.
+    """
+    if not KEYRING_AVAILABLE:
+        return False
+
+    try:
+        keyring.set_password(KEYRING_SERVICE, provider, api_key)
+        return True
+    except Exception:
+        return False
+
+
+def delete_api_key(provider: str) -> bool:
+    """Delete an API key from keyring."""
+    if not KEYRING_AVAILABLE:
+        return False
+
+    try:
+        keyring.delete_password(KEYRING_SERVICE, provider)
+        return True
+    except Exception:
+        return False
+
+
 def save_config(settings: Settings):
-    """Save settings to config file."""
+    """Save settings to config file (excluding API keys - those go in keyring)."""
     if not YAML_AVAILABLE:
         raise RuntimeError("PyYAML is required to save config. Install with: pip install pyyaml")
 
@@ -102,8 +154,7 @@ def save_config(settings: Settings):
 
     for name, config in settings.providers.items():
         provider_data = {}
-        if config.api_key:
-            provider_data["api_key"] = config.api_key
+        # Don't save API keys to file - they should be in keyring or env vars
         if config.default_model:
             provider_data["default_model"] = config.default_model
         if config.base_url:
@@ -113,3 +164,15 @@ def save_config(settings: Settings):
 
     with open(CONFIG_FILE, "w") as f:
         yaml.safe_dump(data, f, default_flow_style=False)
+
+
+def keyring_available() -> bool:
+    """Check if keyring is available and working."""
+    if not KEYRING_AVAILABLE:
+        return False
+    try:
+        # Try a test operation
+        keyring.get_password(KEYRING_SERVICE, "__test__")
+        return True
+    except Exception:
+        return False
