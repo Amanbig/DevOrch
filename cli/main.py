@@ -1,6 +1,7 @@
 import os
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.markdown import Markdown
 
 from core.agent import Agent
@@ -81,10 +82,44 @@ def repl(
     """
     Start an interactive DevPilot REPL session.
     """
-    console.print("[bold green]Starting DevPilot REPL. Type 'exit' or 'quit' to leave.[/bold green]")
-    # Similar initialization to `ask` command, but in a loop...
-    # (Implementation omitted for brevity)
-    pass
+    if provider.lower() == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            console.print("[bold red]Please set OPENAI_API_KEY environment variable[/bold red]")
+            raise typer.Exit(1)
+        llm = OpenAIProvider(model=model, api_key=api_key)
+    else:
+        console.print(f"[bold red]Provider {provider} is not fully implemented yet.[/bold red]")
+        raise typer.Exit(1)
+        
+    tools = [ShellTool(), FilesystemTool(), SearchTool()]
+    executor = ToolExecutor(tools=tools, require_confirmation=True)
+    planner = SimplePlanner()
+    
+    agent = Agent(provider=llm, planner=planner, executor=executor, tools=tools)
+
+    console.print(Panel.fit("[bold green]Welcome to DevPilot REPL![/bold green]\nType 'exit' or 'quit' to leave.\nType your message below.", border_style="blue"))
+    
+    while True:
+        try:
+            # Use Typer's prompt for basic input, could upgrade to prompt_toolkit later
+            user_input = typer.prompt("You")
+            
+            if user_input.lower() in ("exit", "quit", "q"):
+                console.print("[yellow]Goodbye![/yellow]")
+                break
+                
+            if not user_input.strip():
+                continue
+                
+            result = agent.run(user_input, max_iterations=15)
+            console.print(Panel(Markdown(result), title="DevPilot", border_style="green"))
+            
+        except typer.Abort:
+            console.print("\n[yellow]Aborted.[/yellow]")
+            break
+        except Exception as e:
+            console.print(f"\n[bold red]Error: {str(e)}[/bold red]")
 
 def main():
     app()
