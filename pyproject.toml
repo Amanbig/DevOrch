@@ -9,7 +9,7 @@ description = "AI Coding Assistant"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    { name = "Aman", email = "aman@example.com" }
+    { name = "Aman", email = "amanpreetsinghjhiwant@outlook.com" }
 ]
 dependencies = [
     "typer>=0.12.3",
