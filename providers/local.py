@@ -13,15 +13,30 @@ class LocalProvider(LLMProvider):
 
     name = "local"
 
+    # Models known to support function calling well
+    TOOL_CAPABLE_MODELS = [
+        "llama3.1",
+        "llama3.2",
+        "qwen2.5:7b",
+        "qwen2.5:14b",
+        "qwen2.5:32b",
+        "qwen2.5-coder",
+        "mistral",
+        "mixtral",
+        "command-r",
+        "firefunction",
+    ]
+
     DEFAULT_MODELS = [
         "llama3.1",
+        "llama3.2",
         "llama3",
-        "llama2",
         "codellama",
         "mistral",
         "mixtral",
         "gemma2",
-        "qwen2",
+        "qwen2.5",
+        "qwen2.5-coder",
         "deepseek-coder-v2",
     ]
 
@@ -45,6 +60,9 @@ class LocalProvider(LLMProvider):
         else:
             self.model = self._detect_default_model()
 
+        # Track if we've warned about tool capability
+        self._tool_warning_shown = False
+
     def _detect_default_model(self) -> str:
         """Auto-detect the first available model from Ollama."""
         try:
@@ -64,6 +82,17 @@ class LocalProvider(LLMProvider):
         # Fallback to first default model
         return self.DEFAULT_MODELS[0]
 
+    def _is_tool_capable(self, model_name: str) -> bool:
+        """Check if a model is known to support function calling."""
+        model_lower = model_name.lower()
+        for capable in self.TOOL_CAPABLE_MODELS:
+            if capable in model_lower:
+                return True
+        # Small models (under 3B) generally don't support tools well
+        if ":0.5b" in model_lower or ":1b" in model_lower or ":2b" in model_lower:
+            return False
+        return True  # Assume capable for unknown larger models
+
     def list_models(self) -> List[ModelInfo]:
         """Fetch models from local Ollama instance."""
         try:
@@ -75,9 +104,12 @@ class LocalProvider(LLMProvider):
 
             models = []
             for model in data.get("models", []):
+                name = model.get("name")
+                tool_note = "" if self._is_tool_capable(name) else " (no tool support)"
                 models.append(ModelInfo(
-                    id=model.get("name"),
-                    name=model.get("name"),
+                    id=name,
+                    name=name,
+                    description=tool_note if tool_note else None,
                 ))
 
             return models if models else [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
@@ -112,6 +144,14 @@ class LocalProvider(LLMProvider):
                         "parameters": tool.get("parameters", {"type": "object", "properties": {}})
                     }
                 })
+
+        # Warn if model may not support tools
+        if formatted_tools and not self._tool_warning_shown and not self._is_tool_capable(self.model):
+            import sys
+            print(f"\n⚠️  Warning: {self.model} may not support function calling.", file=sys.stderr)
+            print(f"   For best results, use a larger model like llama3.1, qwen2.5:7b, or mistral.", file=sys.stderr)
+            print(f"   Run: ollama pull llama3.1\n", file=sys.stderr)
+            self._tool_warning_shown = True
 
         # Try with tools first, fall back to without if model doesn't support them
         try:

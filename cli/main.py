@@ -105,11 +105,40 @@ def print_banner(small: bool = False):
         console.print(f"  [dim]v{VERSION} - Your AI Coding Assistant[/dim]\n")
 
 
+SYSTEM_PROMPT = """You are DevPilot, an AI coding assistant with access to tools for interacting with the user's computer.
+
+IMPORTANT: You have the following tools available and MUST use them to help the user:
+
+1. **shell** - Execute shell commands (bash/powershell). Use this to:
+   - Run commands like `npx create-next-app`, `npm install`, `git clone`, etc.
+   - Navigate directories, create files, run scripts
+   - Execute any terminal command the user needs
+
+2. **filesystem** - Read/write/list files. Use this to:
+   - Read file contents to understand code
+   - Write or create new files
+   - List directory contents
+
+3. **search** - Find files by name patterns (like glob)
+
+4. **grep** - Search for text patterns within files
+
+5. **edit** - Make targeted edits to existing files
+
+RULES:
+- When the user asks you to CREATE something (app, file, project), USE THE TOOLS to actually do it
+- Do NOT just give instructions - execute the commands yourself using the shell tool
+- Do NOT ask the user to run commands manually - run them for the user
+- Always prefer action over explanation
+
+When executing shell commands, use the shell tool with the command to run."""
+
+
 class SimplePlanner(Planner):
     def plan(self, history: List[Message]) -> List[Message]:
         system_prompt = Message(
             role="system",
-            content="You are DevPilot, an AI coding assistant. You have access to tools to interact with the local machine. Use them to help the user."
+            content=SYSTEM_PROMPT
         )
         return [system_prompt] + history
 
@@ -129,11 +158,20 @@ app.add_typer(permissions_app, name="permissions")
 console = get_console()
 
 
-def has_any_api_key(settings: Settings) -> bool:
-    """Check if any provider has an API key configured."""
+def has_any_provider_configured(settings: Settings) -> bool:
+    """Check if any provider is configured (has API key or is local/lmstudio with model)."""
+    # Check if any API-based provider has a key configured (keyring or env var)
     for name in PROVIDERS.keys():
-        if name not in ("local", "lmstudio") and settings.get_api_key(name):
+        if name not in ("local", "lmstudio"):
+            if settings.get_api_key(name):
+                return True
+
+    # Check if local/lmstudio is configured (has a saved model in config)
+    for name in ("local", "lmstudio"):
+        config = settings.providers.get(name)
+        if config and config.default_model:
             return True
+
     return False
 
 
@@ -589,9 +627,18 @@ def start_repl(
                         for m in models[:30]:  # Limit display
                             marker = "[green]>[/green]" if m.id == current_llm.model else " "
                             ctx = f" ({m.context_length} ctx)" if m.context_length else ""
-                            console.print(f"  {marker} {m.id}{ctx}")
+                            # Show tool capability warning for local models
+                            desc = ""
+                            if m.description:
+                                if "no tool" in m.description.lower():
+                                    desc = f" [yellow]{m.description}[/yellow]"
+                                else:
+                                    desc = f" [dim]{m.description}[/dim]"
+                            console.print(f"  {marker} {m.id}{ctx}{desc}")
                         if len(models) > 30:
                             console.print(f"  [dim]... and {len(models) - 30} more[/dim]")
+                        if current_llm.name == "local":
+                            console.print(f"\n  [dim]For tool/function calling, use 7B+ models[/dim]")
                     except Exception as e:
                         print_error(f"Failed to fetch models: {e}")
                     console.print(f"\n[dim]Use /model <name> to switch[/dim]\n")
@@ -753,7 +800,7 @@ def main_callback(
     settings = Settings.load()
 
     # Check if we need onboarding
-    if not has_any_api_key(settings):
+    if not has_any_provider_configured(settings):
         configured_provider = run_onboarding()
         if not configured_provider:
             raise typer.Exit(1)
@@ -777,7 +824,7 @@ def chat(
     """
     settings = Settings.load()
 
-    if not has_any_api_key(settings):
+    if not has_any_provider_configured(settings):
         configured_provider = run_onboarding()
         if not configured_provider:
             raise typer.Exit(1)
