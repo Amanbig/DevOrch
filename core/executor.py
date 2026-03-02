@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from rich.prompt import Prompt
 
 from tools.base import Tool
@@ -7,6 +7,9 @@ from config.permissions import (
     get_permissions, PermissionLevel, PermissionChoice, Permissions
 )
 from utils.logger import get_console, print_warning, print_success, print_info
+
+if TYPE_CHECKING:
+    from core.modes import ModeManager
 
 console = get_console()
 
@@ -26,11 +29,13 @@ class ToolExecutor(Executor):
         self,
         tools: List[Tool],
         require_confirmation: bool = True,
-        permissions: Optional[Permissions] = None
+        permissions: Optional[Permissions] = None,
+        mode_manager: Optional["ModeManager"] = None
     ):
         self.tools = {tool.name: tool for tool in tools}
         self.require_confirmation = require_confirmation
         self.permissions = permissions or get_permissions()
+        self.mode_manager = mode_manager
 
     def _get_command_description(self, tool_name: str, arguments: Dict[str, Any]) -> str:
         """Get a human-readable description of the command."""
@@ -148,8 +153,13 @@ class ToolExecutor(Executor):
         command = self._get_command_description(tool_name, arguments)
 
         try:
+            # Check if we should ask for permission based on mode
+            should_ask = self.require_confirmation
+            if self.mode_manager and not self.mode_manager.should_ask_permission():
+                should_ask = False
+
             # Check permissions if confirmation is required
-            if self.require_confirmation:
+            if should_ask:
                 perm_level, reason = self.permissions.check_permission(tool_name, command)
 
                 if perm_level == PermissionLevel.DENY:
@@ -162,6 +172,12 @@ class ToolExecutor(Executor):
                         return "Error: User denied permission to execute this command."
 
                 # ALLOW - proceed silently
+            else:
+                # Even in auto mode, check for dangerous commands
+                perm_level, reason = self.permissions.check_permission(tool_name, command)
+                if perm_level == PermissionLevel.DENY:
+                    print_warning(f"Command blocked (dangerous): {reason or 'denied by policy'}")
+                    return f"Error: Command denied - {reason or 'blocked by permission policy'}"
 
             # Execute the tool
             result = tool.run(arguments)

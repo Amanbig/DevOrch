@@ -11,6 +11,7 @@ from prompt_toolkit.styles import Style
 from core.agent import Agent
 from core.executor import ToolExecutor
 from core.sessions import SessionManager, DEFAULT_MESSAGE_LIMIT
+from core.modes import ModeManager, AgentMode
 from providers import get_provider, PROVIDERS
 from config.settings import Settings, set_api_key, keyring_available, save_config
 from config.permissions import get_permissions, reset_permissions, PermissionLevel, PERMISSIONS_FILE
@@ -42,6 +43,10 @@ VERSION = "0.1.0"
 # Slash commands with descriptions
 SLASH_COMMANDS = {
     "/help": "Show available commands",
+    "/mode": "Show or change mode (plan/auto/ask)",
+    "/plan": "Switch to plan mode",
+    "/auto": "Switch to auto mode",
+    "/ask": "Switch to ask mode (default)",
     "/clear": "Clear conversation history",
     "/session": "Show current session info",
     "/config": "Show configuration settings",
@@ -303,7 +308,11 @@ def start_repl(
         session_id = session_manager.create_session(llm.name, llm.model)
 
     tools = [ShellTool(), FilesystemTool(), SearchTool()]
-    executor = ToolExecutor(tools=tools, require_confirmation=True)
+
+    # Create mode manager (shared between agent and executor)
+    mode_manager = ModeManager(default_mode=AgentMode.ASK)
+
+    executor = ToolExecutor(tools=tools, require_confirmation=True, mode_manager=mode_manager)
     planner = SimplePlanner()
 
     def on_session_continue(new_session_id: str):
@@ -315,7 +324,8 @@ def start_repl(
         executor=executor,
         tools=tools,
         session_manager=session_manager,
-        on_session_continue=on_session_continue
+        on_session_continue=on_session_continue,
+        mode_manager=mode_manager
     )
 
     if messages:
@@ -331,7 +341,7 @@ def start_repl(
     # Show session info
     console.print(f"  [dim]Provider:[/dim] [cyan]{llm.name}[/cyan]  [dim]Model:[/dim] [cyan]{llm.model}[/cyan]")
     console.print(f"  [dim]Session:[/dim] {session_manager.current_session_id}  [dim]cwd:[/dim] {cwd_short}")
-    console.print(f"  [dim]Type[/dim] / [dim]to see commands,[/dim] exit [dim]to quit[/dim]\n")
+    console.print(f"  [dim]Mode:[/dim] {mode_manager.get_mode_display()}  [dim]- Type[/dim] / [dim]to see commands[/dim]\n")
 
     # Create completer for slash commands
     completer = SlashCommandCompleter()
@@ -340,11 +350,24 @@ def start_repl(
     current_llm = llm
     current_settings = settings
 
+    def get_prompt():
+        """Generate prompt with mode indicator."""
+        mode_indicator = {
+            AgentMode.PLAN: "[yellow]P[/yellow]",
+            AgentMode.AUTO: "[green]A[/green]",
+            AgentMode.ASK: "[blue]?[/blue]",
+        }.get(mode_manager.mode, "")
+        return f"[{mode_indicator}] {cwd_short}> "
+
     while True:
         try:
+            # Build prompt with mode indicator
+            mode_char = {"plan": "P", "auto": "A", "ask": "?"}.get(mode_manager.mode.value, "?")
+            prompt_str = f"[{mode_char}] {cwd_short}> "
+
             # Use prompt_toolkit with autocomplete
             user_input = pt_prompt(
-                f"{cwd_short}> ",
+                prompt_str,
                 completer=completer,
                 complete_while_typing=True,
                 style=PROMPT_STYLE,
