@@ -55,6 +55,11 @@ class Settings:
             "anthropic": ("ANTHROPIC_API_KEY", "claude-sonnet-4-20250514"),
             "gemini": ("GOOGLE_API_KEY", "gemini-1.5-pro"),
             "local": (None, "llama3"),
+            "groq": ("GROQ_API_KEY", "llama-3.1-70b-versatile"),
+            "openrouter": ("OPENROUTER_API_KEY", "openai/gpt-4o"),
+            "mistral": ("MISTRAL_API_KEY", "mistral-large-latest"),
+            "together": ("TOGETHER_API_KEY", "meta-llama/Llama-3-70b-chat-hf"),
+            "lmstudio": (None, ""),
         }
 
         for provider, (env_var, default_model) in env_mappings.items():
