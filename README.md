@@ -11,7 +11,7 @@ A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
 - **Multi-Provider Support** - OpenAI, Anthropic, Google Gemini, Groq, Mistral, Together AI, OpenRouter, Ollama (local), and LM Studio
 - **Secure API Key Storage** - Uses system keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service)
 - **Session Persistence** - SQLite-based chat history with resume capability
-- **Tool Execution** - Shell commands, file operations, search, grep, and code editing
+- **Tool Execution** - Shell commands, file operations, search, grep, code editing, and web search
 - **Interactive UI** - Arrow-key navigation for selections, syntax-highlighted output
 - **Permission System** - Configurable allow/deny rules with interactive prompts
 - **Interactive Commands** - Full support for interactive CLI tools (npx, npm create, etc.)
@@ -213,6 +213,8 @@ DevPilot has access to these tools:
 | **grep** | Search for text patterns in files |
 | **edit** | Make targeted edits to existing files |
 | **task** | Track progress on multi-step work with visual task list |
+| **websearch** | Search the web for current information (uses DuckDuckGo) |
+| **webfetch** | Fetch and read content from a URL |
 
 ## Task Tracking
 
@@ -247,7 +249,7 @@ DevPilot stores configuration in `~/.devpilot/`:
   - typer, rich, pydantic
   - openai, anthropic, google-genai
   - httpx, keyring, prompt_toolkit
-  - questionary, pyyaml
+  - questionary, pyyaml, duckduckgo-search
 
 ## License
 

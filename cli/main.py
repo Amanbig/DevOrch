@@ -38,6 +38,7 @@ from tools.search import SearchTool
 from tools.grep import GrepTool
 from tools.edit import EditTool
 from tools.task import TaskTool
+from tools.websearch import WebSearchTool, WebFetchTool
 from core.tasks import get_task_manager, reset_task_manager
 
 from core.planner import Planner
@@ -163,6 +164,17 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
    - Mark tasks 'completed' immediately after finishing each one
    - content: imperative form (e.g., "Fix bug", "Run tests")
    - activeForm: present continuous (e.g., "Fixing bug", "Running tests")
+
+7. **websearch** - Search the web for current information. Use when:
+   - You need up-to-date information (news, docs, releases)
+   - Looking up programming solutions or best practices
+   - Finding package/library documentation
+   - User asks about something you're unsure about
+
+8. **webfetch** - Fetch content from a specific URL. Use when:
+   - You need to read a documentation page
+   - User provides a URL to check
+   - You found a relevant URL from search results
 
 RULES:
 - When the user asks you to CREATE something (app, file, project), USE THE TOOLS to actually do it
@@ -499,7 +511,7 @@ def start_repl(
     if not resume:
         session_id = session_manager.create_session(llm.name, llm.model)
 
-    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool(), TaskTool()]
+    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool(), TaskTool(), WebSearchTool(), WebFetchTool()]
 
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
@@ -1079,7 +1091,7 @@ def ask(
 
     llm = create_provider(provider, model, settings)
 
-    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool(), TaskTool()]
+    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool(), TaskTool(), WebSearchTool(), WebFetchTool()]
     executor = ToolExecutor(tools=tools)
     planner = SimplePlanner()
 

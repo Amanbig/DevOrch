@@ -122,6 +122,16 @@ class Agent:
             # Task tool - don't show anything, the task panel will display
             pass
 
+        elif call.name == "websearch":
+            query = args.get("query", "")
+            console.print(f"  [dim]>[/dim] [cyan]searching web[/cyan] [bold]{query}[/bold]")
+
+        elif call.name == "webfetch":
+            url = args.get("url", "")
+            # Truncate long URLs
+            display_url = url[:60] + "..." if len(url) > 60 else url
+            console.print(f"  [dim]>[/dim] [cyan]fetching[/cyan] [bold]{display_url}[/bold]")
+
         else:
             # Generic fallback - show tool name and brief args
             brief_args = {k: (v[:50] + "..." if isinstance(v, str) and len(v) > 50 else v)
