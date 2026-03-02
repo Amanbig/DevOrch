@@ -1,19 +1,27 @@
-version="0.1.0"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-name="devpilot"
-description="AI Coding Assistant"
-requires-python=">=3.10"
-authors=[
-    {name="Aman", email="[EMAIL_ADDRESS]"}
+name = "devpilot"
+version = "0.1.0"
+description = "AI Coding Assistant"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Aman", email = "aman@example.com" }
 ]
 dependencies = [
     "typer>=0.12.3",
+    "rich>=13.7.1",
     "pydantic>=2.7.1",
-    "openai>=1.28.1",
+    "openai>=1.28.0",
     "anthropic>=0.25.8",
     "google-generativeai>=0.5.3",
 ]
 
 [project.scripts]
-devpilot = "devpilot.cli:main"
+devpilot = "cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cli", "core", "providers", "schemas", "tools"]
