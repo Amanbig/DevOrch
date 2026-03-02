@@ -90,6 +90,7 @@ devpilot --resume abc123    # Resume a previous session
 | `/compact` | Summarize and compact history |
 | `/save` | Save conversation to file |
 | `/undo` | Undo last message |
+| `/tasks` | Show current task list |
 
 ### Modes
 
@@ -204,6 +205,22 @@ DevPilot has access to these tools:
 | **search** | Find files by name patterns (glob) |
 | **grep** | Search for text patterns in files |
 | **edit** | Make targeted edits to existing files |
+| **task** | Track progress on multi-step work with visual task list |
+
+## Task Tracking
+
+DevPilot can track progress on complex tasks:
+
+```
+╭─────────── Tasks (2/4) ───────────╮
+│   ✓ Create project structure      │
+│   ✓ Set up dependencies           │
+│   ● Installing packages           │
+│   ○ Run initial build             │
+╰───────────────────────────────────╯
+```
+
+Use `/tasks` to view current task list anytime.
 
 ## Config Files
 

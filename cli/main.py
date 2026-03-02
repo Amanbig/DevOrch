@@ -37,6 +37,8 @@ from tools.filesystem import FilesystemTool
 from tools.search import SearchTool
 from tools.grep import GrepTool
 from tools.edit import EditTool
+from tools.task import TaskTool
+from core.tasks import get_task_manager, reset_task_manager
 
 from core.planner import Planner
 from schemas.message import Message
@@ -77,6 +79,7 @@ SLASH_COMMANDS = {
     "/undo": "Undo last message",
     "/save": "Save conversation to file",
     "/status": "Show current provider, model, and mode",
+    "/tasks": "Show current task list",
 }
 
 # Style for prompt_toolkit (including completion menu)
@@ -149,11 +152,24 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
 
 5. **edit** - Make targeted edits to existing files
 
+6. **task** - Track progress on multi-step work. Use this to:
+   - Create a task list when working on complex requests (3+ steps)
+   - Show the user what you're currently working on
+   - Mark tasks complete as you finish them
+
+   Task guidelines:
+   - Use when working on multiple steps or user gives multiple items
+   - Only ONE task should be 'in_progress' at a time
+   - Mark tasks 'completed' immediately after finishing each one
+   - content: imperative form (e.g., "Fix bug", "Run tests")
+   - activeForm: present continuous (e.g., "Fixing bug", "Running tests")
+
 RULES:
 - When the user asks you to CREATE something (app, file, project), USE THE TOOLS to actually do it
 - Do NOT just give instructions - execute the commands yourself using the shell tool
 - Do NOT ask the user to run commands manually - run them for the user
 - Always prefer action over explanation
+- For multi-step tasks, use the task tool to track and show progress
 
 When executing shell commands, use the shell tool with the command to run."""
 
@@ -449,6 +465,9 @@ def start_repl(
     settings = Settings.load()
     session_manager = SessionManager(message_limit=message_limit)
 
+    # Reset task manager for new session
+    reset_task_manager()
+
     context_summary = None
 
     # Handle session resumption
@@ -480,7 +499,7 @@ def start_repl(
     if not resume:
         session_id = session_manager.create_session(llm.name, llm.model)
 
-    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool()]
+    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool(), TaskTool()]
 
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
@@ -949,6 +968,15 @@ def start_repl(
                         print_error(f"Failed to save: {e}")
                     continue
 
+                elif cmd == "tasks":
+                    task_manager = get_task_manager()
+                    if task_manager.task_list.total_count == 0:
+                        print_info("No tasks in progress.")
+                    else:
+                        panel = task_manager._create_panel()
+                        console.print(panel)
+                    continue
+
                 else:
                     print_warning(f"Unknown command: /{cmd}")
                     print_info("Type /help to see available commands")
@@ -1051,7 +1079,7 @@ def ask(
 
     llm = create_provider(provider, model, settings)
 
-    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool()]
+    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool(), TaskTool()]
     executor = ToolExecutor(tools=tools)
     planner = SimplePlanner()
 
