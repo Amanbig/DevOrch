@@ -12,7 +12,7 @@ from core.agent import Agent
 from core.executor import ToolExecutor
 from core.sessions import SessionManager, DEFAULT_MESSAGE_LIMIT
 from core.modes import ModeManager, AgentMode
-from providers import get_provider, PROVIDERS
+from providers import get_provider, PROVIDERS, PROVIDER_INFO, PROVIDER_ENV_VARS
 from config.settings import Settings, set_api_key, keyring_available, save_config
 from config.permissions import get_permissions, reset_permissions, PermissionLevel, PERMISSIONS_FILE
 from utils.logger import get_console, print_error, print_success, print_panel, print_warning, print_info
@@ -130,8 +130,8 @@ console = get_console()
 
 def has_any_api_key(settings: Settings) -> bool:
     """Check if any provider has an API key configured."""
-    for name in ["openai", "anthropic", "gemini"]:
-        if settings.get_api_key(name):
+    for name in PROVIDERS.keys():
+        if name not in ("local", "lmstudio") and settings.get_api_key(name):
             return True
     return False
 
@@ -143,42 +143,51 @@ def run_onboarding() -> Optional[str]:
 
     # Show available providers
     console.print("[bold]Available providers:[/bold]")
-    console.print("  1. [cyan]openai[/cyan]     - GPT-4o, GPT-4, etc.")
-    console.print("  2. [cyan]anthropic[/cyan]  - Claude Sonnet, Opus, etc.")
-    console.print("  3. [cyan]gemini[/cyan]     - Gemini Pro, Flash, etc.")
-    console.print("  4. [cyan]local[/cyan]      - Ollama (no API key needed)")
+    console.print("  1. [cyan]openai[/cyan]      - GPT-4o, GPT-4, etc.")
+    console.print("  2. [cyan]anthropic[/cyan]   - Claude Sonnet, Opus, etc.")
+    console.print("  3. [cyan]gemini[/cyan]      - Gemini Pro, Flash, etc.")
+    console.print("  4. [cyan]groq[/cyan]        - Ultra-fast Llama, Mixtral")
+    console.print("  5. [cyan]openrouter[/cyan]  - Access 100+ models")
+    console.print("  6. [cyan]mistral[/cyan]     - Mistral Large, Codestral")
+    console.print("  7. [cyan]together[/cyan]    - Open source models")
+    console.print("  8. [cyan]local[/cyan]       - Ollama (no key needed)")
+    console.print("  9. [cyan]lmstudio[/cyan]    - LM Studio (no key needed)")
     console.print()
 
     # Ask which provider to set up
     choice = typer.prompt(
-        "Which provider would you like to use? (1-4 or name)",
+        "Which provider? (1-9 or name)",
         default="1"
     )
 
     provider_map = {
-        "1": "openai", "2": "anthropic", "3": "gemini", "4": "local",
-        "openai": "openai", "anthropic": "anthropic", "gemini": "gemini", "local": "local"
+        "1": "openai", "2": "anthropic", "3": "gemini", "4": "groq",
+        "5": "openrouter", "6": "mistral", "7": "together",
+        "8": "local", "9": "lmstudio",
     }
+    # Add name mappings
+    for name in PROVIDERS.keys():
+        provider_map[name] = name
 
     provider = provider_map.get(choice.lower().strip())
     if not provider:
         print_error(f"Unknown provider: {choice}")
         return None
 
-    if provider == "local":
-        print_success("Local provider selected - no API key needed!")
-        print_info("Make sure Ollama is running at http://localhost:11434")
+    if provider in ("local", "lmstudio"):
+        print_success(f"{provider.title()} provider selected - no API key needed!")
+        if provider == "local":
+            print_info("Make sure Ollama is running at http://localhost:11434")
+        else:
+            print_info("Make sure LM Studio is running at http://localhost:1234")
         return provider
 
     # Get API key
-    env_vars = {
-        "openai": "OPENAI_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-        "gemini": "GOOGLE_API_KEY"
-    }
+    env_var = PROVIDER_ENV_VARS.get(provider, f"{provider.upper()}_API_KEY")
 
     console.print(f"\n[bold]Setting up {provider}[/bold]")
-    console.print(f"You can also set the [cyan]{env_vars[provider]}[/cyan] environment variable.\n")
+    if env_var:
+        console.print(f"You can also set the [cyan]{env_var}[/cyan] environment variable.\n")
 
     api_key = typer.prompt(f"Enter your {provider} API key", hide_input=True)
 
@@ -483,6 +492,22 @@ def start_repl(
                     print_success("History compacted. Summary preserved.")
                     continue
 
+                elif cmd == "models":
+                    console.print(f"\n[bold]Available models for {current_llm.name}:[/bold]")
+                    try:
+                        with console.status("[dim]Fetching models...", spinner="dots"):
+                            models = current_llm.list_models()
+                        for m in models[:30]:  # Limit display
+                            marker = "[green]>[/green]" if m.id == current_llm.model else " "
+                            ctx = f" ({m.context_length} ctx)" if m.context_length else ""
+                            console.print(f"  {marker} {m.id}{ctx}")
+                        if len(models) > 30:
+                            console.print(f"  [dim]... and {len(models) - 30} more[/dim]")
+                    except Exception as e:
+                        print_error(f"Failed to fetch models: {e}")
+                    console.print(f"\n[dim]Use /model <name> to switch[/dim]\n")
+                    continue
+
                 elif cmd == "model":
                     if cmd_arg:
                         try:
@@ -494,7 +519,23 @@ def start_repl(
                             print_error(f"Failed to switch model: {e}")
                     else:
                         console.print(f"\n[bold]Current model:[/bold] {current_llm.model}")
-                        console.print("[dim]Usage: /model <model-name>[/dim]\n")
+                        console.print("[dim]Usage: /model <model-name>[/dim]")
+                        console.print("[dim]Use /models to see available models[/dim]\n")
+                    continue
+
+                elif cmd == "providers":
+                    console.print("\n[bold]Available Providers:[/bold]")
+                    for name, desc in PROVIDER_INFO.items():
+                        marker = "[green]>[/green]" if name == current_llm.name else " "
+                        env_var = PROVIDER_ENV_VARS.get(name)
+                        key_status = ""
+                        if env_var:
+                            has_key = bool(current_settings.get_api_key(name))
+                            key_status = " [green](configured)[/green]" if has_key else " [yellow](needs key)[/yellow]"
+                        elif name in ("local", "lmstudio"):
+                            key_status = " [dim](no key needed)[/dim]"
+                        console.print(f"  {marker} [cyan]{name:<12}[/cyan] - {desc}{key_status}")
+                    console.print(f"\n[dim]Use /provider <name> to switch[/dim]\n")
                     continue
 
                 elif cmd == "provider":
@@ -502,6 +543,7 @@ def start_repl(
                         new_provider = cmd_arg.lower()
                         if new_provider not in PROVIDERS:
                             print_error(f"Unknown provider: {new_provider}")
+                            console.print("[dim]Use /providers to see available providers[/dim]")
                         else:
                             try:
                                 new_llm = create_provider(new_provider, None, current_settings)
@@ -512,8 +554,8 @@ def start_repl(
                                 print_error(f"Failed to switch provider: {e}")
                     else:
                         console.print(f"\n[bold]Current provider:[/bold] {current_llm.name}")
-                        console.print(f"[bold]Available:[/bold] {', '.join(PROVIDERS.keys())}")
-                        console.print("[dim]Usage: /provider <name>[/dim]\n")
+                        console.print("[dim]Use /providers to see all available providers[/dim]")
+                        console.print("[dim]Use /provider <name> to switch[/dim]\n")
                     continue
 
                 elif cmd == "history":
