@@ -1,12 +1,13 @@
 import typer
 from typing import List, Optional
 from rich.table import Table
+import os
 
 from core.agent import Agent
 from core.executor import ToolExecutor
 from core.sessions import SessionManager, DEFAULT_MESSAGE_LIMIT
 from providers import get_provider, PROVIDERS
-from config.settings import Settings, set_api_key, keyring_available
+from config.settings import Settings, set_api_key, keyring_available, save_config
 from utils.logger import get_console, print_error, print_success, print_panel, print_warning, print_info
 
 from tools.shell import ShellTool
@@ -26,11 +27,121 @@ class SimplePlanner(Planner):
         return [system_prompt] + history
 
 
-app = typer.Typer(help="DevPilot - Your AI Coding Assistant")
+# Main app with invoke_without_command=True so we can handle bare `devpilot`
+app = typer.Typer(
+    help="DevPilot - Your AI Coding Assistant",
+    invoke_without_command=True,
+    no_args_is_help=False
+)
 sessions_app = typer.Typer(help="Manage chat sessions")
 app.add_typer(sessions_app, name="sessions")
 
 console = get_console()
+
+
+def has_any_api_key(settings: Settings) -> bool:
+    """Check if any provider has an API key configured."""
+    for name in ["openai", "anthropic", "gemini"]:
+        if settings.get_api_key(name):
+            return True
+    return False
+
+
+def run_onboarding() -> Optional[str]:
+    """Run first-time setup. Returns the configured provider name or None."""
+    console.print("\n[bold blue]Welcome to DevPilot![/bold blue]")
+    console.print("Let's set up your AI provider.\n")
+
+    # Show available providers
+    console.print("[bold]Available providers:[/bold]")
+    console.print("  1. [cyan]openai[/cyan]     - GPT-4o, GPT-4, etc.")
+    console.print("  2. [cyan]anthropic[/cyan]  - Claude Sonnet, Opus, etc.")
+    console.print("  3. [cyan]gemini[/cyan]     - Gemini Pro, Flash, etc.")
+    console.print("  4. [cyan]local[/cyan]      - Ollama (no API key needed)")
+    console.print()
+
+    # Ask which provider to set up
+    choice = typer.prompt(
+        "Which provider would you like to use? (1-4 or name)",
+        default="1"
+    )
+
+    provider_map = {
+        "1": "openai", "2": "anthropic", "3": "gemini", "4": "local",
+        "openai": "openai", "anthropic": "anthropic", "gemini": "gemini", "local": "local"
+    }
+
+    provider = provider_map.get(choice.lower().strip())
+    if not provider:
+        print_error(f"Unknown provider: {choice}")
+        return None
+
+    if provider == "local":
+        print_success("Local provider selected - no API key needed!")
+        print_info("Make sure Ollama is running at http://localhost:11434")
+        return provider
+
+    # Get API key
+    env_vars = {
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "gemini": "GOOGLE_API_KEY"
+    }
+
+    console.print(f"\n[bold]Setting up {provider}[/bold]")
+    console.print(f"You can also set the [cyan]{env_vars[provider]}[/cyan] environment variable.\n")
+
+    api_key = typer.prompt(f"Enter your {provider} API key", hide_input=True)
+
+    if not api_key.strip():
+        print_error("API key cannot be empty.")
+        return None
+
+    # Try to store in keyring
+    if keyring_available():
+        if set_api_key(provider, api_key.strip()):
+            print_success(f"API key stored securely in system keychain!")
+        else:
+            print_warning("Could not store in keychain. Key will only be available this session.")
+    else:
+        print_warning("Keychain not available. Set the environment variable for persistence.")
+
+    # Save as default provider
+    settings = Settings.load()
+    settings.default_provider = provider
+    settings.providers[provider].api_key = api_key.strip()
+
+    try:
+        save_config(settings)
+        print_success(f"Default provider set to: {provider}")
+    except Exception:
+        pass  # Config save failed, but key is in memory
+
+    return provider
+
+
+def create_provider_safe(provider_name: str, model: str, settings: Settings):
+    """Create provider, returning None if API key missing (for onboarding check)."""
+    provider_name = provider_name.lower()
+
+    if provider_name not in PROVIDERS:
+        return None
+
+    api_key = settings.get_api_key(provider_name)
+
+    if provider_name != "local" and not api_key:
+        return None
+
+    if not model:
+        model = settings.get_default_model(provider_name)
+
+    kwargs = {}
+    if provider_name == "local":
+        base_url = settings.get_base_url(provider_name)
+        if base_url:
+            kwargs["base_url"] = base_url
+
+    return get_provider(provider_name, model=model, api_key=api_key, **kwargs)
 
 
 def create_provider(provider_name: str, model: str, settings: Settings):
@@ -41,10 +152,8 @@ def create_provider(provider_name: str, model: str, settings: Settings):
         print_error(f"Unknown provider '{provider_name}'. Available: {', '.join(PROVIDERS.keys())}")
         raise typer.Exit(1)
 
-    # Get API key from settings (which checks keyring and env vars)
     api_key = settings.get_api_key(provider_name)
 
-    # Validate API key is present (except for local)
     if provider_name != "local" and not api_key:
         env_var_name = {
             "openai": "OPENAI_API_KEY",
@@ -56,11 +165,9 @@ def create_provider(provider_name: str, model: str, settings: Settings):
         print_error(f"Use 'devpilot set-key {provider_name}' or set {env_var_name} environment variable")
         raise typer.Exit(1)
 
-    # Use default model if not specified
     if not model:
         model = settings.get_default_model(provider_name)
 
-    # Create provider with optional kwargs for local
     kwargs = {}
     if provider_name == "local":
         base_url = settings.get_base_url(provider_name)
@@ -70,18 +177,197 @@ def create_provider(provider_name: str, model: str, settings: Settings):
     return get_provider(provider_name, model=model, api_key=api_key, **kwargs)
 
 
-@app.command()
-def ask(
-    prompt: str = typer.Argument(..., help="The prompt or question for DevPilot"),
-    provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider (openai, anthropic, gemini, local)"),
-    model: str = typer.Option(None, "--model", "-m", help="Model name to use")
+def start_repl(
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    resume: Optional[str] = None,
+    message_limit: int = DEFAULT_MESSAGE_LIMIT
+):
+    """Start the interactive REPL session."""
+    settings = Settings.load()
+    session_manager = SessionManager(message_limit=message_limit)
+
+    context_summary = None
+
+    # Handle session resumption
+    if resume:
+        try:
+            session_info, messages = session_manager.load_session(resume)
+            provider = session_info["provider"]
+            model = session_info["model"]
+            context_summary = session_info.get("summary")
+
+            print_success(f"Resumed session: {resume}")
+            print_info(f"Provider: {provider} | Model: {model} | Messages: {len(messages)}")
+
+            if context_summary:
+                print_info("Session has context from previous conversation")
+
+        except ValueError as e:
+            print_error(str(e))
+            raise typer.Exit(1)
+    else:
+        messages = []
+
+    if not provider:
+        provider = settings.default_provider
+
+    llm = create_provider(provider, model, settings)
+
+    # Create new session if not resuming
+    if not resume:
+        session_id = session_manager.create_session(llm.name, llm.model)
+
+    tools = [ShellTool(), FilesystemTool(), SearchTool()]
+    executor = ToolExecutor(tools=tools, require_confirmation=True)
+    planner = SimplePlanner()
+
+    def on_session_continue(new_session_id: str):
+        print_info(f"Session continued: {new_session_id}")
+
+    agent = Agent(
+        provider=llm,
+        planner=planner,
+        executor=executor,
+        tools=tools,
+        session_manager=session_manager,
+        on_session_continue=on_session_continue
+    )
+
+    if messages:
+        agent.set_history(messages)
+
+    if context_summary:
+        agent.set_context_summary(context_summary)
+
+    # Get current working directory for display
+    cwd = os.getcwd()
+    cwd_short = os.path.basename(cwd) or cwd
+
+    print_panel(
+        f"[bold]DevPilot[/bold] - AI Coding Assistant\n"
+        f"Provider: [cyan]{llm.name}[/cyan] | Model: [cyan]{llm.model}[/cyan]\n"
+        f"Session: [dim]{session_manager.current_session_id}[/dim]\n"
+        f"Working directory: [dim]{cwd_short}[/dim]\n\n"
+        f"Type your message or [dim]'exit'[/dim] to quit.",
+        title="",
+        border_style="blue",
+        fit=True
+    )
+
+    while True:
+        try:
+            user_input = typer.prompt(f"[{cwd_short}]")
+
+            if user_input.lower() in ("exit", "quit", "q"):
+                print_info(f"Session saved: {session_manager.current_session_id}")
+                break
+
+            if user_input.strip() == "":
+                continue
+
+            # Handle special commands
+            if user_input.startswith("/"):
+                cmd = user_input[1:].strip().lower()
+                if cmd == "help":
+                    console.print("\n[bold]Commands:[/bold]")
+                    console.print("  /help     - Show this help")
+                    console.print("  /clear    - Clear conversation history")
+                    console.print("  /session  - Show current session info")
+                    console.print("  /config   - Show configuration")
+                    console.print("  exit      - Exit DevPilot\n")
+                    continue
+                elif cmd == "clear":
+                    agent.history = []
+                    print_success("Conversation cleared.")
+                    continue
+                elif cmd == "session":
+                    print_info(f"Session ID: {session_manager.current_session_id}")
+                    print_info(f"Messages: {len(agent.history)}")
+                    continue
+                elif cmd == "config":
+                    print_info(f"Provider: {llm.name}")
+                    print_info(f"Model: {llm.model}")
+                    continue
+
+            result = agent.run(user_input, max_iterations=15)
+            print_panel(result, title="DevPilot", border_style="green")
+
+        except typer.Abort:
+            print_warning("Aborted.")
+            break
+        except KeyboardInterrupt:
+            print_info(f"\nSession saved: {session_manager.current_session_id}")
+            break
+        except Exception as e:
+            print_error(str(e))
+
+
+@app.callback()
+def main_callback(
+    ctx: typer.Context,
+    provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
+    model: str = typer.Option(None, "--model", "-m", help="Model name"),
+    resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID"),
 ):
     """
-    Ask DevPilot a single question or give it a task.
+    DevPilot - Your AI Coding Assistant
+
+    Just run 'devpilot' to start chatting!
+    """
+    # If a subcommand is being invoked, don't run the default behavior
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # No subcommand - run the default REPL behavior
+    settings = Settings.load()
+
+    # Check if we need onboarding
+    if not has_any_api_key(settings):
+        configured_provider = run_onboarding()
+        if not configured_provider:
+            raise typer.Exit(1)
+        # Reload settings after onboarding
+        settings = Settings.load()
+        provider = configured_provider
+
+    # Start REPL
+    start_repl(provider=provider, model=model, resume=resume)
+
+
+@app.command()
+def chat(
+    provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
+    model: str = typer.Option(None, "--model", "-m", help="Model name"),
+    resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID"),
+    message_limit: int = typer.Option(DEFAULT_MESSAGE_LIMIT, "--limit", "-l", help="Messages before auto-summarization")
+):
+    """
+    Start an interactive chat session (alias for running devpilot directly).
     """
     settings = Settings.load()
 
-    # Use default provider if not specified
+    if not has_any_api_key(settings):
+        configured_provider = run_onboarding()
+        if not configured_provider:
+            raise typer.Exit(1)
+        settings = Settings.load()
+        provider = configured_provider
+
+    start_repl(provider=provider, model=model, resume=resume, message_limit=message_limit)
+
+
+@app.command()
+def ask(
+    prompt: str = typer.Argument(..., help="The prompt or question for DevPilot"),
+    provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
+    model: str = typer.Option(None, "--model", "-m", help="Model name")
+):
+    """
+    Ask DevPilot a single question (non-interactive).
+    """
+    settings = Settings.load()
+
     if not provider:
         provider = settings.default_provider
 
@@ -98,124 +384,12 @@ def ask(
         tools=tools
     )
 
-    console.print(f"[bold blue]DevPilot ({llm.name}/{llm.model}) is thinking...[/bold blue]")
+    console.print(f"[dim]Using {llm.name}/{llm.model}[/dim]")
     try:
         result = agent.run(prompt, max_iterations=15)
-        print_success("Response:")
-        print_panel(result, title="DevPilot Response", border_style="green")
+        print_panel(result, title="DevPilot", border_style="green")
     except Exception as e:
         print_error(str(e))
-
-
-@app.command()
-def repl(
-    provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider (openai, anthropic, gemini, local)"),
-    model: str = typer.Option(None, "--model", "-m", help="Model name to use"),
-    resume: str = typer.Option(None, "--resume", "-r", help="Resume a previous session by ID"),
-    message_limit: int = typer.Option(DEFAULT_MESSAGE_LIMIT, "--limit", "-l", help="Messages before auto-summarization")
-):
-    """
-    Start an interactive DevPilot REPL session.
-
-    Sessions are automatically saved. When the message limit is reached,
-    the conversation is summarized and continued in a new session.
-    """
-    settings = Settings.load()
-    session_manager = SessionManager(message_limit=message_limit)
-
-    context_summary = None
-    session_info = None
-
-    # Handle session resumption
-    if resume:
-        try:
-            session_info, messages = session_manager.load_session(resume)
-            provider = session_info["provider"]
-            model = session_info["model"]
-            context_summary = session_info.get("summary")
-
-            print_success(f"Resumed session: {resume}")
-            print_info(f"Provider: {provider} | Model: {model} | Messages: {len(messages)}")
-
-            if context_summary:
-                print_info("Session has context from previous conversation")
-
-            # Check if this is a continuation session
-            if session_info.get("parent_session_id"):
-                print_info(f"Continuation of session: {session_info['parent_session_id']}")
-
-        except ValueError as e:
-            print_error(str(e))
-            raise typer.Exit(1)
-    else:
-        messages = []
-
-    if not provider:
-        provider = settings.default_provider
-
-    llm = create_provider(provider, model, settings)
-
-    # Create new session if not resuming
-    if not resume:
-        session_id = session_manager.create_session(llm.name, llm.model)
-        print_info(f"Session ID: {session_id}")
-
-    tools = [ShellTool(), FilesystemTool(), SearchTool()]
-    executor = ToolExecutor(tools=tools, require_confirmation=True)
-    planner = SimplePlanner()
-
-    # Callback for when session continues to a new one
-    def on_session_continue(new_session_id: str):
-        print_info(f"Session continued: {new_session_id}")
-
-    agent = Agent(
-        provider=llm,
-        planner=planner,
-        executor=executor,
-        tools=tools,
-        session_manager=session_manager,
-        on_session_continue=on_session_continue
-    )
-
-    # Restore history if resuming
-    if messages:
-        agent.set_history(messages)
-
-    # Set context summary if available
-    if context_summary:
-        agent.set_context_summary(context_summary)
-
-    print_panel(
-        f"Welcome to DevPilot REPL!\n"
-        f"Provider: {llm.name} | Model: {llm.model}\n"
-        f"Session: {session_manager.current_session_id}\n"
-        f"Auto-summarize at: {message_limit} messages\n"
-        f"Type 'exit' or 'quit' to leave.",
-        title="DevPilot",
-        border_style="blue",
-        fit=True
-    )
-
-    while True:
-        try:
-            user_input = typer.prompt("You")
-
-            if user_input.lower() in ("exit", "quit", "q"):
-                print_warning("Goodbye!")
-                print_info(f"Session saved: {session_manager.current_session_id}")
-                break
-
-            if not user_input.strip():
-                continue
-
-            result = agent.run(user_input, max_iterations=15)
-            print_panel(result, title="DevPilot", border_style="green")
-
-        except typer.Abort:
-            print_warning("Aborted.")
-            break
-        except Exception as e:
-            print_error(str(e))
 
 
 @app.command()
@@ -225,10 +399,10 @@ def config():
     """
     settings = Settings.load()
 
-    console.print("[bold]DevPilot Configuration[/bold]\n")
+    console.print("\n[bold]DevPilot Configuration[/bold]\n")
     console.print(f"Default Provider: [cyan]{settings.default_provider}[/cyan]")
     console.print(f"Keyring Available: {'[green]yes[/green]' if keyring_available() else '[yellow]no[/yellow]'}")
-    console.print("\n[bold]Configured Providers:[/bold]")
+    console.print("\n[bold]Providers:[/bold]")
 
     for name in PROVIDERS.keys():
         provider_config = settings.providers.get(name)
@@ -239,7 +413,7 @@ def config():
                 if provider_config.key_encrypted:
                     key_status = "[green]configured (encrypted)[/green]"
                 else:
-                    key_status = "[green]configured (env var)[/green]"
+                    key_status = "[green]configured[/green]"
             else:
                 key_status = "[yellow]not set[/yellow]"
             model = provider_config.default_model or "default"
@@ -266,7 +440,6 @@ def set_key(
         print_error("Please set API keys via environment variables instead.")
         raise typer.Exit(1)
 
-    # Prompt for key securely (hidden input)
     api_key = typer.prompt(f"Enter API key for {provider}", hide_input=True)
 
     if not api_key.strip():
@@ -285,7 +458,7 @@ def providers():
     """
     List available providers.
     """
-    console.print("[bold]Available Providers:[/bold]\n")
+    console.print("\n[bold]Available Providers:[/bold]\n")
     for name in PROVIDERS.keys():
         console.print(f"  - {name}")
 
@@ -349,20 +522,14 @@ def sessions_show(
     console.print(f"Provider: {session_info['provider']}")
     console.print(f"Model: {session_info['model']}")
     console.print(f"Messages: {len(messages)}")
-    console.print(f"Created: {session_info['created_at']}")
-    console.print(f"Updated: {session_info['updated_at']}")
 
     if session_info.get("parent_session_id"):
-        console.print(f"Parent Session: {session_info['parent_session_id']}")
+        console.print(f"Parent: {session_info['parent_session_id']}")
 
     if session_info.get("summary"):
         console.print("\n[bold]Context Summary:[/bold]")
-        print_panel(session_info["summary"][:500] + "..." if len(session_info.get("summary", "")) > 500 else session_info.get("summary", ""), border_style="dim")
-
-    # Show session chain if this is a continuation
-    chain = session_manager.get_session_chain(session_id)
-    if len(chain) > 1:
-        console.print(f"\n[bold]Session Chain:[/bold] {' -> '.join(s['id'] for s in chain)}")
+        summary = session_info["summary"]
+        print_panel(summary[:500] + "..." if len(summary) > 500 else summary, border_style="dim")
 
 
 @sessions_app.command("delete")
