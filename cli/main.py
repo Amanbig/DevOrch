@@ -13,7 +13,7 @@ from core.executor import ToolExecutor
 from core.sessions import SessionManager, DEFAULT_MESSAGE_LIMIT
 from core.modes import ModeManager, AgentMode
 from providers import get_provider, PROVIDERS, PROVIDER_INFO, PROVIDER_ENV_VARS
-from config.settings import Settings, set_api_key, keyring_available, save_config
+from config.settings import Settings, ProviderConfig, set_api_key, keyring_available, save_config
 from config.permissions import get_permissions, reset_permissions, PermissionLevel, PERMISSIONS_FILE
 from utils.logger import get_console, print_error, print_success, print_panel, print_warning, print_info
 
@@ -181,6 +181,48 @@ def run_onboarding() -> Optional[str]:
             print_info("Make sure Ollama is running at http://localhost:11434")
         else:
             print_info("Make sure LM Studio is running at http://localhost:1234")
+
+        # Try to list available models and let user select
+        settings = Settings.load()
+        try:
+            temp_provider = get_provider(provider)
+            models = temp_provider.list_models()
+            if models:
+                console.print("\n[bold]Available models:[/bold]")
+                for i, m in enumerate(models[:10], 1):
+                    console.print(f"  {i}. [cyan]{m.id}[/cyan]")
+                console.print()
+
+                model_choice = typer.prompt(
+                    "Select a model (number or name)",
+                    default="1"
+                )
+
+                # Parse selection
+                try:
+                    idx = int(model_choice) - 1
+                    if 0 <= idx < len(models):
+                        selected_model = models[idx].id
+                    else:
+                        selected_model = model_choice.strip()
+                except ValueError:
+                    selected_model = model_choice.strip()
+
+                # Save the selection
+                if provider not in settings.providers:
+                    settings.providers[provider] = ProviderConfig()
+                settings.providers[provider].default_model = selected_model
+                settings.default_provider = provider
+                save_config(settings)
+                print_success(f"Saved: provider={provider}, model={selected_model}")
+        except Exception as e:
+            print_warning(f"Could not list models: {e}")
+            settings.default_provider = provider
+            try:
+                save_config(settings)
+            except Exception:
+                pass
+
         return provider
 
     # Get API key
@@ -208,11 +250,49 @@ def run_onboarding() -> Optional[str]:
     # Save as default provider
     settings = Settings.load()
     settings.default_provider = provider
+    if provider not in settings.providers:
+        settings.providers[provider] = ProviderConfig()
     settings.providers[provider].api_key = api_key.strip()
+
+    # Let user select a model
+    selected_model = None
+    try:
+        temp_provider = get_provider(provider, api_key=api_key.strip())
+        models = temp_provider.list_models()
+        if models:
+            console.print("\n[bold]Available models:[/bold]")
+            for i, m in enumerate(models[:10], 1):
+                desc = f" - {m.description[:50]}..." if m.description and len(m.description) > 50 else (f" - {m.description}" if m.description else "")
+                console.print(f"  {i}. [cyan]{m.id}[/cyan]{desc}")
+            if len(models) > 10:
+                console.print(f"  [dim]... and {len(models) - 10} more[/dim]")
+            console.print()
+
+            model_choice = typer.prompt(
+                "Select a model (number or name, Enter for default)",
+                default="1"
+            )
+
+            # Parse selection
+            try:
+                idx = int(model_choice) - 1
+                if 0 <= idx < len(models):
+                    selected_model = models[idx].id
+                else:
+                    selected_model = model_choice.strip()
+            except ValueError:
+                selected_model = model_choice.strip()
+
+            settings.providers[provider].default_model = selected_model
+    except Exception as e:
+        print_warning(f"Could not fetch models: {e}")
 
     try:
         save_config(settings)
-        print_success(f"Default provider set to: {provider}")
+        if selected_model:
+            print_success(f"Saved: provider={provider}, model={selected_model}")
+        else:
+            print_success(f"Default provider set to: {provider}")
     except Exception:
         pass  # Config save failed, but key is in memory
 
@@ -535,7 +615,16 @@ def start_repl(
                             )
                             current_llm = new_llm
                             agent.provider = new_llm
-                            print_success(f"Switched to model: {cmd_arg}")
+
+                            # Save model selection to settings
+                            try:
+                                if current_llm.name not in current_settings.providers:
+                                    current_settings.providers[current_llm.name] = ProviderConfig()
+                                current_settings.providers[current_llm.name].default_model = cmd_arg
+                                save_config(current_settings)
+                                print_success(f"Switched to model: {cmd_arg} (saved as default)")
+                            except Exception:
+                                print_success(f"Switched to model: {cmd_arg}")
                         except Exception as e:
                             print_error(f"Failed to switch model: {e}")
                     else:
@@ -570,7 +659,14 @@ def start_repl(
                                 new_llm = create_provider(new_provider, None, current_settings)
                                 current_llm = new_llm
                                 agent.provider = new_llm
-                                print_success(f"Switched to provider: {new_provider} ({new_llm.model})")
+
+                                # Save provider selection to settings
+                                try:
+                                    current_settings.default_provider = new_provider
+                                    save_config(current_settings)
+                                    print_success(f"Switched to provider: {new_provider} ({new_llm.model}) (saved as default)")
+                                except Exception:
+                                    print_success(f"Switched to provider: {new_provider} ({new_llm.model})")
                             except Exception as e:
                                 print_error(f"Failed to switch provider: {e}")
                     else:
