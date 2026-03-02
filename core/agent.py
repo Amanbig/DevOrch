@@ -5,7 +5,8 @@ from providers.base import LLMProvider
 from core.planner import Planner
 from core.executor import Executor
 from core.sessions import SessionManager
-from utils.logger import get_console, print_panel, print_info, print_warning
+from core.modes import ModeManager, AgentMode, ExecutionPlan
+from utils.logger import get_console, print_panel, print_info, print_warning, print_success
 import json
 
 console = get_console()
@@ -18,6 +19,22 @@ SUMMARIZATION_PROMPT = """Please provide a concise summary of our conversation s
 
 Keep the summary focused and under 500 words."""
 
+PLAN_MODE_PROMPT = """You are in PLAN MODE. Before taking any actions:
+
+1. First, analyze the user's request carefully
+2. Create a clear, numbered plan of steps you will take
+3. List each tool you plan to use and why
+4. Present this plan to the user in a clear format like:
+
+📋 **Plan:**
+1. [Step description] - using [tool_name]
+2. [Step description] - using [tool_name]
+...
+
+After presenting the plan, ask: "Should I proceed with this plan? (yes/no/modify)"
+
+Do NOT execute any tools until the user approves the plan."""
+
 
 class Agent:
     def __init__(
@@ -28,6 +45,7 @@ class Agent:
         tools: list,
         session_manager: Optional[SessionManager] = None,
         on_session_continue: Optional[Callable[[str], None]] = None,
+        mode_manager: Optional[ModeManager] = None,
     ):
         self.provider = provider
         self.planner = planner
@@ -35,8 +53,11 @@ class Agent:
         self.tools = tools
         self.session_manager = session_manager
         self.on_session_continue = on_session_continue  # Callback when session continues
+        self.mode_manager = mode_manager or ModeManager()
         self.history: List[Message] = []
         self._context_summary: Optional[str] = None  # Summary from previous session
+        self._awaiting_plan_approval: bool = False
+        self._pending_plan_response: Optional[str] = None
 
     def set_history(self, messages: List[Message]):
         """Set the conversation history (used when resuming a session)."""
@@ -112,7 +133,41 @@ class Agent:
 
         return True
 
+    def _handle_plan_approval(self, user_input: str) -> Optional[str]:
+        """Handle plan approval responses. Returns response or None to continue."""
+        input_lower = user_input.strip().lower()
+
+        if input_lower in ("yes", "y", "proceed", "go", "ok", "continue"):
+            self._awaiting_plan_approval = False
+            print_success("Plan approved! Executing...")
+            # Switch to auto mode temporarily for this execution
+            return None  # Continue with execution
+
+        elif input_lower in ("no", "n", "cancel", "stop", "abort"):
+            self._awaiting_plan_approval = False
+            self._pending_plan_response = None
+            return "Plan cancelled. What would you like me to do instead?"
+
+        elif input_lower.startswith("modify") or input_lower.startswith("change"):
+            self._awaiting_plan_approval = False
+            # User wants to modify, treat the rest as new instructions
+            modification = user_input[6:].strip() if input_lower.startswith("modify") else user_input[6:].strip()
+            if modification:
+                return self.run(f"Please modify the plan: {modification}", max_iterations=15)
+            return "What changes would you like me to make to the plan?"
+
+        else:
+            # Treat as modification request
+            return self.run(user_input, max_iterations=15)
+
     def run(self, user_input: str, max_iterations: int = 15):
+        # Check if we're awaiting plan approval
+        if self._awaiting_plan_approval:
+            result = self._handle_plan_approval(user_input)
+            if result is not None:
+                return result
+            # If None, continue with the pending execution
+
         # Check session limit before processing
         self._check_and_handle_session_limit()
 
@@ -121,6 +176,9 @@ class Agent:
         self._save_message(user_message)
 
         iteration = 0
+        is_plan_mode = self.mode_manager.mode == AgentMode.PLAN
+        plan_created = False
+
         while iteration < max_iterations:
             planned_messages = self.planner.plan(self.history)
 
@@ -136,14 +194,43 @@ class Agent:
                         planned_messages.insert(i + 1, context_msg)
                         break
 
-            with console.status("[bold blue]DevPilot is thinking...", spinner="dots"):
+            # In plan mode, inject plan prompt on first iteration
+            if is_plan_mode and iteration == 0 and not plan_created:
+                for i, msg in enumerate(planned_messages):
+                    if msg.role == "system":
+                        plan_msg = Message(
+                            role="system",
+                            content=f"\n\n{PLAN_MODE_PROMPT}"
+                        )
+                        planned_messages.insert(i + 1, plan_msg)
+                        break
+
+            # Determine which tools to provide based on mode
+            if is_plan_mode and not plan_created:
+                # In planning phase, don't provide tools so LLM creates plan first
+                tools_for_call = None
+                status_msg = "[bold yellow]DevPilot is planning..."
+            else:
+                tools_for_call = [tool.schema() for tool in self.tools]
+                status_msg = "[bold blue]DevPilot is thinking..."
+
+            with console.status(status_msg, spinner="dots"):
                 response = self.provider.generate(
                     planned_messages,
-                    tools=[tool.schema() for tool in self.tools],
+                    tools=tools_for_call,
                 )
 
             # Save assistant message
             self._save_message(response.message)
+
+            # In plan mode, check if this is a plan response
+            if is_plan_mode and not plan_created and not response.tool_calls:
+                plan_created = True
+                self._awaiting_plan_approval = True
+                self._pending_plan_response = response.message.content
+                # Check session limit after response
+                self._check_and_handle_session_limit()
+                return response.message.content
 
             if not response.tool_calls:
                 # The LLM didn't call any tools, so we have a final answer
