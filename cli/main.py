@@ -844,7 +844,21 @@ def start_repl(
             console.print()  # New line after ^C
             continue  # Don't exit on Ctrl+C, just cancel current input
         except Exception as e:
+            error_str = str(e).lower()
             print_error(str(e))
+
+            # Provide helpful hints for common errors
+            if "401" in error_str or "unauthorized" in error_str or "authentication" in error_str:
+                console.print("[dim]  Tip: Your API key may be invalid. Try:[/dim]")
+                console.print(f"[dim]  - /provider <name> to switch providers[/dim]")
+                console.print(f"[dim]  - devpilot set-key {current_llm.name} to update the key[/dim]")
+            elif "402" in error_str or "payment" in error_str or "quota" in error_str or "rate" in error_str:
+                console.print("[dim]  Tip: You may have exceeded your quota or rate limit.[/dim]")
+                console.print(f"[dim]  - /provider <name> to switch to another provider[/dim]")
+            elif "connection" in error_str or "timeout" in error_str or "network" in error_str:
+                console.print("[dim]  Tip: Network error. Check your connection.[/dim]")
+                if current_llm.name == "local":
+                    console.print("[dim]  - Make sure Ollama is running: ollama serve[/dim]")
 
 
 @app.callback()
