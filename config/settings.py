@@ -1,16 +1,17 @@
 import os
-from pathlib import Path
-from typing import Optional, Dict
 from dataclasses import dataclass, field
+from pathlib import Path
 
 try:
     import yaml
+
     YAML_AVAILABLE = True
 except ImportError:
     YAML_AVAILABLE = False
 
 try:
     import keyring
+
     KEYRING_AVAILABLE = True
 except ImportError:
     KEYRING_AVAILABLE = False
@@ -22,16 +23,16 @@ KEYRING_SERVICE = "devpilot"
 
 @dataclass
 class ProviderConfig:
-    api_key: Optional[str] = None
+    api_key: str | None = None
     default_model: str = ""
-    base_url: Optional[str] = None
+    base_url: str | None = None
     key_encrypted: bool = False  # True if key is stored in keyring
 
 
 @dataclass
 class Settings:
     default_provider: str = "openai"
-    providers: Dict[str, ProviderConfig] = field(default_factory=dict)
+    providers: dict[str, ProviderConfig] = field(default_factory=dict)
 
     @classmethod
     def load(cls) -> "Settings":
@@ -41,7 +42,7 @@ class Settings:
         # Load from YAML if exists and yaml is available
         if YAML_AVAILABLE and CONFIG_FILE.exists():
             try:
-                with open(CONFIG_FILE, "r") as f:
+                with open(CONFIG_FILE) as f:
                     data = yaml.safe_load(f) or {}
                 settings.default_provider = data.get("default_provider", "openai")
                 for name, config in data.get("providers", {}).items():
@@ -92,7 +93,7 @@ class Settings:
 
         return settings
 
-    def get_api_key(self, provider: str) -> Optional[str]:
+    def get_api_key(self, provider: str) -> str | None:
         """Get API key for a provider."""
         config = self.providers.get(provider)
         return config.api_key if config else None
@@ -102,7 +103,7 @@ class Settings:
         config = self.providers.get(provider)
         return config.default_model if config else ""
 
-    def get_base_url(self, provider: str) -> Optional[str]:
+    def get_base_url(self, provider: str) -> str | None:
         """Get base URL for a provider (used for local/custom endpoints)."""
         config = self.providers.get(provider)
         return config.base_url if config else None
@@ -152,10 +153,7 @@ def save_config(settings: Settings):
 
     ensure_config_dir()
 
-    data = {
-        "default_provider": settings.default_provider,
-        "providers": {}
-    }
+    data = {"default_provider": settings.default_provider, "providers": {}}
 
     for name, config in settings.providers.items():
         provider_data = {}

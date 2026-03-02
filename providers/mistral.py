@@ -4,17 +4,18 @@ https://mistral.ai/
 """
 
 import json
-from typing import List, Optional
+
 import httpx
 
-from schemas.message import Message, LLMResponse, ToolCall
 from providers.base import LLMProvider, ModelInfo
+from schemas.message import LLMResponse, Message, ToolCall
 
 
 class MistralProvider(LLMProvider):
     """
     Mistral AI provider for Mistral models.
     """
+
     name = "mistral"
 
     DEFAULT_MODELS = [
@@ -32,7 +33,7 @@ class MistralProvider(LLMProvider):
     def __init__(
         self,
         model: str = "mistral-large-latest",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
     ):
         self.model = model
         self.api_key = api_key
@@ -44,22 +45,21 @@ class MistralProvider(LLMProvider):
             "Content-Type": "application/json",
         }
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Fetch available models from Mistral API."""
         try:
-            response = self.client.get(
-                f"{self.BASE_URL}/models",
-                headers=self._get_headers()
-            )
+            response = self.client.get(f"{self.BASE_URL}/models", headers=self._get_headers())
             response.raise_for_status()
             data = response.json()
 
             models = []
             for model in data.get("data", []):
-                models.append(ModelInfo(
-                    id=model.get("id"),
-                    name=model.get("id"),
-                ))
+                models.append(
+                    ModelInfo(
+                        id=model.get("id"),
+                        name=model.get("id"),
+                    )
+                )
 
             models.sort(key=lambda m: m.id)
             return models if models else [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
@@ -69,8 +69,8 @@ class MistralProvider(LLMProvider):
 
     def generate(
         self,
-        messages: List[Message],
-        tools: Optional[list] = None,
+        messages: list[Message],
+        tools: list | None = None,
         stream: bool = False,
     ) -> LLMResponse:
         # Format messages for Mistral API
@@ -84,12 +84,17 @@ class MistralProvider(LLMProvider):
                     "tool_call_id": msg.tool_call_id or msg.name,
                     "name": msg.name,
                 }
-            elif msg.role == "assistant" and hasattr(msg, 'metadata') and msg.metadata and msg.metadata.get('tool_calls'):
+            elif (
+                msg.role == "assistant"
+                and hasattr(msg, "metadata")
+                and msg.metadata
+                and msg.metadata.get("tool_calls")
+            ):
                 # Preserve tool_calls in assistant messages
                 formatted_msg = {
                     "role": "assistant",
                     "content": msg.content or "",
-                    "tool_calls": msg.metadata['tool_calls']
+                    "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
                 formatted_msg = {"role": msg.role, "content": msg.content}
@@ -100,14 +105,18 @@ class MistralProvider(LLMProvider):
         if tools:
             formatted_tools = []
             for tool in tools:
-                formatted_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool["name"],
-                        "description": tool["description"],
-                        "parameters": tool.get("parameters", {"type": "object", "properties": {}})
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool["name"],
+                            "description": tool["description"],
+                            "parameters": tool.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        },
                     }
-                })
+                )
 
         payload = {
             "model": self.model,
@@ -120,9 +129,7 @@ class MistralProvider(LLMProvider):
             payload["tool_choice"] = "auto"
 
         response = self.client.post(
-            f"{self.BASE_URL}/chat/completions",
-            headers=self._get_headers(),
-            json=payload
+            f"{self.BASE_URL}/chat/completions", headers=self._get_headers(), json=payload
         )
         response.raise_for_status()
         data = response.json()
@@ -133,11 +140,15 @@ class MistralProvider(LLMProvider):
         tool_calls = []
         if message.get("tool_calls"):
             for tc in message["tool_calls"]:
-                args = json.loads(tc["function"]["arguments"]) if tc["function"].get("arguments") else {}
+                args = (
+                    json.loads(tc["function"]["arguments"])
+                    if tc["function"].get("arguments")
+                    else {}
+                )
                 tool_call = ToolCall(
                     name=tc["function"]["name"],
                     arguments=args,
-                    id=tc.get("id", tc["function"]["name"])
+                    id=tc.get("id", tc["function"]["name"]),
                 )
                 tool_calls.append(tool_call)
 
@@ -146,5 +157,5 @@ class MistralProvider(LLMProvider):
         return LLMResponse(
             message=Message(role="assistant", content=content),
             tool_calls=tool_calls if tool_calls else None,
-            raw=data
+            raw=data,
         )

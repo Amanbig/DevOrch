@@ -1,9 +1,8 @@
-import sqlite3
 import json
+import sqlite3
 import uuid
-from pathlib import Path
 from datetime import datetime
-from typing import List, Optional, Tuple
+from pathlib import Path
 
 from schemas.message import Message
 
@@ -20,7 +19,7 @@ class SessionManager:
 
     def __init__(self, message_limit: int = DEFAULT_MESSAGE_LIMIT):
         self._ensure_db()
-        self.current_session_id: Optional[str] = None
+        self.current_session_id: str | None = None
         self.message_limit = message_limit
         self._message_count = 0
 
@@ -77,9 +76,9 @@ class SessionManager:
         self,
         provider: str,
         model: str,
-        name: Optional[str] = None,
-        parent_session_id: Optional[str] = None,
-        summary: Optional[str] = None
+        name: str | None = None,
+        parent_session_id: str | None = None,
+        summary: str | None = None,
     ) -> str:
         """Create a new session and return its ID."""
         session_id = str(uuid.uuid4())[:8]
@@ -92,7 +91,7 @@ class SessionManager:
         cursor.execute(
             """INSERT INTO sessions (id, name, provider, model, parent_session_id, summary)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (session_id, name, provider, model, parent_session_id, summary)
+            (session_id, name, provider, model, parent_session_id, summary),
         )
 
         conn.commit()
@@ -102,7 +101,7 @@ class SessionManager:
         self._message_count = 0
         return session_id
 
-    def save_message(self, message: Message, session_id: Optional[str] = None):
+    def save_message(self, message: Message, session_id: str | None = None):
         """Save a message to the current or specified session."""
         sid = session_id or self.current_session_id
         if not sid:
@@ -116,14 +115,11 @@ class SessionManager:
         cursor.execute(
             """INSERT INTO messages (session_id, role, content, name, tool_call_id, metadata)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (sid, message.role, message.content, message.name, message.tool_call_id, metadata_json)
+            (sid, message.role, message.content, message.name, message.tool_call_id, metadata_json),
         )
 
         # Update session timestamp
-        cursor.execute(
-            "UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (sid,)
-        )
+        cursor.execute("UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (sid,))
 
         conn.commit()
         conn.close()
@@ -131,7 +127,7 @@ class SessionManager:
         if sid == self.current_session_id:
             self._message_count += 1
 
-    def get_message_count(self, session_id: Optional[str] = None) -> int:
+    def get_message_count(self, session_id: str | None = None) -> int:
         """Get the number of messages in a session."""
         sid = session_id or self.current_session_id
         if not sid:
@@ -150,7 +146,7 @@ class SessionManager:
         """Check if the current session should be summarized."""
         return self._message_count >= self.message_limit
 
-    def load_session(self, session_id: str) -> Tuple[dict, List[Message]]:
+    def load_session(self, session_id: str) -> tuple[dict, list[Message]]:
         """Load a session and its messages. Returns (session_info, messages)."""
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -168,8 +164,7 @@ class SessionManager:
 
         # Get messages
         cursor.execute(
-            "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at",
-            (session_id,)
+            "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at", (session_id,)
         )
         message_rows = cursor.fetchall()
 
@@ -181,7 +176,7 @@ class SessionManager:
                 content=row["content"],
                 name=row["name"],
                 tool_call_id=row["tool_call_id"],
-                metadata=metadata
+                metadata=metadata,
             )
             messages.append(msg)
 
@@ -191,12 +186,7 @@ class SessionManager:
         self._message_count = len(messages)
         return session_info, messages
 
-    def create_continuation_session(
-        self,
-        provider: str,
-        model: str,
-        summary: str
-    ) -> str:
+    def create_continuation_session(self, provider: str, model: str, summary: str) -> str:
         """Create a new session that continues from the current one with a summary."""
         parent_id = self.current_session_id
 
@@ -204,16 +194,12 @@ class SessionManager:
         name = f"Continuation {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
         new_session_id = self.create_session(
-            provider=provider,
-            model=model,
-            name=name,
-            parent_session_id=parent_id,
-            summary=summary
+            provider=provider, model=model, name=name, parent_session_id=parent_id, summary=summary
         )
 
         return new_session_id
 
-    def get_session_chain(self, session_id: str) -> List[dict]:
+    def get_session_chain(self, session_id: str) -> list[dict]:
         """Get the chain of sessions (parent -> child) for context."""
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -235,7 +221,7 @@ class SessionManager:
         conn.close()
         return chain
 
-    def list_sessions(self, limit: int = 20) -> List[dict]:
+    def list_sessions(self, limit: int = 20) -> list[dict]:
         """List recent sessions."""
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -248,7 +234,7 @@ class SessionManager:
                GROUP BY s.id
                ORDER BY s.updated_at DESC
                LIMIT ?""",
-            (limit,)
+            (limit,),
         )
 
         sessions = [dict(row) for row in cursor.fetchall()]

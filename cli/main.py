@@ -1,49 +1,60 @@
-import typer
-from typing import List, Optional, Dict, Callable, Any
-from rich.table import Table
-from rich.panel import Panel
 import os
 
 import questionary
-from questionary import Style as QStyle
-
+import typer
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
+from questionary import Style as QStyle
+from rich.panel import Panel
+from rich.table import Table
 
 # Custom style for questionary prompts
-QUESTIONARY_STYLE = QStyle([
-    ('qmark', 'fg:yellow bold'),
-    ('question', 'fg:white bold'),
-    ('answer', 'fg:green bold'),
-    ('pointer', 'fg:cyan bold'),
-    ('highlighted', 'fg:cyan bold'),
-    ('selected', 'fg:green'),
-    ('instruction', 'fg:gray'),
-])
+QUESTIONARY_STYLE = QStyle(
+    [
+        ("qmark", "fg:yellow bold"),
+        ("question", "fg:white bold"),
+        ("answer", "fg:green bold"),
+        ("pointer", "fg:cyan bold"),
+        ("highlighted", "fg:cyan bold"),
+        ("selected", "fg:green"),
+        ("instruction", "fg:gray"),
+    ]
+)
 
+from config.permissions import PERMISSIONS_FILE, PermissionLevel, get_permissions, reset_permissions
+from config.settings import (
+    CONFIG_FILE,
+    ProviderConfig,
+    Settings,
+    keyring_available,
+    save_config,
+    set_api_key,
+)
 from core.agent import Agent
 from core.executor import ToolExecutor
-from core.sessions import SessionManager, DEFAULT_MESSAGE_LIMIT
-from core.modes import ModeManager, AgentMode
-from providers import get_provider, PROVIDERS, PROVIDER_INFO, PROVIDER_ENV_VARS
-from config.settings import Settings, ProviderConfig, set_api_key, keyring_available, save_config, CONFIG_FILE
-from config.permissions import get_permissions, reset_permissions, PermissionLevel, PERMISSIONS_FILE
-from utils.logger import get_console, print_error, print_success, print_panel, print_warning, print_info
-
-from tools.shell import ShellTool
-from tools.filesystem import FilesystemTool
-from tools.search import SearchTool
-from tools.grep import GrepTool
-from tools.edit import EditTool
-from tools.task import TaskTool
-from tools.websearch import WebSearchTool, WebFetchTool
-from core.tasks import get_task_manager, reset_task_manager
-
+from core.modes import AgentMode, ModeManager
 from core.planner import Planner
+from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
+from core.tasks import get_task_manager, reset_task_manager
+from providers import PROVIDER_ENV_VARS, PROVIDER_INFO, PROVIDERS, get_provider
 from schemas.message import Message
-
+from tools.edit import EditTool
+from tools.filesystem import FilesystemTool
+from tools.grep import GrepTool
+from tools.search import SearchTool
+from tools.shell import ShellTool
+from tools.task import TaskTool
+from tools.websearch import WebFetchTool, WebSearchTool
+from utils.logger import (
+    get_console,
+    print_error,
+    print_info,
+    print_panel,
+    print_success,
+    print_warning,
+)
 
 # ASCII Art Banner
 BANNER = r"""
@@ -84,20 +95,22 @@ SLASH_COMMANDS = {
 }
 
 # Style for prompt_toolkit (including completion menu)
-PROMPT_STYLE = Style.from_dict({
-    "prompt": "#00aa00 bold",
-    "command": "#00aaff bold",
-    "description": "#888888",
-    # Completion menu styling
-    "completion-menu": "bg:#1a1a2e",
-    "completion-menu.completion": "bg:#1a1a2e #e0e0e0",
-    "completion-menu.completion.current": "bg:#0066cc #ffffff bold",
-    "completion-menu.meta": "bg:#1a1a2e #666666 italic",
-    "completion-menu.meta.current": "bg:#0066cc #cccccc italic",
-    # Scrollbar
-    "scrollbar.background": "bg:#333344",
-    "scrollbar.button": "bg:#0066cc",
-})
+PROMPT_STYLE = Style.from_dict(
+    {
+        "prompt": "#00aa00 bold",
+        "command": "#00aaff bold",
+        "description": "#888888",
+        # Completion menu styling
+        "completion-menu": "bg:#1a1a2e",
+        "completion-menu.completion": "bg:#1a1a2e #e0e0e0",
+        "completion-menu.completion.current": "bg:#0066cc #ffffff bold",
+        "completion-menu.meta": "bg:#1a1a2e #666666 italic",
+        "completion-menu.meta.current": "bg:#0066cc #cccccc italic",
+        # Scrollbar
+        "scrollbar.background": "bg:#333344",
+        "scrollbar.button": "bg:#0066cc",
+    }
+)
 
 
 class SlashCommandCompleter(Completer):
@@ -187,19 +200,14 @@ When executing shell commands, use the shell tool with the command to run."""
 
 
 class SimplePlanner(Planner):
-    def plan(self, history: List[Message]) -> List[Message]:
-        system_prompt = Message(
-            role="system",
-            content=SYSTEM_PROMPT
-        )
+    def plan(self, history: list[Message]) -> list[Message]:
+        system_prompt = Message(role="system", content=SYSTEM_PROMPT)
         return [system_prompt] + history
 
 
 # Main app with invoke_without_command=True so we can handle bare `devpilot`
 app = typer.Typer(
-    help="DevPilot - Your AI Coding Assistant",
-    invoke_without_command=True,
-    no_args_is_help=False
+    help="DevPilot - Your AI Coding Assistant", invoke_without_command=True, no_args_is_help=False
 )
 sessions_app = typer.Typer(help="Manage chat sessions")
 app.add_typer(sessions_app, name="sessions")
@@ -234,16 +242,18 @@ def has_any_provider_configured(settings: Settings) -> bool:
     return False
 
 
-def run_onboarding() -> Optional[str]:
+def run_onboarding() -> str | None:
     """Run first-time setup with interactive prompts. Returns the configured provider name or None."""
     print_banner()
 
     # Welcome panel
-    console.print(Panel(
-        "[bold]Welcome to DevPilot![/bold]\n\nLet's set up your AI provider to get started.",
-        border_style="blue",
-        padding=(1, 2)
-    ))
+    console.print(
+        Panel(
+            "[bold]Welcome to DevPilot![/bold]\n\nLet's set up your AI provider to get started.",
+            border_style="blue",
+            padding=(1, 2),
+        )
+    )
     console.print()
 
     # Provider selection with questionary
@@ -265,7 +275,7 @@ def run_onboarding() -> Optional[str]:
             "Select your AI provider:",
             choices=provider_choices,
             style=QUESTIONARY_STYLE,
-            instruction="(Use arrow keys to navigate, Enter to select)"
+            instruction="(Use arrow keys to navigate, Enter to select)",
         ).ask()
 
         if not provider:
@@ -289,16 +299,13 @@ def run_onboarding() -> Optional[str]:
                 models = temp_provider.list_models()
 
             if models:
-                model_choices = [
-                    questionary.Choice(m.id, value=m.id)
-                    for m in models[:15]
-                ]
+                model_choices = [questionary.Choice(m.id, value=m.id) for m in models[:15]]
 
                 selected_model = questionary.select(
                     "Select a model:",
                     choices=model_choices,
                     style=QUESTIONARY_STYLE,
-                    instruction="(Use arrow keys)"
+                    instruction="(Use arrow keys)",
                 ).ask()
 
                 if selected_model:
@@ -323,19 +330,18 @@ def run_onboarding() -> Optional[str]:
     env_var = PROVIDER_ENV_VARS.get(provider, f"{provider.upper()}_API_KEY")
 
     console.print()
-    console.print(Panel(
-        f"[bold]Setting up {provider.title()}[/bold]\n\n"
-        f"You'll need an API key from {provider.title()}.\n"
-        f"Alternatively, set the [cyan]{env_var}[/cyan] environment variable.",
-        border_style="yellow",
-        padding=(0, 1)
-    ))
+    console.print(
+        Panel(
+            f"[bold]Setting up {provider.title()}[/bold]\n\n"
+            f"You'll need an API key from {provider.title()}.\n"
+            f"Alternatively, set the [cyan]{env_var}[/cyan] environment variable.",
+            border_style="yellow",
+            padding=(0, 1),
+        )
+    )
     console.print()
 
-    api_key = questionary.password(
-        f"Enter your {provider} API key:",
-        style=QUESTIONARY_STYLE
-    ).ask()
+    api_key = questionary.password(f"Enter your {provider} API key:", style=QUESTIONARY_STYLE).ask()
 
     if not api_key or not api_key.strip():
         print_error("API key cannot be empty.")
@@ -369,14 +375,18 @@ def run_onboarding() -> Optional[str]:
         if models:
             model_choices = []
             for m in models[:15]:
-                desc = f" - {m.description[:40]}..." if m.description and len(m.description) > 40 else ""
+                desc = (
+                    f" - {m.description[:40]}..."
+                    if m.description and len(m.description) > 40
+                    else ""
+                )
                 model_choices.append(questionary.Choice(f"{m.id}{desc}", value=m.id))
 
             selected_model = questionary.select(
                 "Select a model:",
                 choices=model_choices,
                 style=QUESTIONARY_STYLE,
-                instruction="(Use arrow keys)"
+                instruction="(Use arrow keys)",
             ).ask()
 
             if selected_model:
@@ -395,13 +405,15 @@ def run_onboarding() -> Optional[str]:
         pass  # Config save failed, but key is in memory
 
     console.print()
-    console.print(Panel(
-        "[bold green]Setup complete![/bold green]\n\n"
-        "You're ready to start using DevPilot.\n"
-        "Type your questions or commands, or use /help for available commands.",
-        border_style="green",
-        padding=(0, 1)
-    ))
+    console.print(
+        Panel(
+            "[bold green]Setup complete![/bold green]\n\n"
+            "You're ready to start using DevPilot.\n"
+            "Type your questions or commands, or use /help for available commands.",
+            border_style="green",
+            padding=(0, 1),
+        )
+    )
 
     return provider
 
@@ -448,7 +460,9 @@ def create_provider(provider_name: str, model: str, settings: Settings):
         }.get(provider_name, f"{provider_name.upper()}_API_KEY")
 
         print_error(f"No API key found for {provider_name}.")
-        print_error(f"Use 'devpilot set-key {provider_name}' or set {env_var_name} environment variable")
+        print_error(
+            f"Use 'devpilot set-key {provider_name}' or set {env_var_name} environment variable"
+        )
         raise typer.Exit(1)
 
     if not model:
@@ -464,11 +478,11 @@ def create_provider(provider_name: str, model: str, settings: Settings):
 
 
 def start_repl(
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    resume: Optional[str] = None,
+    provider: str | None = None,
+    model: str | None = None,
+    resume: str | None = None,
     message_limit: int = DEFAULT_MESSAGE_LIMIT,
-    show_banner: bool = True
+    show_banner: bool = True,
 ):
     """Start the interactive REPL session."""
     if show_banner:
@@ -511,7 +525,16 @@ def start_repl(
     if not resume:
         session_id = session_manager.create_session(llm.name, llm.model)
 
-    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool(), TaskTool(), WebSearchTool(), WebFetchTool()]
+    tools = [
+        ShellTool(),
+        FilesystemTool(),
+        SearchTool(),
+        GrepTool(),
+        EditTool(),
+        TaskTool(),
+        WebSearchTool(),
+        WebFetchTool(),
+    ]
 
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
@@ -529,7 +552,7 @@ def start_repl(
         tools=tools,
         session_manager=session_manager,
         on_session_continue=on_session_continue,
-        mode_manager=mode_manager
+        mode_manager=mode_manager,
     )
 
     if messages:
@@ -543,9 +566,15 @@ def start_repl(
     cwd_short = os.path.basename(cwd) or cwd
 
     # Show session info
-    console.print(f"  [dim]Provider:[/dim] [cyan]{llm.name}[/cyan]  [dim]Model:[/dim] [cyan]{llm.model}[/cyan]")
-    console.print(f"  [dim]Session:[/dim] {session_manager.current_session_id}  [dim]cwd:[/dim] {cwd_short}")
-    console.print(f"  [dim]Mode:[/dim] {mode_manager.get_mode_display()}  [dim]- Type[/dim] / [dim]to see commands[/dim]\n")
+    console.print(
+        f"  [dim]Provider:[/dim] [cyan]{llm.name}[/cyan]  [dim]Model:[/dim] [cyan]{llm.model}[/cyan]"
+    )
+    console.print(
+        f"  [dim]Session:[/dim] {session_manager.current_session_id}  [dim]cwd:[/dim] {cwd_short}"
+    )
+    console.print(
+        f"  [dim]Mode:[/dim] {mode_manager.get_mode_display()}  [dim]- Type[/dim] / [dim]to see commands[/dim]\n"
+    )
 
     # Create completer for slash commands
     completer = SlashCommandCompleter()
@@ -596,8 +625,12 @@ def start_repl(
                         console.print(f"  [cyan]{slash_cmd:<14}[/cyan] - {desc}")
                     console.print(f"  [cyan]{'exit':<14}[/cyan] - Exit DevPilot")
                     console.print("\n[bold]Modes:[/bold]")
-                    console.print("  [yellow]PLAN[/yellow] - Shows plan before executing, asks for approval")
-                    console.print("  [green]AUTO[/green] - Executes tools automatically (trusted mode)")
+                    console.print(
+                        "  [yellow]PLAN[/yellow] - Shows plan before executing, asks for approval"
+                    )
+                    console.print(
+                        "  [green]AUTO[/green] - Executes tools automatically (trusted mode)"
+                    )
                     console.print("  [blue]ASK[/blue]  - Asks before each tool execution (default)")
                     console.print("\n[dim]Tip: Type / and use Tab for autocomplete[/dim]\n")
                     continue
@@ -610,15 +643,15 @@ def start_repl(
                         mode_choices = [
                             questionary.Choice(
                                 f"{'> ' if mode_manager.mode == AgentMode.PLAN else '  '}PLAN - Shows plan before executing, asks for approval",
-                                value="plan"
+                                value="plan",
                             ),
                             questionary.Choice(
                                 f"{'> ' if mode_manager.mode == AgentMode.AUTO else '  '}AUTO - Executes tools automatically (trusted mode)",
-                                value="auto"
+                                value="auto",
                             ),
                             questionary.Choice(
                                 f"{'> ' if mode_manager.mode == AgentMode.ASK else '  '}ASK - Asks before each tool execution (default)",
-                                value="ask"
+                                value="ask",
                             ),
                         ]
                         try:
@@ -626,7 +659,7 @@ def start_repl(
                                 "Select mode:",
                                 choices=mode_choices,
                                 style=QUESTIONARY_STYLE,
-                                instruction="(Use arrow keys)"
+                                instruction="(Use arrow keys)",
                             ).ask()
                             if not mode_name:
                                 continue
@@ -650,7 +683,9 @@ def start_repl(
                 elif cmd == "auto":
                     mode_manager.mode = AgentMode.AUTO
                     print_success("Switched to AUTO mode")
-                    console.print("  [dim]I'll execute tools automatically (dangerous commands still blocked)[/dim]")
+                    console.print(
+                        "  [dim]I'll execute tools automatically (dangerous commands still blocked)[/dim]"
+                    )
                     continue
 
                 elif cmd == "ask":
@@ -665,7 +700,7 @@ def start_repl(
                     continue
 
                 elif cmd == "status":
-                    console.print(f"\n[bold]Status[/bold]")
+                    console.print("\n[bold]Status[/bold]")
                     console.print(f"  [dim]Provider:[/dim] [cyan]{current_llm.name}[/cyan]")
                     console.print(f"  [dim]Model:[/dim]    [cyan]{current_llm.model}[/cyan]")
                     console.print(f"  [dim]Mode:[/dim]     {mode_manager.get_mode_display()}")
@@ -687,7 +722,9 @@ def start_repl(
                     print_info(f"Provider: {current_llm.name}")
                     print_info(f"Model: {current_llm.model}")
                     print_info(f"Session limit: {session_manager.message_limit} messages")
-                    print_info(f"Keyring: {'available' if keyring_available() else 'not available'}")
+                    print_info(
+                        f"Keyring: {'available' if keyring_available() else 'not available'}"
+                    )
                     console.print()
                     continue
 
@@ -695,10 +732,16 @@ def start_repl(
                     perms = get_permissions()
                     console.print("\n[bold]Tool Permissions:[/bold]")
                     for tool_name, perm in perms.tools.items():
-                        level_color = {"allow": "green", "deny": "red", "ask": "yellow"}.get(perm.level.value, "white")
-                        console.print(f"  {tool_name}: [{level_color}]{perm.level.value}[/{level_color}]")
+                        level_color = {"allow": "green", "deny": "red", "ask": "yellow"}.get(
+                            perm.level.value, "white"
+                        )
+                        console.print(
+                            f"  {tool_name}: [{level_color}]{perm.level.value}[/{level_color}]"
+                        )
                     if perms.session_allowed:
-                        console.print(f"\n[green]Session allowed:[/green] {len(perms.session_allowed)} patterns")
+                        console.print(
+                            f"\n[green]Session allowed:[/green] {len(perms.session_allowed)} patterns"
+                        )
                     console.print()
                     continue
 
@@ -729,10 +772,12 @@ def start_repl(
                         if len(models) > 30:
                             console.print(f"  [dim]... and {len(models) - 30} more[/dim]")
                         if current_llm.name == "local":
-                            console.print(f"\n  [dim]For tool/function calling, use 7B+ models[/dim]")
+                            console.print(
+                                "\n  [dim]For tool/function calling, use 7B+ models[/dim]"
+                            )
                     except Exception as e:
                         print_error(f"Failed to fetch models: {e}")
-                    console.print(f"\n[dim]Use /model <name> to switch[/dim]\n")
+                    console.print("\n[dim]Use /model <name> to switch[/dim]\n")
                     continue
 
                 elif cmd == "model":
@@ -750,16 +795,15 @@ def start_repl(
                                     is_current = m.id == current_llm.model
                                     prefix = "> " if is_current else "  "
                                     ctx = f" ({m.context_length} ctx)" if m.context_length else ""
-                                    model_choices.append(questionary.Choice(
-                                        f"{prefix}{m.id}{ctx}",
-                                        value=m.id
-                                    ))
+                                    model_choices.append(
+                                        questionary.Choice(f"{prefix}{m.id}{ctx}", value=m.id)
+                                    )
 
                                 selected_model = questionary.select(
                                     f"Select model for {current_llm.name}:",
                                     choices=model_choices,
                                     style=QUESTIONARY_STYLE,
-                                    instruction="(Use arrow keys)"
+                                    instruction="(Use arrow keys)",
                                 ).ask()
 
                                 if not selected_model:
@@ -780,13 +824,15 @@ def start_repl(
                                 provider_kwargs["base_url"] = base_url
 
                         # Get API key - prefer current provider's key, then settings
-                        api_key = getattr(current_llm, 'api_key', None) or current_settings.get_api_key(current_llm.name)
+                        api_key = getattr(
+                            current_llm, "api_key", None
+                        ) or current_settings.get_api_key(current_llm.name)
 
                         new_llm = get_provider(
                             current_llm.name,
                             model=selected_model,
                             api_key=api_key,
-                            **provider_kwargs
+                            **provider_kwargs,
                         )
                         current_llm = new_llm
                         agent.provider = new_llm
@@ -795,7 +841,9 @@ def start_repl(
                         try:
                             if current_llm.name not in current_settings.providers:
                                 current_settings.providers[current_llm.name] = ProviderConfig()
-                            current_settings.providers[current_llm.name].default_model = selected_model
+                            current_settings.providers[
+                                current_llm.name
+                            ].default_model = selected_model
                             save_config(current_settings)
                             print_success(f"Switched to model: {selected_model}")
                         except Exception:
@@ -812,11 +860,15 @@ def start_repl(
                         key_status = ""
                         if env_var:
                             has_key = bool(current_settings.get_api_key(name))
-                            key_status = " [green](configured)[/green]" if has_key else " [yellow](needs key)[/yellow]"
+                            key_status = (
+                                " [green](configured)[/green]"
+                                if has_key
+                                else " [yellow](needs key)[/yellow]"
+                            )
                         elif name in ("local", "lmstudio"):
                             key_status = " [dim](no key needed)[/dim]"
                         console.print(f"  {marker} [cyan]{name:<12}[/cyan] - {desc}{key_status}")
-                    console.print(f"\n[dim]Use /provider <name> to switch[/dim]\n")
+                    console.print("\n[dim]Use /provider <name> to switch[/dim]\n")
                     continue
 
                 elif cmd == "provider":
@@ -844,7 +896,7 @@ def start_repl(
                                 "Select provider:",
                                 choices=provider_choices,
                                 style=QUESTIONARY_STYLE,
-                                instruction="(Use arrow keys)"
+                                instruction="(Use arrow keys)",
                             ).ask()
                             if not new_provider:
                                 continue
@@ -864,17 +916,20 @@ def start_repl(
 
                     if needs_key and not has_key:
                         # Prompt for API key with questionary
-                        env_var = PROVIDER_ENV_VARS.get(new_provider, f"{new_provider.upper()}_API_KEY")
-                        console.print(Panel(
-                            f"[bold]Setting up {new_provider}[/bold]\n"
-                            f"[dim]You can also set {env_var} environment variable[/dim]",
-                            border_style="yellow"
-                        ))
+                        env_var = PROVIDER_ENV_VARS.get(
+                            new_provider, f"{new_provider.upper()}_API_KEY"
+                        )
+                        console.print(
+                            Panel(
+                                f"[bold]Setting up {new_provider}[/bold]\n"
+                                f"[dim]You can also set {env_var} environment variable[/dim]",
+                                border_style="yellow",
+                            )
+                        )
 
                         try:
                             api_key = questionary.password(
-                                f"Enter your {new_provider} API key:",
-                                style=QUESTIONARY_STYLE
+                                f"Enter your {new_provider} API key:", style=QUESTIONARY_STYLE
                             ).ask()
 
                             if api_key and api_key.strip():
@@ -903,10 +958,12 @@ def start_repl(
                                         selected_model = questionary.select(
                                             "Select a model:",
                                             choices=model_choices,
-                                            style=QUESTIONARY_STYLE
+                                            style=QUESTIONARY_STYLE,
                                         ).ask()
                                         if selected_model:
-                                            current_settings.providers[new_provider].default_model = selected_model
+                                            current_settings.providers[
+                                                new_provider
+                                            ].default_model = selected_model
                                 except Exception:
                                     pass  # Model selection is optional
                             else:
@@ -920,9 +977,7 @@ def start_repl(
                         # Use entered key directly if we just got it, otherwise use settings
                         if entered_key:
                             new_llm = get_provider(
-                                new_provider,
-                                model=selected_model,
-                                api_key=entered_key
+                                new_provider, model=selected_model, api_key=entered_key
                             )
                         else:
                             new_llm = create_provider(new_provider, None, current_settings)
@@ -946,11 +1001,21 @@ def start_repl(
                         print_info("No messages yet.")
                     else:
                         for i, msg in enumerate(agent.history[-10:], 1):
-                            role_color = {"user": "green", "assistant": "blue", "tool": "yellow"}.get(msg.role, "white")
-                            content_preview = (msg.content[:80] + "...") if len(msg.content) > 80 else msg.content
-                            console.print(f"  [{role_color}]{msg.role}[/{role_color}]: {content_preview}")
+                            role_color = {
+                                "user": "green",
+                                "assistant": "blue",
+                                "tool": "yellow",
+                            }.get(msg.role, "white")
+                            content_preview = (
+                                (msg.content[:80] + "...") if len(msg.content) > 80 else msg.content
+                            )
+                            console.print(
+                                f"  [{role_color}]{msg.role}[/{role_color}]: {content_preview}"
+                            )
                         if len(agent.history) > 10:
-                            console.print(f"  [dim]... and {len(agent.history) - 10} more messages[/dim]")
+                            console.print(
+                                f"  [dim]... and {len(agent.history) - 10} more messages[/dim]"
+                            )
                     console.print()
                     continue
 
@@ -970,7 +1035,9 @@ def start_repl(
                     continue
 
                 elif cmd == "save":
-                    filename = cmd_arg or f"devpilot_session_{session_manager.current_session_id}.txt"
+                    filename = (
+                        cmd_arg or f"devpilot_session_{session_manager.current_session_id}.txt"
+                    )
                     try:
                         with open(filename, "w") as f:
                             for msg in agent.history:
@@ -1010,11 +1077,18 @@ def start_repl(
             # Provide helpful hints for common errors
             if "401" in error_str or "unauthorized" in error_str or "authentication" in error_str:
                 console.print("[dim]  Tip: Your API key may be invalid. Try:[/dim]")
-                console.print(f"[dim]  - /provider <name> to switch providers[/dim]")
-                console.print(f"[dim]  - devpilot set-key {current_llm.name} to update the key[/dim]")
-            elif "402" in error_str or "payment" in error_str or "quota" in error_str or "rate" in error_str:
+                console.print("[dim]  - /provider <name> to switch providers[/dim]")
+                console.print(
+                    f"[dim]  - devpilot set-key {current_llm.name} to update the key[/dim]"
+                )
+            elif (
+                "402" in error_str
+                or "payment" in error_str
+                or "quota" in error_str
+                or "rate" in error_str
+            ):
                 console.print("[dim]  Tip: You may have exceeded your quota or rate limit.[/dim]")
-                console.print(f"[dim]  - /provider <name> to switch to another provider[/dim]")
+                console.print("[dim]  - /provider <name> to switch to another provider[/dim]")
             elif "connection" in error_str or "timeout" in error_str or "network" in error_str:
                 console.print("[dim]  Tip: Network error. Check your connection.[/dim]")
                 if current_llm.name == "local":
@@ -1058,7 +1132,9 @@ def chat(
     provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
     model: str = typer.Option(None, "--model", "-m", help="Model name"),
     resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID"),
-    message_limit: int = typer.Option(DEFAULT_MESSAGE_LIMIT, "--limit", "-l", help="Messages before auto-summarization")
+    message_limit: int = typer.Option(
+        DEFAULT_MESSAGE_LIMIT, "--limit", "-l", help="Messages before auto-summarization"
+    ),
 ):
     """
     Start an interactive chat session (alias for running devpilot directly).
@@ -1079,7 +1155,7 @@ def chat(
 def ask(
     prompt: str = typer.Argument(..., help="The prompt or question for DevPilot"),
     provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
-    model: str = typer.Option(None, "--model", "-m", help="Model name")
+    model: str = typer.Option(None, "--model", "-m", help="Model name"),
 ):
     """
     Ask DevPilot a single question (non-interactive).
@@ -1091,16 +1167,20 @@ def ask(
 
     llm = create_provider(provider, model, settings)
 
-    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool(), TaskTool(), WebSearchTool(), WebFetchTool()]
+    tools = [
+        ShellTool(),
+        FilesystemTool(),
+        SearchTool(),
+        GrepTool(),
+        EditTool(),
+        TaskTool(),
+        WebSearchTool(),
+        WebFetchTool(),
+    ]
     executor = ToolExecutor(tools=tools)
     planner = SimplePlanner()
 
-    agent = Agent(
-        provider=llm,
-        planner=planner,
-        executor=executor,
-        tools=tools
-    )
+    agent = Agent(provider=llm, planner=planner, executor=executor, tools=tools)
 
     console.print(f"[dim]Using {llm.name}/{llm.model}[/dim]")
     try:
@@ -1119,7 +1199,9 @@ def config():
 
     console.print("\n[bold]DevPilot Configuration[/bold]\n")
     console.print(f"Default Provider: [cyan]{settings.default_provider}[/cyan]")
-    console.print(f"Keyring Available: {'[green]yes[/green]' if keyring_available() else '[yellow]no[/yellow]'}")
+    console.print(
+        f"Keyring Available: {'[green]yes[/green]' if keyring_available() else '[yellow]no[/yellow]'}"
+    )
     console.print("\n[bold]Providers:[/bold]")
 
     for name in PROVIDERS.keys():
@@ -1141,7 +1223,9 @@ def config():
 @app.command("set-key")
 def set_key(
     provider: str = typer.Argument(..., help="Provider name (openai, anthropic, gemini)"),
-    set_default: bool = typer.Option(True, "--default/--no-default", help="Set as default provider")
+    set_default: bool = typer.Option(
+        True, "--default/--no-default", help="Set as default provider"
+    ),
 ):
     """
     Securely store an API key for a provider.
@@ -1176,7 +1260,9 @@ def set_key(
                 save_config(settings)
                 print_success(f"Set {provider} as default provider.")
             except Exception:
-                print_warning(f"Key stored but couldn't save as default. Use: devpilot -p {provider}")
+                print_warning(
+                    f"Key stored but couldn't save as default. Use: devpilot -p {provider}"
+                )
     else:
         print_error("Failed to store API key.")
         raise typer.Exit(1)
@@ -1195,7 +1281,7 @@ def providers():
 # Session commands
 @sessions_app.command("list")
 def sessions_list(
-    limit: int = typer.Option(20, "--limit", "-n", help="Number of sessions to show")
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of sessions to show"),
 ):
     """
     List recent chat sessions.
@@ -1225,16 +1311,14 @@ def sessions_list(
             session["model"][:15],
             str(session["message_count"]),
             parent[:8] if parent != "-" else "-",
-            session["updated_at"][:16]
+            session["updated_at"][:16],
         )
 
     console.print(table)
 
 
 @sessions_app.command("show")
-def sessions_show(
-    session_id: str = typer.Argument(..., help="Session ID to show details")
-):
+def sessions_show(session_id: str = typer.Argument(..., help="Session ID to show details")):
     """
     Show details of a specific session.
     """
@@ -1262,9 +1346,7 @@ def sessions_show(
 
 
 @sessions_app.command("delete")
-def sessions_delete(
-    session_id: str = typer.Argument(..., help="Session ID to delete")
-):
+def sessions_delete(session_id: str = typer.Argument(..., help="Session ID to delete")):
     """
     Delete a chat session.
     """
@@ -1282,9 +1364,7 @@ def sessions_delete(
 
 
 @sessions_app.command("clear")
-def sessions_clear(
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation")
-):
+def sessions_clear(force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation")):
     """
     Delete all chat sessions.
     """
@@ -1323,10 +1403,12 @@ def permissions_list():
         level_color = {
             PermissionLevel.ALLOW: "green",
             PermissionLevel.DENY: "red",
-            PermissionLevel.ASK: "yellow"
+            PermissionLevel.ASK: "yellow",
         }.get(perm.level, "white")
 
-        console.print(f"[bold]{tool_name}[/bold]: [{level_color}]{perm.level.value}[/{level_color}]")
+        console.print(
+            f"[bold]{tool_name}[/bold]: [{level_color}]{perm.level.value}[/{level_color}]"
+        )
 
         if perm.allowed_patterns:
             console.print(f"  [green]Allowed patterns:[/green] {len(perm.allowed_patterns)}")
@@ -1354,7 +1436,7 @@ def permissions_list():
 @permissions_app.command("allow")
 def permissions_allow(
     tool: str = typer.Argument(..., help="Tool name (shell, filesystem)"),
-    pattern: str = typer.Argument(..., help="Command pattern to allow (e.g., 'git *')")
+    pattern: str = typer.Argument(..., help="Command pattern to allow (e.g., 'git *')"),
 ):
     """
     Add a pattern to the allowed list for a tool.
@@ -1367,7 +1449,7 @@ def permissions_allow(
 @permissions_app.command("deny")
 def permissions_deny(
     tool: str = typer.Argument(..., help="Tool name (shell, filesystem)"),
-    pattern: str = typer.Argument(..., help="Command pattern to deny")
+    pattern: str = typer.Argument(..., help="Command pattern to deny"),
 ):
     """
     Add a pattern to the denied list for a tool.
@@ -1380,7 +1462,7 @@ def permissions_deny(
 @permissions_app.command("set")
 def permissions_set(
     tool: str = typer.Argument(..., help="Tool name (shell, filesystem, search)"),
-    level: str = typer.Argument(..., help="Permission level (allow, deny, ask)")
+    level: str = typer.Argument(..., help="Permission level (allow, deny, ask)"),
 ):
     """
     Set the default permission level for a tool.
@@ -1397,9 +1479,7 @@ def permissions_set(
 
 
 @permissions_app.command("reset")
-def permissions_reset(
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation")
-):
+def permissions_reset(force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation")):
     """
     Reset all permissions to defaults.
     """

@@ -4,11 +4,11 @@ https://lmstudio.ai/
 """
 
 import json
-from typing import List, Optional
+
 import httpx
 
-from schemas.message import Message, LLMResponse, ToolCall
 from providers.base import LLMProvider, ModelInfo
+from schemas.message import LLMResponse, Message, ToolCall
 
 
 class LMStudioProvider(LLMProvider):
@@ -16,6 +16,7 @@ class LMStudioProvider(LLMProvider):
     LM Studio provider for running local models.
     Uses OpenAI-compatible API format.
     """
+
     name = "lmstudio"
 
     DEFAULT_MODELS = [
@@ -25,12 +26,12 @@ class LMStudioProvider(LLMProvider):
     def __init__(
         self,
         model: str = "local-model",
-        api_key: Optional[str] = None,  # Not needed for local
+        api_key: str | None = None,  # Not needed for local
         base_url: str = "http://localhost:1234/v1",
     ):
         self.model = model
         self.api_key = api_key or "lm-studio"  # Placeholder
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.client = httpx.Client(timeout=300.0)  # Longer timeout for local
 
     def _get_headers(self) -> dict:
@@ -39,22 +40,21 @@ class LMStudioProvider(LLMProvider):
             "Content-Type": "application/json",
         }
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Fetch loaded models from LM Studio."""
         try:
-            response = self.client.get(
-                f"{self.base_url}/models",
-                headers=self._get_headers()
-            )
+            response = self.client.get(f"{self.base_url}/models", headers=self._get_headers())
             response.raise_for_status()
             data = response.json()
 
             models = []
             for model in data.get("data", []):
-                models.append(ModelInfo(
-                    id=model.get("id"),
-                    name=model.get("id"),
-                ))
+                models.append(
+                    ModelInfo(
+                        id=model.get("id"),
+                        name=model.get("id"),
+                    )
+                )
 
             return models if models else [ModelInfo(id="local-model", name="Local Model")]
 
@@ -63,8 +63,8 @@ class LMStudioProvider(LLMProvider):
 
     def generate(
         self,
-        messages: List[Message],
-        tools: Optional[list] = None,
+        messages: list[Message],
+        tools: list | None = None,
         stream: bool = False,
     ) -> LLMResponse:
         # Format messages for LM Studio API
@@ -81,7 +81,7 @@ class LMStudioProvider(LLMProvider):
                 formatted_msg = {
                     "role": "assistant",
                     "content": msg.content or "",
-                    "tool_calls": msg.metadata["tool_calls"]
+                    "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
                 formatted_msg = {"role": msg.role, "content": msg.content}
@@ -92,14 +92,18 @@ class LMStudioProvider(LLMProvider):
         if tools:
             formatted_tools = []
             for tool in tools:
-                formatted_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool["name"],
-                        "description": tool["description"],
-                        "parameters": tool.get("parameters", {"type": "object", "properties": {}})
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool["name"],
+                            "description": tool["description"],
+                            "parameters": tool.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        },
                     }
-                })
+                )
 
         payload = {
             "model": self.model,
@@ -111,9 +115,7 @@ class LMStudioProvider(LLMProvider):
             payload["tools"] = formatted_tools
 
         response = self.client.post(
-            f"{self.base_url}/chat/completions",
-            headers=self._get_headers(),
-            json=payload
+            f"{self.base_url}/chat/completions", headers=self._get_headers(), json=payload
         )
         response.raise_for_status()
         data = response.json()
@@ -124,11 +126,15 @@ class LMStudioProvider(LLMProvider):
         tool_calls = []
         if message.get("tool_calls"):
             for tc in message["tool_calls"]:
-                args = json.loads(tc["function"]["arguments"]) if tc["function"].get("arguments") else {}
+                args = (
+                    json.loads(tc["function"]["arguments"])
+                    if tc["function"].get("arguments")
+                    else {}
+                )
                 tool_call = ToolCall(
                     name=tc["function"]["name"],
                     arguments=args,
-                    id=tc.get("id", tc["function"]["name"])
+                    id=tc.get("id", tc["function"]["name"]),
                 )
                 tool_calls.append(tool_call)
 
@@ -137,5 +143,5 @@ class LMStudioProvider(LLMProvider):
         return LLMResponse(
             message=Message(role="assistant", content=content),
             tool_calls=tool_calls if tool_calls else None,
-            raw=data
+            raw=data,
         )

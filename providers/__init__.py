@@ -1,19 +1,18 @@
-from typing import Optional, List, Dict, Type
+from typing import Dict, List, Optional, Type
 
-from providers.base import LLMProvider, ModelInfo
-from providers.openai import OpenAIProvider
 from providers.anthropic import AnthropicProvider
+from providers.base import LLMProvider, ModelInfo
 from providers.gemini import GeminiProvider
-from providers.local import LocalProvider
-from providers.openrouter import OpenRouterProvider
-from providers.mistral import MistralProvider
 from providers.groq import GroqProvider
 from providers.lmstudio import LMStudioProvider
+from providers.local import LocalProvider
+from providers.mistral import MistralProvider
+from providers.openai import OpenAIProvider
+from providers.openrouter import OpenRouterProvider
 from providers.together import TogetherProvider
 
-
 # All available providers
-PROVIDERS: Dict[str, Type[LLMProvider]] = {
+PROVIDERS: dict[str, type[LLMProvider]] = {
     "openai": OpenAIProvider,
     "anthropic": AnthropicProvider,
     "gemini": GeminiProvider,
@@ -53,10 +52,7 @@ PROVIDER_ENV_VARS = {
 
 
 def get_provider(
-    name: str,
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
-    **kwargs
+    name: str, model: str | None = None, api_key: str | None = None, **kwargs
 ) -> LLMProvider:
     """
     Factory function to get a provider instance.
@@ -89,7 +85,7 @@ def get_provider(
     return provider_class(**init_kwargs)
 
 
-def get_default_models(provider_name: str) -> List[str]:
+def get_default_models(provider_name: str) -> list[str]:
     """Get default model list for a provider."""
     if provider_name not in PROVIDERS:
         return []

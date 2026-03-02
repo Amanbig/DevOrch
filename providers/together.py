@@ -4,11 +4,11 @@ https://together.ai/
 """
 
 import json
-from typing import List, Optional
+
 import httpx
 
-from schemas.message import Message, LLMResponse, ToolCall
 from providers.base import LLMProvider, ModelInfo
+from schemas.message import LLMResponse, Message, ToolCall
 
 
 class TogetherProvider(LLMProvider):
@@ -16,6 +16,7 @@ class TogetherProvider(LLMProvider):
     Together AI provider for open source models.
     Supports Llama, Mistral, Code Llama, and more.
     """
+
     name = "together"
 
     DEFAULT_MODELS = [
@@ -33,7 +34,7 @@ class TogetherProvider(LLMProvider):
     def __init__(
         self,
         model: str = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
     ):
         self.model = model
         self.api_key = api_key
@@ -45,13 +46,10 @@ class TogetherProvider(LLMProvider):
             "Content-Type": "application/json",
         }
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Fetch available models from Together API."""
         try:
-            response = self.client.get(
-                f"{self.BASE_URL}/models",
-                headers=self._get_headers()
-            )
+            response = self.client.get(f"{self.BASE_URL}/models", headers=self._get_headers())
             response.raise_for_status()
             data = response.json()
 
@@ -61,11 +59,13 @@ class TogetherProvider(LLMProvider):
                 model_id = model.get("id", "")
                 model_type = model.get("type", "")
                 if "chat" in model_type.lower() or "instruct" in model_id.lower():
-                    models.append(ModelInfo(
-                        id=model_id,
-                        name=model.get("display_name", model_id),
-                        context_length=model.get("context_length"),
-                    ))
+                    models.append(
+                        ModelInfo(
+                            id=model_id,
+                            name=model.get("display_name", model_id),
+                            context_length=model.get("context_length"),
+                        )
+                    )
 
             models.sort(key=lambda m: m.name)
             return models[:50] if models else [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
@@ -75,8 +75,8 @@ class TogetherProvider(LLMProvider):
 
     def generate(
         self,
-        messages: List[Message],
-        tools: Optional[list] = None,
+        messages: list[Message],
+        tools: list | None = None,
         stream: bool = False,
     ) -> LLMResponse:
         # Format messages for Together API
@@ -93,7 +93,7 @@ class TogetherProvider(LLMProvider):
                 formatted_msg = {
                     "role": "assistant",
                     "content": msg.content or "",
-                    "tool_calls": msg.metadata["tool_calls"]
+                    "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
                 formatted_msg = {"role": msg.role, "content": msg.content}
@@ -104,14 +104,18 @@ class TogetherProvider(LLMProvider):
         if tools:
             formatted_tools = []
             for tool in tools:
-                formatted_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool["name"],
-                        "description": tool["description"],
-                        "parameters": tool.get("parameters", {"type": "object", "properties": {}})
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool["name"],
+                            "description": tool["description"],
+                            "parameters": tool.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        },
                     }
-                })
+                )
 
         payload = {
             "model": self.model,
@@ -123,9 +127,7 @@ class TogetherProvider(LLMProvider):
             payload["tools"] = formatted_tools
 
         response = self.client.post(
-            f"{self.BASE_URL}/chat/completions",
-            headers=self._get_headers(),
-            json=payload
+            f"{self.BASE_URL}/chat/completions", headers=self._get_headers(), json=payload
         )
         response.raise_for_status()
         data = response.json()
@@ -136,11 +138,15 @@ class TogetherProvider(LLMProvider):
         tool_calls = []
         if message.get("tool_calls"):
             for tc in message["tool_calls"]:
-                args = json.loads(tc["function"]["arguments"]) if tc["function"].get("arguments") else {}
+                args = (
+                    json.loads(tc["function"]["arguments"])
+                    if tc["function"].get("arguments")
+                    else {}
+                )
                 tool_call = ToolCall(
                     name=tc["function"]["name"],
                     arguments=args,
-                    id=tc.get("id", tc["function"]["name"])
+                    id=tc.get("id", tc["function"]["name"]),
                 )
                 tool_calls.append(tool_call)
 
@@ -149,5 +155,5 @@ class TogetherProvider(LLMProvider):
         return LLMResponse(
             message=Message(role="assistant", content=content),
             tool_calls=tool_calls if tool_calls else None,
-            raw=data
+            raw=data,
         )

@@ -1,11 +1,10 @@
 """Task manager for tracking work progress with visual display."""
 
-from typing import List, Optional, Callable
+from collections.abc import Callable
+
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 from rich.live import Live
+from rich.panel import Panel
 
 from schemas.task import Task, TaskList, TaskStatus
 
@@ -15,12 +14,12 @@ console = Console()
 class TaskManager:
     """Manages tasks and displays progress."""
 
-    def __init__(self, on_update: Optional[Callable] = None):
+    def __init__(self, on_update: Callable | None = None):
         self.task_list = TaskList()
         self.on_update = on_update  # Callback when tasks change
-        self._live: Optional[Live] = None
+        self._live: Live | None = None
 
-    def set_tasks(self, tasks: List[dict]) -> None:
+    def set_tasks(self, tasks: list[dict]) -> None:
         """Set tasks from a list of dictionaries (from AI tool call)."""
         self.task_list.clear()
         for task_data in tasks:
@@ -32,26 +31,26 @@ class TaskManager:
             self.task_list.add(task)
         self._display()
 
-    def add_task(self, content: str, active_form: Optional[str] = None) -> Task:
+    def add_task(self, content: str, active_form: str | None = None) -> Task:
         """Add a new task."""
         task = Task(content=content, active_form=active_form or content)
         self.task_list.add(task)
         self._display()
         return task
 
-    def start_task(self, task_id: str) -> Optional[Task]:
+    def start_task(self, task_id: str) -> Task | None:
         """Mark a task as in progress."""
         task = self.task_list.update_status(task_id, TaskStatus.IN_PROGRESS)
         self._display()
         return task
 
-    def complete_task(self, task_id: str) -> Optional[Task]:
+    def complete_task(self, task_id: str) -> Task | None:
         """Mark a task as completed."""
         task = self.task_list.update_status(task_id, TaskStatus.COMPLETED)
         self._display()
         return task
 
-    def get_current_task(self) -> Optional[Task]:
+    def get_current_task(self) -> Task | None:
         """Get the currently active task."""
         return self.task_list.get_current()
 
@@ -125,7 +124,7 @@ class TaskManager:
 
 
 # Global task manager instance
-_task_manager: Optional[TaskManager] = None
+_task_manager: TaskManager | None = None
 
 
 def get_task_manager() -> TaskManager:

@@ -10,13 +10,13 @@ Supports:
 
 import fnmatch
 import re
-from pathlib import Path
-from typing import Dict, List, Optional, Literal
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 try:
     import yaml
+
     YAML_AVAILABLE = True
 except ImportError:
     YAML_AVAILABLE = False
@@ -26,9 +26,9 @@ PERMISSIONS_FILE = CONFIG_DIR / "permissions.yaml"
 
 
 class PermissionLevel(str, Enum):
-    ALLOW = "allow"      # Always allow without asking
-    DENY = "deny"        # Always deny
-    ASK = "ask"          # Ask every time (default)
+    ALLOW = "allow"  # Always allow without asking
+    DENY = "deny"  # Always deny
+    ASK = "ask"  # Ask every time (default)
 
 
 class PermissionChoice(str, Enum):
@@ -41,53 +41,87 @@ class PermissionChoice(str, Enum):
 # Commands that are generally safe (read-only or low risk)
 SAFE_COMMANDS = [
     # Version/info commands
-    "git --version", "git status", "git log*", "git diff*", "git branch*",
-    "git remote -v", "git show*",
-    "python --version", "python3 --version", "pip --version", "pip list",
-    "node --version", "npm --version", "npm list*",
-    "cargo --version", "rustc --version",
+    "git --version",
+    "git status",
+    "git log*",
+    "git diff*",
+    "git branch*",
+    "git remote -v",
+    "git show*",
+    "python --version",
+    "python3 --version",
+    "pip --version",
+    "pip list",
+    "node --version",
+    "npm --version",
+    "npm list*",
+    "cargo --version",
+    "rustc --version",
     "go version",
-
     # List/read commands
-    "ls*", "dir*", "pwd", "cd*", "echo*", "cat*", "head*", "tail*",
-    "which*", "where*", "type*", "file*",
-    "wc*", "grep*", "find*", "tree*",
-
+    "ls*",
+    "dir*",
+    "pwd",
+    "cd*",
+    "echo*",
+    "cat*",
+    "head*",
+    "tail*",
+    "which*",
+    "where*",
+    "type*",
+    "file*",
+    "wc*",
+    "grep*",
+    "find*",
+    "tree*",
     # Environment
-    "env", "printenv*", "hostname", "whoami", "date", "uptime",
+    "env",
+    "printenv*",
+    "hostname",
+    "whoami",
+    "date",
+    "uptime",
 ]
 
 # Commands that are potentially dangerous
 DANGEROUS_PATTERNS = [
-    "rm -rf *", "rm -r *", "rmdir*",
-    "del /s*", "rd /s*",
+    "rm -rf *",
+    "rm -r *",
+    "rmdir*",
+    "del /s*",
+    "rd /s*",
     "format*",
     "mkfs*",
     "dd if=*",
     "> /dev/*",
     "chmod 777*",
     "sudo*",
-    "curl*|*sh", "wget*|*sh",  # Pipe to shell
-    "*; rm*", "*&& rm*",  # Chained destructive
+    "curl*|*sh",
+    "wget*|*sh",  # Pipe to shell
+    "*; rm*",
+    "*&& rm*",  # Chained destructive
 ]
 
 
 @dataclass
 class ToolPermission:
     """Permission settings for a specific tool."""
+
     level: PermissionLevel = PermissionLevel.ASK
-    allowed_patterns: List[str] = field(default_factory=list)
-    denied_patterns: List[str] = field(default_factory=list)
+    allowed_patterns: list[str] = field(default_factory=list)
+    denied_patterns: list[str] = field(default_factory=list)
 
 
 @dataclass
 class Permissions:
     """Global permission settings."""
-    tools: Dict[str, ToolPermission] = field(default_factory=dict)
+
+    tools: dict[str, ToolPermission] = field(default_factory=dict)
 
     # Session-only permissions (not persisted)
-    session_allowed: List[str] = field(default_factory=list)
-    session_denied: List[str] = field(default_factory=list)
+    session_allowed: list[str] = field(default_factory=list)
+    session_denied: list[str] = field(default_factory=list)
 
     @classmethod
     def load(cls) -> "Permissions":
@@ -99,7 +133,7 @@ class Permissions:
             "shell": ToolPermission(
                 level=PermissionLevel.ASK,
                 allowed_patterns=SAFE_COMMANDS.copy(),
-                denied_patterns=DANGEROUS_PATTERNS.copy()
+                denied_patterns=DANGEROUS_PATTERNS.copy(),
             ),
             "filesystem": ToolPermission(level=PermissionLevel.ASK),
             "search": ToolPermission(level=PermissionLevel.ALLOW),  # Search is safe
@@ -108,7 +142,7 @@ class Permissions:
         # Load from file if exists
         if YAML_AVAILABLE and PERMISSIONS_FILE.exists():
             try:
-                with open(PERMISSIONS_FILE, "r") as f:
+                with open(PERMISSIONS_FILE) as f:
                     data = yaml.safe_load(f) or {}
 
                 for tool_name, tool_data in data.get("tools", {}).items():
@@ -145,10 +179,8 @@ class Permissions:
             yaml.safe_dump(data, f, default_flow_style=False)
 
     def check_permission(
-        self,
-        tool_name: str,
-        command: Optional[str] = None
-    ) -> tuple[PermissionLevel, Optional[str]]:
+        self, tool_name: str, command: str | None = None
+    ) -> tuple[PermissionLevel, str | None]:
         """
         Check if a tool/command is allowed.
 
@@ -234,7 +266,7 @@ class Permissions:
 
 
 # Global permissions instance
-_permissions: Optional[Permissions] = None
+_permissions: Permissions | None = None
 
 
 def get_permissions() -> Permissions:

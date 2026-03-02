@@ -1,17 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict
 from dataclasses import dataclass
 
-from schemas.message import Message, LLMResponse
+from schemas.message import LLMResponse, Message
 
 
 @dataclass
 class ModelInfo:
     """Information about an available model."""
+
     id: str
     name: str
-    context_length: Optional[int] = None
-    description: Optional[str] = None
+    context_length: int | None = None
+    description: str | None = None
 
 
 class LLMProvider(ABC):
@@ -23,13 +23,13 @@ class LLMProvider(ABC):
     model: str
 
     # Default models for this provider (can be overridden)
-    DEFAULT_MODELS: List[str] = []
+    DEFAULT_MODELS: list[str] = []
 
     @abstractmethod
     def generate(
         self,
-        messages: List[Message],
-        tools: Optional[list] = None,
+        messages: list[Message],
+        tools: list | None = None,
         stream: bool = False,
     ) -> LLMResponse:
         """
@@ -37,7 +37,7 @@ class LLMProvider(ABC):
         """
         pass
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """
         List available models for this provider.
         Override in subclasses to fetch from API.
@@ -46,6 +46,6 @@ class LLMProvider(ABC):
         return [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
 
     @classmethod
-    def get_default_models(cls) -> List[str]:
+    def get_default_models(cls) -> list[str]:
         """Get list of default model IDs."""
         return cls.DEFAULT_MODELS

@@ -1,5 +1,6 @@
 import os
-from typing import Dict, Any, Literal, Optional, List
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 from tools.base import Tool
@@ -7,13 +8,14 @@ from tools.base import Tool
 
 class FilesystemToolSchema(BaseModel):
     action: Literal["read", "write", "list", "read_lines", "info"] = Field(
-        ...,
-        description="Action: read (full file), read_lines (specific lines), write, list, info"
+        ..., description="Action: read (full file), read_lines (specific lines), write, list, info"
     )
     path: str = Field(..., description="Path to the file or directory.")
     content: str = Field(default="", description="Content to write (only for 'write' action).")
     start_line: int = Field(default=1, description="Start line number for read_lines (1-indexed).")
-    end_line: int = Field(default=0, description="End line number for read_lines (0 = to end of file).")
+    end_line: int = Field(
+        default=0, description="End line number for read_lines (0 = to end of file)."
+    )
     max_lines: int = Field(default=200, description="Maximum lines to return for read action.")
 
 
@@ -37,7 +39,7 @@ Examples:
 
     def _format_size(self, size: int) -> str:
         """Format file size in human-readable format."""
-        for unit in ['B', 'KB', 'MB', 'GB']:
+        for unit in ["B", "KB", "MB", "GB"]:
             if size < 1024:
                 return f"{size:.1f}{unit}"
             size /= 1024
@@ -46,21 +48,17 @@ Examples:
     def _count_lines(self, path: str) -> int:
         """Count lines in a file efficiently."""
         try:
-            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(path, encoding="utf-8", errors="ignore") as f:
                 return sum(1 for _ in f)
         except Exception:
             return -1
 
     def _read_with_line_numbers(
-        self,
-        path: str,
-        start_line: int = 1,
-        end_line: int = 0,
-        max_lines: int = 200
+        self, path: str, start_line: int = 1, end_line: int = 0, max_lines: int = 200
     ) -> str:
         """Read file with line numbers, supporting line ranges."""
         try:
-            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(path, encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
 
             total_lines = len(lines)
@@ -138,7 +136,8 @@ Examples:
             modified = os.path.getmtime(path)
 
             from datetime import datetime
-            mod_date = datetime.fromtimestamp(modified).strftime('%Y-%m-%d %H:%M:%S')
+
+            mod_date = datetime.fromtimestamp(modified).strftime("%Y-%m-%d %H:%M:%S")
 
             info = [
                 f"Path: {os.path.abspath(path)}",
@@ -148,7 +147,18 @@ Examples:
 
             # Add line count for text files
             ext = os.path.splitext(path)[1].lower()
-            text_exts = {'.py', '.js', '.ts', '.json', '.yaml', '.yml', '.md', '.txt', '.html', '.css'}
+            text_exts = {
+                ".py",
+                ".js",
+                ".ts",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".md",
+                ".txt",
+                ".html",
+                ".css",
+            }
             if ext in text_exts or not ext:
                 line_count = self._count_lines(path)
                 if line_count >= 0:
@@ -159,7 +169,7 @@ Examples:
         except Exception as e:
             return f"Error getting file info: {str(e)}"
 
-    def run(self, arguments: Dict[str, Any]) -> Any:
+    def run(self, arguments: dict[str, Any]) -> Any:
         action = arguments.get("action")
         path = arguments.get("path")
         content = arguments.get("content", "")
@@ -190,7 +200,9 @@ Examples:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(content)
 
-                line_count = content.count('\n') + (1 if content and not content.endswith('\n') else 0)
+                line_count = content.count("\n") + (
+                    1 if content and not content.endswith("\n") else 0
+                )
                 return f"Successfully wrote {line_count} lines to {path}"
 
             elif action == "list":

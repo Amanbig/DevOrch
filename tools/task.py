@@ -1,23 +1,29 @@
 """Task tool for AI to track work progress."""
 
-from typing import Dict, Any, List
+from typing import Any
+
 from pydantic import BaseModel, Field
 
-from tools.base import Tool
 from core.tasks import get_task_manager
-from schemas.task import TaskStatus
+from tools.base import Tool
 
 
 class TaskItem(BaseModel):
     """A single task item."""
-    content: str = Field(..., description="What needs to be done (imperative form, e.g., 'Run tests')")
+
+    content: str = Field(
+        ..., description="What needs to be done (imperative form, e.g., 'Run tests')"
+    )
     status: str = Field("pending", description="Task status: pending, in_progress, or completed")
-    activeForm: str = Field(..., description="Present continuous form shown during execution (e.g., 'Running tests')")
+    activeForm: str = Field(
+        ..., description="Present continuous form shown during execution (e.g., 'Running tests')"
+    )
 
 
 class TaskToolSchema(BaseModel):
     """Schema for the task tool."""
-    todos: List[TaskItem] = Field(..., description="The updated todo list with all tasks")
+
+    todos: list[TaskItem] = Field(..., description="The updated todo list with all tasks")
 
 
 class TaskTool(Tool):
@@ -48,7 +54,7 @@ Only ONE task should be in_progress at a time."""
 
     args_schema = TaskToolSchema
 
-    def run(self, arguments: Dict[str, Any]) -> str:
+    def run(self, arguments: dict[str, Any]) -> str:
         """Execute the task tool."""
         todos = arguments.get("todos", [])
 
@@ -62,11 +68,13 @@ Only ONE task should be in_progress at a time."""
                 task_list.append(item)
             else:
                 # Pydantic model
-                task_list.append({
-                    "content": item.content,
-                    "status": item.status,
-                    "activeForm": item.activeForm,
-                })
+                task_list.append(
+                    {
+                        "content": item.content,
+                        "status": item.status,
+                        "activeForm": item.activeForm,
+                    }
+                )
 
         # Update task manager
         task_manager = get_task_manager()

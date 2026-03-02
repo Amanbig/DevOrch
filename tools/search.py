@@ -1,6 +1,7 @@
 import glob
 import os
-from typing import Dict, Any, List
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from tools.base import Tool
@@ -36,26 +37,38 @@ Common patterns:
 
     # Directories to skip by default
     SKIP_DIRS = {
-        '.git', '.svn', '.hg', 'node_modules', '__pycache__', '.venv', 'venv',
-        'env', '.env', 'dist', 'build', '.next', '.nuxt', 'target', 'out',
-        '.idea', '.vscode', '.pytest_cache', '.mypy_cache'
+        ".git",
+        ".svn",
+        ".hg",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "env",
+        ".env",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        "target",
+        "out",
+        ".idea",
+        ".vscode",
+        ".pytest_cache",
+        ".mypy_cache",
     }
 
     def _filter_results(
-        self,
-        matches: List[str],
-        type_filter: str,
-        include_hidden: bool,
-        max_results: int
-    ) -> List[str]:
+        self, matches: list[str], type_filter: str, include_hidden: bool, max_results: int
+    ) -> list[str]:
         """Filter and limit results."""
         filtered = []
 
         for match in matches:
             # Skip hidden unless requested
             if not include_hidden:
-                parts = match.replace('\\', '/').split('/')
-                if any(p.startswith('.') and p not in ('.', '..') for p in parts):
+                parts = match.replace("\\", "/").split("/")
+                if any(p.startswith(".") and p not in (".", "..") for p in parts):
                     continue
 
                 # Skip common ignored directories
@@ -75,7 +88,7 @@ Common patterns:
 
         return filtered
 
-    def run(self, arguments: Dict[str, Any]) -> Any:
+    def run(self, arguments: dict[str, Any]) -> Any:
         pattern = arguments.get("pattern")
         directory = arguments.get("directory", ".")
         type_filter = arguments.get("type", "all").lower()

@@ -7,39 +7,39 @@ Modes:
 - ASK: Ask for confirmation before each tool execution (default)
 """
 
-from enum import Enum
-from typing import Optional, List, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import Enum
 
 
 class AgentMode(str, Enum):
-    PLAN = "plan"   # Plan first, then execute after approval
-    AUTO = "auto"   # Execute automatically (no confirmations)
-    ASK = "ask"     # Ask before each tool execution (default)
+    PLAN = "plan"  # Plan first, then execute after approval
+    AUTO = "auto"  # Execute automatically (no confirmations)
+    ASK = "ask"  # Ask before each tool execution (default)
 
 
 @dataclass
 class PlanStep:
     """A single step in an execution plan."""
+
     description: str
-    tool_name: Optional[str] = None
-    tool_args: Optional[dict] = None
+    tool_name: str | None = None
+    tool_args: dict | None = None
     status: str = "pending"  # pending, approved, rejected, completed, failed
 
 
 @dataclass
 class ExecutionPlan:
     """A plan of steps to execute."""
+
     goal: str
-    steps: List[PlanStep] = field(default_factory=list)
+    steps: list[PlanStep] = field(default_factory=list)
     approved: bool = False
 
     def add_step(self, description: str, tool_name: str = None, tool_args: dict = None):
-        self.steps.append(PlanStep(
-            description=description,
-            tool_name=tool_name,
-            tool_args=tool_args
-        ))
+        self.steps.append(
+            PlanStep(description=description, tool_name=tool_name, tool_args=tool_args)
+        )
 
     def to_display(self) -> str:
         """Format plan for display."""
@@ -50,7 +50,7 @@ class ExecutionPlan:
                 "approved": "✅",
                 "rejected": "❌",
                 "completed": "✔️",
-                "failed": "💥"
+                "failed": "💥",
             }.get(step.status, "⬜")
 
             tool_info = f" [{step.tool_name}]" if step.tool_name else ""
@@ -64,8 +64,8 @@ class ModeManager:
 
     def __init__(self, default_mode: AgentMode = AgentMode.ASK):
         self._mode = default_mode
-        self._current_plan: Optional[ExecutionPlan] = None
-        self._on_mode_change: Optional[Callable[[AgentMode], None]] = None
+        self._current_plan: ExecutionPlan | None = None
+        self._on_mode_change: Callable[[AgentMode], None] | None = None
 
     @property
     def mode(self) -> AgentMode:
@@ -79,7 +79,7 @@ class ModeManager:
             self._on_mode_change(value)
 
     @property
-    def current_plan(self) -> Optional[ExecutionPlan]:
+    def current_plan(self) -> ExecutionPlan | None:
         return self._current_plan
 
     def set_on_mode_change(self, callback: Callable[[AgentMode], None]):
@@ -116,7 +116,11 @@ class ModeManager:
 
     def is_planning(self) -> bool:
         """Check if we're currently in planning phase."""
-        return self._mode == AgentMode.PLAN and self._current_plan is not None and not self._current_plan.approved
+        return (
+            self._mode == AgentMode.PLAN
+            and self._current_plan is not None
+            and not self._current_plan.approved
+        )
 
     def get_mode_display(self) -> str:
         """Get a short display string for the current mode."""

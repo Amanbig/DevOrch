@@ -1,10 +1,10 @@
-from typing import List, Optional, Dict, Any
+from typing import Any
 
 from google import genai
 from google.genai import types
 
-from schemas.message import Message, LLMResponse, ToolCall
 from providers.base import LLMProvider, ModelInfo
+from schemas.message import LLMResponse, Message, ToolCall
 
 
 class GeminiProvider(LLMProvider):
@@ -20,32 +20,36 @@ class GeminiProvider(LLMProvider):
         "gemini-pro",
     ]
 
-    def __init__(self, model: str = "gemini-2.0-flash", api_key: Optional[str] = None):
+    def __init__(self, model: str = "gemini-2.0-flash", api_key: str | None = None):
         self.model_name = model
         self.model = model
         self.client = genai.Client(api_key=api_key)
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Fetch available models from Gemini API."""
         try:
             models = []
             for m in self.client.models.list():
                 # Filter for models that support content generation
-                if hasattr(m, 'supported_actions') and 'generateContent' in m.supported_actions:
-                    model_id = m.name.replace("models/", "") if m.name.startswith("models/") else m.name
-                    models.append(ModelInfo(
-                        id=model_id,
-                        name=getattr(m, 'display_name', model_id),
-                        description=getattr(m, 'description', ''),
-                    ))
+                if hasattr(m, "supported_actions") and "generateContent" in m.supported_actions:
+                    model_id = (
+                        m.name.replace("models/", "") if m.name.startswith("models/") else m.name
+                    )
+                    models.append(
+                        ModelInfo(
+                            id=model_id,
+                            name=getattr(m, "display_name", model_id),
+                            description=getattr(m, "description", ""),
+                        )
+                    )
             return models if models else [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
         except Exception:
             return [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
 
     def generate(
         self,
-        messages: List[Message],
-        tools: Optional[list] = None,
+        messages: list[Message],
+        tools: list | None = None,
         stream: bool = False,
     ) -> LLMResponse:
         # Build contents list for the API
@@ -56,10 +60,9 @@ class GeminiProvider(LLMProvider):
             if msg.role == "system":
                 system_instruction = msg.content
             elif msg.role == "user":
-                contents.append(types.Content(
-                    role="user",
-                    parts=[types.Part.from_text(text=msg.content)]
-                ))
+                contents.append(
+                    types.Content(role="user", parts=[types.Part.from_text(text=msg.content)])
+                )
             elif msg.role == "assistant":
                 # Check for function call metadata
                 if msg.metadata and msg.metadata.get("function_calls"):
@@ -67,25 +70,26 @@ class GeminiProvider(LLMProvider):
                     if msg.content and msg.content != "Calling tool...":
                         parts.append(types.Part.from_text(text=msg.content))
                     for fc in msg.metadata["function_calls"]:
-                        parts.append(types.Part.from_function_call(
-                            name=fc["name"],
-                            args=fc["args"]
-                        ))
+                        parts.append(
+                            types.Part.from_function_call(name=fc["name"], args=fc["args"])
+                        )
                     contents.append(types.Content(role="model", parts=parts))
                 else:
-                    contents.append(types.Content(
-                        role="model",
-                        parts=[types.Part.from_text(text=msg.content)]
-                    ))
+                    contents.append(
+                        types.Content(role="model", parts=[types.Part.from_text(text=msg.content)])
+                    )
             elif msg.role == "tool":
                 # Tool results use function_response
-                contents.append(types.Content(
-                    role="user",
-                    parts=[types.Part.from_function_response(
-                        name=msg.name,
-                        response={"result": msg.content}
-                    )]
-                ))
+                contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part.from_function_response(
+                                name=msg.name, response={"result": msg.content}
+                            )
+                        ],
+                    )
+                )
 
         # Build tools configuration
         gemini_tools = None
@@ -94,11 +98,11 @@ class GeminiProvider(LLMProvider):
             for tool in tools:
                 params = tool.get("parameters", {"type": "object", "properties": {}})
                 gemini_params = self._convert_params(params)
-                function_declarations.append(types.FunctionDeclaration(
-                    name=tool["name"],
-                    description=tool["description"],
-                    parameters=gemini_params
-                ))
+                function_declarations.append(
+                    types.FunctionDeclaration(
+                        name=tool["name"], description=tool["description"], parameters=gemini_params
+                    )
+                )
             gemini_tools = [types.Tool(function_declarations=function_declarations)]
 
         # Build config
@@ -117,20 +121,18 @@ class GeminiProvider(LLMProvider):
         # Generate response
         try:
             response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=contents,
-                config=config
+                model=self.model_name, contents=contents, config=config
             )
         except Exception as e:
             # If tools fail, try without them
             if gemini_tools and "tool" in str(e).lower():
-                config_no_tools = types.GenerateContentConfig(
-                    system_instruction=system_instruction
-                ) if system_instruction else None
+                config_no_tools = (
+                    types.GenerateContentConfig(system_instruction=system_instruction)
+                    if system_instruction
+                    else None
+                )
                 response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=contents,
-                    config=config_no_tools
+                    model=self.model_name, contents=contents, config=config_no_tools
                 )
             else:
                 raise
@@ -149,15 +151,10 @@ class GeminiProvider(LLMProvider):
                     # Convert args to dict
                     args = dict(fc.args) if fc.args else {}
                     tool_call = ToolCall(
-                        name=fc.name,
-                        arguments=args,
-                        id=f"gemini_{fc.name}_{len(tool_calls)}"
+                        name=fc.name, arguments=args, id=f"gemini_{fc.name}_{len(tool_calls)}"
                     )
                     tool_calls.append(tool_call)
-                    function_call_metadata.append({
-                        "name": fc.name,
-                        "args": args
-                    })
+                    function_call_metadata.append({"name": fc.name, "args": args})
 
         content = text_content if text_content else ("Calling tool..." if tool_calls else "")
 
@@ -167,10 +164,10 @@ class GeminiProvider(LLMProvider):
         return LLMResponse(
             message=Message(role="assistant", content=content, metadata=metadata),
             tool_calls=tool_calls if tool_calls else None,
-            raw=response
+            raw=response,
         )
 
-    def _convert_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _convert_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """Convert JSON Schema parameters to Gemini format."""
         result = {}
 

@@ -1,18 +1,17 @@
-from typing import List, Optional, Callable
 import json
+from collections.abc import Callable
 
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
-from rich.table import Table
 
-from schemas.message import Message, ToolCall
-from providers.base import LLMProvider
-from core.planner import Planner
 from core.executor import Executor
+from core.modes import AgentMode, ModeManager
+from core.planner import Planner
 from core.sessions import SessionManager
-from core.modes import ModeManager, AgentMode, ExecutionPlan
-from utils.logger import get_console, print_panel, print_info, print_warning, print_success
+from providers.base import LLMProvider
+from schemas.message import Message, ToolCall
+from utils.logger import get_console, print_info, print_success, print_warning
 
 console = get_console()
 
@@ -48,9 +47,9 @@ class Agent:
         planner: Planner,
         executor: Executor,
         tools: list,
-        session_manager: Optional[SessionManager] = None,
-        on_session_continue: Optional[Callable[[str], None]] = None,
-        mode_manager: Optional[ModeManager] = None,
+        session_manager: SessionManager | None = None,
+        on_session_continue: Callable[[str], None] | None = None,
+        mode_manager: ModeManager | None = None,
     ):
         self.provider = provider
         self.planner = planner
@@ -59,12 +58,12 @@ class Agent:
         self.session_manager = session_manager
         self.on_session_continue = on_session_continue  # Callback when session continues
         self.mode_manager = mode_manager or ModeManager()
-        self.history: List[Message] = []
-        self._context_summary: Optional[str] = None  # Summary from previous session
+        self.history: list[Message] = []
+        self._context_summary: str | None = None  # Summary from previous session
         self._awaiting_plan_approval: bool = False
-        self._pending_plan_response: Optional[str] = None
+        self._pending_plan_response: str | None = None
 
-    def set_history(self, messages: List[Message]):
+    def set_history(self, messages: list[Message]):
         """Set the conversation history (used when resuming a session)."""
         self.history = messages
 
@@ -80,12 +79,14 @@ class Agent:
         if call.name == "shell":
             cmd = args.get("command", "")
             syntax = Syntax(cmd, "bash", theme="monokai", line_numbers=False, word_wrap=True)
-            console.print(Panel(
-                syntax,
-                title=f"[bold magenta]Shell[/bold magenta]",
-                border_style="magenta",
-                padding=(0, 1)
-            ))
+            console.print(
+                Panel(
+                    syntax,
+                    title="[bold magenta]Shell[/bold magenta]",
+                    border_style="magenta",
+                    padding=(0, 1),
+                )
+            )
 
         elif call.name == "filesystem":
             action = args.get("action", "")
@@ -93,7 +94,7 @@ class Agent:
             content = args.get("content", "")
 
             if action == "write":
-                lines = content.count('\n') + 1 if content else 0
+                lines = content.count("\n") + 1 if content else 0
                 summary = f"[cyan]write[/cyan] {lines} lines to [bold]{path}[/bold]"
             elif action == "read":
                 summary = f"[cyan]read[/cyan] [bold]{path}[/bold]"
@@ -134,8 +135,10 @@ class Agent:
 
         else:
             # Generic fallback - show tool name and brief args
-            brief_args = {k: (v[:50] + "..." if isinstance(v, str) and len(v) > 50 else v)
-                         for k, v in args.items()}
+            brief_args = {
+                k: (v[:50] + "..." if isinstance(v, str) and len(v) > 50 else v)
+                for k, v in args.items()
+            }
             console.print(f"  [dim]>[/dim] [cyan]{call.name}[/cyan] {brief_args}")
 
     def _display_tool_result(self, tool_name: str, result: str):
@@ -153,13 +156,13 @@ class Agent:
 
         # For successful file reads with long content, truncate
         if tool_name == "filesystem" and len(result_str) > 200 and "Error" not in result_str:
-            lines = result_str.count('\n')
+            lines = result_str.count("\n")
             console.print(f"    [green]✓[/green] [dim]Read {lines} lines[/dim]")
             return
 
         # For search/grep results (file search, not web search)
         if tool_name in ("search", "grep") and "Error" not in result_str:
-            matches = result_str.strip().split('\n')
+            matches = result_str.strip().split("\n")
             count = len([m for m in matches if m.strip()])
             if count > 5:
                 console.print(f"    [green]✓[/green] [dim]Found {count} matches[/dim]")
@@ -168,25 +171,29 @@ class Agent:
         # For websearch results, show them nicely
         if tool_name == "websearch" and "Search results for:" in result_str:
             # Show a brief summary, full results go to the AI
-            lines = result_str.strip().split('\n')
-            result_count = sum(1 for line in lines if line.strip().startswith(('1.', '2.', '3.', '4.', '5.')))
+            lines = result_str.strip().split("\n")
+            result_count = sum(
+                1 for line in lines if line.strip().startswith(("1.", "2.", "3.", "4.", "5."))
+            )
             console.print(f"    [green]✓[/green] [dim]Found {result_count} web results[/dim]")
             return
 
         # For webfetch results
         if tool_name == "webfetch" and "Content from" in result_str:
-            lines = result_str.count('\n')
+            lines = result_str.count("\n")
             console.print(f"    [green]✓[/green] [dim]Fetched page ({lines} lines)[/dim]")
             return
 
         # Check for errors
         if "Error:" in result_str or result_str.startswith("Error"):
-            console.print(Panel(
-                Text(result_str[:300], style="red"),
-                title=f"[bold red]Error[/bold red]",
-                border_style="red",
-                padding=(0, 1)
-            ))
+            console.print(
+                Panel(
+                    Text(result_str[:300], style="red"),
+                    title="[bold red]Error[/bold red]",
+                    border_style="red",
+                    padding=(0, 1),
+                )
+            )
             return
 
         # Shell output - show in panel
@@ -194,16 +201,23 @@ class Agent:
             # Truncate long output
             max_display = 400
             if len(result_str) > max_display:
-                display_result = result_str[:max_display] + f"\n[dim]... ({len(result_str) - max_display} more chars)[/dim]"
+                display_result = (
+                    result_str[:max_display]
+                    + f"\n[dim]... ({len(result_str) - max_display} more chars)[/dim]"
+                )
             else:
                 display_result = result_str
 
-            console.print(Panel(
-                Syntax(display_result, "text", theme="monokai", line_numbers=False, word_wrap=True),
-                title=f"[bold green]Output[/bold green]",
-                border_style="green",
-                padding=(0, 1)
-            ))
+            console.print(
+                Panel(
+                    Syntax(
+                        display_result, "text", theme="monokai", line_numbers=False, word_wrap=True
+                    ),
+                    title="[bold green]Output[/bold green]",
+                    border_style="green",
+                    padding=(0, 1),
+                )
+            )
             return
 
         # Brief result for simple operations
@@ -223,7 +237,9 @@ class Agent:
         """Generate a summary of the current conversation."""
         # Build messages for summarization (without tools)
         summary_messages = [
-            Message(role="system", content="You are a helpful assistant that summarizes conversations."),
+            Message(
+                role="system", content="You are a helpful assistant that summarizes conversations."
+            ),
         ]
 
         # Add conversation history (simplified)
@@ -255,9 +271,7 @@ class Agent:
 
         # Create continuation session
         new_session_id = self.session_manager.create_continuation_session(
-            provider=self.provider.name,
-            model=self.provider.model,
-            summary=summary
+            provider=self.provider.name, model=self.provider.model, summary=summary
         )
 
         print_info(f"Continued to new session: {new_session_id}")
@@ -269,7 +283,7 @@ class Agent:
         # Save a system message with the summary context
         context_message = Message(
             role="assistant",
-            content=f"[Previous conversation summary]\n{summary}\n\n[Continuing conversation...]"
+            content=f"[Previous conversation summary]\n{summary}\n\n[Continuing conversation...]",
         )
         self._save_message(context_message)
 
@@ -279,7 +293,7 @@ class Agent:
 
         return True
 
-    def _handle_plan_approval(self, user_input: str) -> Optional[str]:
+    def _handle_plan_approval(self, user_input: str) -> str | None:
         """Handle plan approval responses. Returns response or None to continue."""
         input_lower = user_input.strip().lower()
 
@@ -297,7 +311,11 @@ class Agent:
         elif input_lower.startswith("modify") or input_lower.startswith("change"):
             self._awaiting_plan_approval = False
             # User wants to modify, treat the rest as new instructions
-            modification = user_input[6:].strip() if input_lower.startswith("modify") else user_input[6:].strip()
+            modification = (
+                user_input[6:].strip()
+                if input_lower.startswith("modify")
+                else user_input[6:].strip()
+            )
             if modification:
                 return self.run(f"Please modify the plan: {modification}", max_iterations=15)
             return "What changes would you like me to make to the plan?"
@@ -335,7 +353,7 @@ class Agent:
                     if msg.role == "system":
                         context_msg = Message(
                             role="system",
-                            content=f"\n\n[Previous conversation context]\n{self._context_summary}"
+                            content=f"\n\n[Previous conversation context]\n{self._context_summary}",
                         )
                         planned_messages.insert(i + 1, context_msg)
                         break
@@ -344,10 +362,7 @@ class Agent:
             if is_plan_mode and iteration == 0 and not plan_created:
                 for i, msg in enumerate(planned_messages):
                     if msg.role == "system":
-                        plan_msg = Message(
-                            role="system",
-                            content=f"\n\n{PLAN_MODE_PROMPT}"
-                        )
+                        plan_msg = Message(role="system", content=f"\n\n{PLAN_MODE_PROMPT}")
                         planned_messages.insert(i + 1, plan_msg)
                         break
 
@@ -373,10 +388,7 @@ class Agent:
                     {
                         "id": tc.id,
                         "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": json.dumps(tc.arguments)
-                        }
+                        "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
                     }
                     for tc in response.tool_calls
                 ]
@@ -412,10 +424,7 @@ class Agent:
 
                 # Save tool result message
                 tool_message = Message(
-                    role="tool",
-                    content=str(result),
-                    name=call.name,
-                    tool_call_id=call.id
+                    role="tool", content=str(result), name=call.name, tool_call_id=call.id
                 )
                 self._save_message(tool_message)
 

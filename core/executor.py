@@ -1,17 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 import questionary
 from questionary import Style as QStyle
 from rich.panel import Panel
-from rich.syntax import Syntax
 from rich.text import Text
 
+from config.permissions import PermissionChoice, PermissionLevel, Permissions, get_permissions
 from tools.base import Tool
-from config.permissions import (
-    get_permissions, PermissionLevel, PermissionChoice, Permissions
-)
-from utils.logger import get_console, print_warning, print_success, print_info
+from utils.logger import get_console, print_success, print_warning
 
 if TYPE_CHECKING:
     from core.modes import ModeManager
@@ -19,14 +16,16 @@ if TYPE_CHECKING:
 console = get_console()
 
 # Custom style for questionary prompts
-PROMPT_STYLE = QStyle([
-    ('qmark', 'fg:yellow bold'),
-    ('question', 'fg:white bold'),
-    ('answer', 'fg:green bold'),
-    ('pointer', 'fg:cyan bold'),
-    ('highlighted', 'fg:cyan bold'),
-    ('selected', 'fg:green'),
-])
+PROMPT_STYLE = QStyle(
+    [
+        ("qmark", "fg:yellow bold"),
+        ("question", "fg:white bold"),
+        ("answer", "fg:green bold"),
+        ("pointer", "fg:cyan bold"),
+        ("highlighted", "fg:cyan bold"),
+        ("selected", "fg:green"),
+    ]
+)
 
 
 class Executor(ABC):
@@ -35,24 +34,24 @@ class Executor(ABC):
     """
 
     @abstractmethod
-    def execute(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    def execute(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         pass
 
 
 class ToolExecutor(Executor):
     def __init__(
         self,
-        tools: List[Tool],
+        tools: list[Tool],
         require_confirmation: bool = True,
-        permissions: Optional[Permissions] = None,
-        mode_manager: Optional["ModeManager"] = None
+        permissions: Permissions | None = None,
+        mode_manager: Optional["ModeManager"] = None,
     ):
         self.tools = {tool.name: tool for tool in tools}
         self.require_confirmation = require_confirmation
         self.permissions = permissions or get_permissions()
         self.mode_manager = mode_manager
 
-    def _get_command_description(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+    def _get_command_description(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Get a human-readable description of the command."""
         if tool_name == "shell":
             return arguments.get("command", "")
@@ -70,19 +69,16 @@ class ToolExecutor(Executor):
             return str(arguments)
 
     def _ask_permission(
-        self,
-        tool_name: str,
-        command: str,
-        reason: Optional[str] = None
+        self, tool_name: str, command: str, reason: str | None = None
     ) -> PermissionChoice:
         """Ask user for permission to execute a command using interactive selection."""
         console.print()
 
         # Create a nice panel for the command
         command_display = Text()
-        command_display.append(f"Tool: ", style="dim")
+        command_display.append("Tool: ", style="dim")
         command_display.append(f"{tool_name}\n", style="bold yellow")
-        command_display.append(f"Command: ", style="dim")
+        command_display.append("Command: ", style="dim")
         command_display.append(command, style="bold cyan")
 
         if reason:
@@ -92,7 +88,7 @@ class ToolExecutor(Executor):
             command_display,
             title="[bold yellow]Permission Required[/bold yellow]",
             border_style="yellow",
-            padding=(0, 1)
+            padding=(0, 1),
         )
         console.print(panel)
 
@@ -100,7 +96,9 @@ class ToolExecutor(Executor):
         choices = [
             questionary.Choice("Allow once", value=PermissionChoice.ALLOW_ONCE),
             questionary.Choice("Allow for this session", value=PermissionChoice.ALLOW_SESSION),
-            questionary.Choice("Always allow (save to config)", value=PermissionChoice.ALLOW_ALWAYS),
+            questionary.Choice(
+                "Always allow (save to config)", value=PermissionChoice.ALLOW_ALWAYS
+            ),
             questionary.Choice("Deny", value=PermissionChoice.DENY),
         ]
 
@@ -110,7 +108,7 @@ class ToolExecutor(Executor):
                 choices=choices,
                 default=choices[0],
                 style=PROMPT_STYLE,
-                instruction="(Use arrow keys to navigate, Enter to select)"
+                instruction="(Use arrow keys to navigate, Enter to select)",
             ).ask()
 
             if result is None:  # User pressed Ctrl+C
@@ -122,10 +120,7 @@ class ToolExecutor(Executor):
             return PermissionChoice.DENY
 
     def _handle_permission_choice(
-        self,
-        choice: PermissionChoice,
-        tool_name: str,
-        command: str
+        self, choice: PermissionChoice, tool_name: str, command: str
     ) -> bool:
         """Handle the user's permission choice. Returns True if allowed."""
         if choice == PermissionChoice.ALLOW_ONCE:
@@ -175,7 +170,7 @@ class ToolExecutor(Executor):
         # Default: first word + wildcard
         return f"{base}*"
 
-    def execute(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+    def execute(self, tool_name: str, arguments: dict[str, Any]) -> str:
         if tool_name not in self.tools:
             return f"Error: Tool '{tool_name}' not found."
 

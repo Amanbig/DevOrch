@@ -1,6 +1,7 @@
 import subprocess
 import sys
-from typing import Dict, Any
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from tools.base import Tool
@@ -45,7 +46,7 @@ class ShellTool(Tool):
                 return True
         return False
 
-    def run(self, arguments: Dict[str, Any]) -> Any:
+    def run(self, arguments: dict[str, Any]) -> Any:
         try:
             command = arguments.get("command")
             if not command:
@@ -57,14 +58,10 @@ class ShellTool(Tool):
                 sys.stdout.flush()
 
                 # Run interactively - let user interact directly
-                result = subprocess.run(
-                    command,
-                    shell=True,
-                    check=False
-                )
+                result = subprocess.run(command, shell=True, check=False)
 
                 if result.returncode == 0:
-                    return f"Command completed successfully (exit code 0)."
+                    return "Command completed successfully (exit code 0)."
                 else:
                     return f"Command completed with exit code {result.returncode}."
 
@@ -76,8 +73,8 @@ class ShellTool(Tool):
                 text=True,
                 check=False,
                 timeout=120,  # 2 minute timeout for non-interactive commands
-                encoding='utf-8',
-                errors='replace'  # Replace undecodable chars instead of failing
+                encoding="utf-8",
+                errors="replace",  # Replace undecodable chars instead of failing
             )
 
             output = ""

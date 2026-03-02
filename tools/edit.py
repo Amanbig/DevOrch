@@ -3,10 +3,11 @@ Edit Tool - Make targeted edits to files.
 Supports find/replace, line-based edits, and smart code modifications.
 """
 
+import difflib
 import os
 import re
-import difflib
-from typing import Dict, Any, List, Optional, Literal
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 from tools.base import Tool
@@ -14,13 +15,14 @@ from tools.base import Tool
 
 class EditToolSchema(BaseModel):
     action: Literal["replace", "replace_lines", "insert", "delete", "patch"] = Field(
-        ...,
-        description="Edit action: replace (find/replace), replace_lines, insert, delete, patch"
+        ..., description="Edit action: replace (find/replace), replace_lines, insert, delete, patch"
     )
     path: str = Field(..., description="Path to the file to edit.")
     find: str = Field(default="", description="Text or pattern to find (for replace action).")
     replace_with: str = Field(default="", description="Replacement text.")
-    line_start: int = Field(default=0, description="Start line number (1-indexed, for line-based actions).")
+    line_start: int = Field(
+        default=0, description="Start line number (1-indexed, for line-based actions)."
+    )
     line_end: int = Field(default=0, description="End line number (for replace_lines/delete).")
     content: str = Field(default="", description="Content for insert or patch action.")
     regex: bool = Field(default=False, description="Treat 'find' as regex pattern.")
@@ -33,6 +35,7 @@ class EditTool(Tool):
     Make targeted edits to files with precise control.
     Returns a diff showing the changes made.
     """
+
     name = "edit"
     description = """Make targeted edits to files. More precise than full file writes.
 
@@ -55,42 +58,28 @@ Examples:
 Always use dry_run=true first to preview significant changes!"""
     args_schema = EditToolSchema
 
-    def _read_file(self, path: str) -> List[str]:
+    def _read_file(self, path: str) -> list[str]:
         """Read file and return lines."""
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, encoding="utf-8") as f:
             return f.readlines()
 
-    def _write_file(self, path: str, lines: List[str]):
+    def _write_file(self, path: str, lines: list[str]):
         """Write lines to file."""
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
-    def _generate_diff(
-        self,
-        original: List[str],
-        modified: List[str],
-        path: str
-    ) -> str:
+    def _generate_diff(self, original: list[str], modified: list[str], path: str) -> str:
         """Generate a unified diff between original and modified content."""
         diff = difflib.unified_diff(
-            original,
-            modified,
-            fromfile=f"a/{path}",
-            tofile=f"b/{path}",
-            lineterm=''
+            original, modified, fromfile=f"a/{path}", tofile=f"b/{path}", lineterm=""
         )
-        return '\n'.join(diff)
+        return "\n".join(diff)
 
     def _replace_text(
-        self,
-        lines: List[str],
-        find: str,
-        replace_with: str,
-        regex: bool = False,
-        count: int = 1
-    ) -> tuple[List[str], int]:
+        self, lines: list[str], find: str, replace_with: str, regex: bool = False, count: int = 1
+    ) -> tuple[list[str], int]:
         """Replace text in content. Returns (new_lines, replacement_count)."""
-        content = ''.join(lines)
+        content = "".join(lines)
         replacements = 0
 
         if regex:
@@ -111,63 +100,47 @@ Always use dry_run=true first to preview significant changes!"""
                 replacements = min(content.count(find), count)
 
         # Preserve line structure
-        if new_content and not new_content.endswith('\n') and lines and lines[-1].endswith('\n'):
-            new_content += '\n'
+        if new_content and not new_content.endswith("\n") and lines and lines[-1].endswith("\n"):
+            new_content += "\n"
 
         new_lines = new_content.splitlines(keepends=True)
         return new_lines, replacements
 
-    def _replace_lines(
-        self,
-        lines: List[str],
-        start: int,
-        end: int,
-        new_content: str
-    ) -> List[str]:
+    def _replace_lines(self, lines: list[str], start: int, end: int, new_content: str) -> list[str]:
         """Replace lines in range with new content."""
         # Convert to 0-indexed
         start_idx = max(0, start - 1)
         end_idx = min(len(lines), end)
 
         # Ensure new content ends with newline
-        if new_content and not new_content.endswith('\n'):
-            new_content += '\n'
+        if new_content and not new_content.endswith("\n"):
+            new_content += "\n"
 
         new_lines = new_content.splitlines(keepends=True) if new_content else []
 
         return lines[:start_idx] + new_lines + lines[end_idx:]
 
-    def _insert_lines(
-        self,
-        lines: List[str],
-        at_line: int,
-        content: str
-    ) -> List[str]:
+    def _insert_lines(self, lines: list[str], at_line: int, content: str) -> list[str]:
         """Insert content at a specific line."""
         # Convert to 0-indexed
         insert_idx = max(0, min(len(lines), at_line - 1))
 
         # Ensure content ends with newline
-        if content and not content.endswith('\n'):
-            content += '\n'
+        if content and not content.endswith("\n"):
+            content += "\n"
 
         new_lines = content.splitlines(keepends=True) if content else []
 
         return lines[:insert_idx] + new_lines + lines[insert_idx:]
 
-    def _delete_lines(
-        self,
-        lines: List[str],
-        start: int,
-        end: int
-    ) -> List[str]:
+    def _delete_lines(self, lines: list[str], start: int, end: int) -> list[str]:
         """Delete lines in range."""
         start_idx = max(0, start - 1)
         end_idx = min(len(lines), end)
 
         return lines[:start_idx] + lines[end_idx:]
 
-    def run(self, arguments: Dict[str, Any]) -> Any:
+    def run(self, arguments: dict[str, Any]) -> Any:
         action = arguments.get("action")
         path = arguments.get("path")
         find = arguments.get("find", "")
@@ -212,9 +185,7 @@ Always use dry_run=true first to preview significant changes!"""
                 if line_start > len(original_lines):
                     return f"Error: line_start ({line_start}) exceeds file length ({len(original_lines)})"
 
-                modified_lines = self._replace_lines(
-                    modified_lines, line_start, line_end, content
-                )
+                modified_lines = self._replace_lines(modified_lines, line_start, line_end, content)
                 change_summary = f"Replaced lines {line_start}-{line_end}"
 
             elif action == "insert":

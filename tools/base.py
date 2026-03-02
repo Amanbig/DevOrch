@@ -1,23 +1,26 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Type
+from typing import Any
+
 from pydantic import BaseModel
+
 
 class Tool(ABC):
     """
     Base class for all tools.
     """
+
     name: str = ""
     description: str = ""
-    args_schema: Type[BaseModel] = None
+    args_schema: type[BaseModel] = None
 
     @abstractmethod
-    def run(self, arguments: Dict[str, Any]) -> Any:
+    def run(self, arguments: dict[str, Any]) -> Any:
         """
         Execute the tool with given arguments.
         """
         pass
 
-    def schema(self) -> Dict[str, Any]:
+    def schema(self) -> dict[str, Any]:
         """
         JSON schema exposed to LLMs.
         """
@@ -27,9 +30,9 @@ class Tool(ABC):
             parameters = {
                 "type": "object",
                 "properties": schema_dump.get("properties", {}),
-                "required": schema_dump.get("required", [])
+                "required": schema_dump.get("required", []),
             }
-            
+
         return {
             "name": self.name,
             "description": self.description,

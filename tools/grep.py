@@ -5,9 +5,10 @@ Similar to ripgrep/grep, optimized for code search.
 
 import os
 import re
-from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field
 from dataclasses import dataclass
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 from tools.base import Tool
 
@@ -15,6 +16,7 @@ from tools.base import Tool
 @dataclass
 class GrepMatch:
     """A single grep match result."""
+
     file: str
     line_number: int
     line_content: str
@@ -26,7 +28,9 @@ class GrepToolSchema(BaseModel):
     pattern: str = Field(..., description="Regex pattern to search for in file contents.")
     path: str = Field(default=".", description="File or directory to search in.")
     include: str = Field(default="*", description="File pattern to include (e.g., '*.py', '*.js').")
-    context: int = Field(default=0, description="Number of context lines before and after match (0-5).")
+    context: int = Field(
+        default=0, description="Number of context lines before and after match (0-5)."
+    )
     max_results: int = Field(default=50, description="Maximum number of results to return.")
     case_sensitive: bool = Field(default=True, description="Whether search is case-sensitive.")
     whole_word: bool = Field(default=False, description="Match whole words only.")
@@ -37,6 +41,7 @@ class GrepTool(Tool):
     Searches for patterns within file contents.
     Returns matching lines with file paths and line numbers.
     """
+
     name = "grep"
     description = """Search for a pattern within file contents. Returns matching lines with file paths and line numbers.
 Use this to find specific code, functions, variables, or text patterns across files.
@@ -49,22 +54,85 @@ Examples:
 
     # File extensions to search by default (text files)
     TEXT_EXTENSIONS = {
-        '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.h', '.hpp',
-        '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.scala', '.cs',
-        '.html', '.css', '.scss', '.less', '.vue', '.svelte',
-        '.json', '.yaml', '.yml', '.toml', '.xml', '.md', '.txt', '.rst',
-        '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd',
-        '.sql', '.graphql', '.proto',
-        '.env', '.gitignore', '.dockerignore', 'Dockerfile', 'Makefile',
-        '.cfg', '.ini', '.conf', '.config'
+        ".py",
+        ".js",
+        ".ts",
+        ".jsx",
+        ".tsx",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".go",
+        ".rs",
+        ".rb",
+        ".php",
+        ".swift",
+        ".kt",
+        ".scala",
+        ".cs",
+        ".html",
+        ".css",
+        ".scss",
+        ".less",
+        ".vue",
+        ".svelte",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".xml",
+        ".md",
+        ".txt",
+        ".rst",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".fish",
+        ".ps1",
+        ".bat",
+        ".cmd",
+        ".sql",
+        ".graphql",
+        ".proto",
+        ".env",
+        ".gitignore",
+        ".dockerignore",
+        "Dockerfile",
+        "Makefile",
+        ".cfg",
+        ".ini",
+        ".conf",
+        ".config",
     }
 
     # Directories to skip
     SKIP_DIRS = {
-        '.git', '.svn', '.hg', 'node_modules', '__pycache__', '.venv', 'venv',
-        'env', '.env', 'dist', 'build', '.next', '.nuxt', 'target', 'out',
-        '.idea', '.vscode', '.pytest_cache', '.mypy_cache', 'coverage',
-        'htmlcov', '.tox', 'eggs', '*.egg-info'
+        ".git",
+        ".svn",
+        ".hg",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "env",
+        ".env",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        "target",
+        "out",
+        ".idea",
+        ".vscode",
+        ".pytest_cache",
+        ".mypy_cache",
+        "coverage",
+        "htmlcov",
+        ".tox",
+        "eggs",
+        "*.egg-info",
     }
 
     def _should_search_file(self, filepath: str, include_pattern: str) -> bool:
@@ -75,6 +143,7 @@ Examples:
         # Check include pattern
         if include_pattern != "*":
             import fnmatch
+
             if not fnmatch.fnmatch(filename, include_pattern):
                 return False
 
@@ -88,21 +157,16 @@ Examples:
 
     def _should_skip_dir(self, dirname: str) -> bool:
         """Check if directory should be skipped."""
-        return dirname in self.SKIP_DIRS or dirname.startswith('.')
+        return dirname in self.SKIP_DIRS or dirname.startswith(".")
 
     def _search_file(
-        self,
-        filepath: str,
-        regex: re.Pattern,
-        context: int,
-        max_results: int,
-        current_results: int
-    ) -> List[dict]:
+        self, filepath: str, regex: re.Pattern, context: int, max_results: int, current_results: int
+    ) -> list[dict]:
         """Search a single file for matches."""
         results = []
 
         try:
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(filepath, encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
 
             for i, line in enumerate(lines):
@@ -114,8 +178,8 @@ Examples:
                     result = {
                         "file": filepath,
                         "line": i + 1,
-                        "content": line.rstrip('\n\r'),
-                        "match": match.group()
+                        "content": line.rstrip("\n\r"),
+                        "match": match.group(),
                     }
 
                     # Add context lines if requested
@@ -141,7 +205,7 @@ Examples:
 
         return results
 
-    def run(self, arguments: Dict[str, Any]) -> Any:
+    def run(self, arguments: dict[str, Any]) -> Any:
         pattern = arguments.get("pattern")
         path = arguments.get("path", ".")
         include = arguments.get("include", "*")
@@ -156,7 +220,7 @@ Examples:
         # Build regex
         try:
             if whole_word:
-                pattern = rf'\b{pattern}\b'
+                pattern = rf"\b{pattern}\b"
 
             flags = 0 if case_sensitive else re.IGNORECASE
             regex = re.compile(pattern, flags)

@@ -1,9 +1,8 @@
-from typing import List, Optional
 
 from anthropic import Anthropic
 
-from schemas.message import Message, LLMResponse, ToolCall
 from providers.base import LLMProvider, ModelInfo
+from schemas.message import LLMResponse, Message, ToolCall
 
 
 class AnthropicProvider(LLMProvider):
@@ -21,19 +20,19 @@ class AnthropicProvider(LLMProvider):
         "claude-3-haiku-20240307",
     ]
 
-    def __init__(self, model: str = "claude-sonnet-4-20250514", api_key: Optional[str] = None):
+    def __init__(self, model: str = "claude-sonnet-4-20250514", api_key: str | None = None):
         self.client = Anthropic(api_key=api_key)
         self.model = model
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Return available Claude models."""
         # Anthropic doesn't have a models list API, use defaults
         return [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
 
     def generate(
         self,
-        messages: List[Message],
-        tools: Optional[list] = None,
+        messages: list[Message],
+        tools: list | None = None,
         stream: bool = False,
     ) -> LLMResponse:
         # Extract system message (Anthropic handles it separately)
@@ -45,14 +44,18 @@ class AnthropicProvider(LLMProvider):
                 system_content = msg.content
             elif msg.role == "tool":
                 # Anthropic expects tool results as user messages with tool_result blocks
-                formatted_messages.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": msg.tool_call_id or msg.name,
-                        "content": msg.content
-                    }]
-                })
+                formatted_messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": msg.tool_call_id or msg.name,
+                                "content": msg.content,
+                            }
+                        ],
+                    }
+                )
             elif msg.role == "assistant":
                 # Check if this was a tool-calling message (has metadata with tool_use_blocks)
                 if msg.metadata and msg.metadata.get("tool_use_blocks"):
@@ -70,11 +73,15 @@ class AnthropicProvider(LLMProvider):
         if tools:
             formatted_tools = []
             for tool in tools:
-                formatted_tools.append({
-                    "name": tool["name"],
-                    "description": tool["description"],
-                    "input_schema": tool.get("parameters", {"type": "object", "properties": {}})
-                })
+                formatted_tools.append(
+                    {
+                        "name": tool["name"],
+                        "description": tool["description"],
+                        "input_schema": tool.get(
+                            "parameters", {"type": "object", "properties": {}}
+                        ),
+                    }
+                )
 
         # Build request kwargs
         kwargs = {
@@ -101,16 +108,13 @@ class AnthropicProvider(LLMProvider):
                 tool_call = ToolCall(
                     name=block.name,
                     arguments=block.input,  # Already a dict, not JSON string
-                    id=block.id
+                    id=block.id,
                 )
                 tool_calls.append(tool_call)
                 # Store the block for message reconstruction in history
-                tool_use_blocks.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input
-                })
+                tool_use_blocks.append(
+                    {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+                )
 
         content = text_content if text_content else "Calling tool..."
 
@@ -120,5 +124,5 @@ class AnthropicProvider(LLMProvider):
         return LLMResponse(
             message=Message(role="assistant", content=content, metadata=metadata),
             tool_calls=tool_calls if tool_calls else None,
-            raw=response
+            raw=response,
         )

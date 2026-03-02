@@ -4,11 +4,11 @@ https://openrouter.ai/
 """
 
 import json
-from typing import List, Optional
+
 import httpx
 
-from schemas.message import Message, LLMResponse, ToolCall
 from providers.base import LLMProvider, ModelInfo
+from schemas.message import LLMResponse, Message, ToolCall
 
 
 class OpenRouterProvider(LLMProvider):
@@ -16,6 +16,7 @@ class OpenRouterProvider(LLMProvider):
     OpenRouter provides access to many models through a single API.
     Supports: Claude, GPT-4, Llama, Mistral, and many more.
     """
+
     name = "openrouter"
 
     DEFAULT_MODELS = [
@@ -34,9 +35,9 @@ class OpenRouterProvider(LLMProvider):
     def __init__(
         self,
         model: str = "anthropic/claude-3.5-sonnet",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         site_url: str = "https://github.com/devpilot",
-        site_name: str = "DevPilot"
+        site_name: str = "DevPilot",
     ):
         self.model = model
         self.api_key = api_key
@@ -52,13 +53,10 @@ class OpenRouterProvider(LLMProvider):
             "Content-Type": "application/json",
         }
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Fetch available models from OpenRouter API."""
         try:
-            response = self.client.get(
-                f"{self.BASE_URL}/models",
-                headers=self._get_headers()
-            )
+            response = self.client.get(f"{self.BASE_URL}/models", headers=self._get_headers())
             response.raise_for_status()
             data = response.json()
 
@@ -70,16 +68,25 @@ class OpenRouterProvider(LLMProvider):
                 if architecture.get("modality") == "text->image":
                     continue  # Skip image generation models
 
-                models.append(ModelInfo(
-                    id=model_id,
-                    name=model.get("name", model_id),
-                    context_length=model.get("context_length"),
-                    description=model.get("description"),
-                ))
+                models.append(
+                    ModelInfo(
+                        id=model_id,
+                        name=model.get("name", model_id),
+                        context_length=model.get("context_length"),
+                        description=model.get("description"),
+                    )
+                )
 
             # Sort by name, prioritizing well-known providers
             def sort_key(m):
-                priority_prefixes = ["openai/", "anthropic/", "google/", "meta-llama/", "mistralai/", "deepseek/"]
+                priority_prefixes = [
+                    "openai/",
+                    "anthropic/",
+                    "google/",
+                    "meta-llama/",
+                    "mistralai/",
+                    "deepseek/",
+                ]
                 for i, prefix in enumerate(priority_prefixes):
                     if m.id.startswith(prefix):
                         return (i, m.name)
@@ -93,8 +100,8 @@ class OpenRouterProvider(LLMProvider):
 
     def generate(
         self,
-        messages: List[Message],
-        tools: Optional[list] = None,
+        messages: list[Message],
+        tools: list | None = None,
         stream: bool = False,
     ) -> LLMResponse:
         # Format messages for OpenRouter API
@@ -111,7 +118,7 @@ class OpenRouterProvider(LLMProvider):
                 formatted_msg = {
                     "role": "assistant",
                     "content": msg.content or "",
-                    "tool_calls": msg.metadata["tool_calls"]
+                    "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
                 formatted_msg = {"role": msg.role, "content": msg.content}
@@ -122,14 +129,18 @@ class OpenRouterProvider(LLMProvider):
         if tools:
             formatted_tools = []
             for tool in tools:
-                formatted_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool["name"],
-                        "description": tool["description"],
-                        "parameters": tool.get("parameters", {"type": "object", "properties": {}})
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool["name"],
+                            "description": tool["description"],
+                            "parameters": tool.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        },
                     }
-                })
+                )
 
         payload = {
             "model": self.model,
@@ -141,14 +152,14 @@ class OpenRouterProvider(LLMProvider):
             payload["tools"] = formatted_tools
 
         response = self.client.post(
-            f"{self.BASE_URL}/chat/completions",
-            headers=self._get_headers(),
-            json=payload
+            f"{self.BASE_URL}/chat/completions", headers=self._get_headers(), json=payload
         )
 
         # Handle errors with better messages
         if response.status_code == 404:
-            raise Exception(f"Model '{self.model}' not found on OpenRouter. Try /model to select a different model.")
+            raise Exception(
+                f"Model '{self.model}' not found on OpenRouter. Try /model to select a different model."
+            )
         elif response.status_code == 401:
             raise Exception("Invalid OpenRouter API key. Please check your API key.")
         elif response.status_code == 402:
@@ -163,11 +174,15 @@ class OpenRouterProvider(LLMProvider):
         tool_calls = []
         if message.get("tool_calls"):
             for tc in message["tool_calls"]:
-                args = json.loads(tc["function"]["arguments"]) if tc["function"].get("arguments") else {}
+                args = (
+                    json.loads(tc["function"]["arguments"])
+                    if tc["function"].get("arguments")
+                    else {}
+                )
                 tool_call = ToolCall(
                     name=tc["function"]["name"],
                     arguments=args,
-                    id=tc.get("id", tc["function"]["name"])
+                    id=tc.get("id", tc["function"]["name"]),
                 )
                 tool_calls.append(tool_call)
 
@@ -176,5 +191,5 @@ class OpenRouterProvider(LLMProvider):
         return LLMResponse(
             message=Message(role="assistant", content=content),
             tool_calls=tool_calls if tool_calls else None,
-            raw=data
+            raw=data,
         )

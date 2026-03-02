@@ -1,12 +1,14 @@
 """Web search tool using DuckDuckGo (no API key required)."""
 
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from tools.base import Tool
 
 try:
     from duckduckgo_search import DDGS
+
     DDGS_AVAILABLE = True
 except ImportError:
     DDGS_AVAILABLE = False
@@ -38,7 +40,7 @@ class WebSearchTool(Tool):
 
     args_schema = WebSearchSchema
 
-    def run(self, arguments: Dict[str, Any]) -> str:
+    def run(self, arguments: dict[str, Any]) -> str:
         if not DDGS_AVAILABLE:
             return "Error: Web search not available. Install with: pip install duckduckgo-search"
 
@@ -74,7 +76,7 @@ class WebSearchTool(Tool):
         except Exception as e:
             return f"Error searching: {str(e)}"
 
-    def _search(self, query: str, max_results: int) -> List[Dict]:
+    def _search(self, query: str, max_results: int) -> list[dict]:
         """Perform the actual search."""
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=max_results))
@@ -100,21 +102,18 @@ class WebFetchTool(Tool):
 
     args_schema = WebFetchSchema
 
-    def run(self, arguments: Dict[str, Any]) -> str:
+    def run(self, arguments: dict[str, Any]) -> str:
         url = arguments.get("url", "")
 
         if not url:
             return "Error: No URL provided."
 
         try:
+
             import httpx
-            from html import unescape
-            import re
 
             # Fetch the page
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
             with httpx.Client(timeout=15.0, follow_redirects=True) as client:
                 response = client.get(url, headers=headers)
@@ -140,29 +139,29 @@ class WebFetchTool(Tool):
         from html import unescape
 
         # Remove script and style elements
-        html = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
-        html = re.sub(r'<style[^>]*>.*?</style>', '', html, flags=re.DOTALL | re.IGNORECASE)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
+        html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL | re.IGNORECASE)
 
         # Remove HTML comments
-        html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+        html = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
 
         # Replace common elements with newlines
-        html = re.sub(r'<br[^>]*>', '\n', html, flags=re.IGNORECASE)
-        html = re.sub(r'<p[^>]*>', '\n\n', html, flags=re.IGNORECASE)
-        html = re.sub(r'<div[^>]*>', '\n', html, flags=re.IGNORECASE)
-        html = re.sub(r'<h[1-6][^>]*>', '\n\n', html, flags=re.IGNORECASE)
-        html = re.sub(r'</h[1-6]>', '\n', html, flags=re.IGNORECASE)
-        html = re.sub(r'<li[^>]*>', '\n- ', html, flags=re.IGNORECASE)
+        html = re.sub(r"<br[^>]*>", "\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"<p[^>]*>", "\n\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"<div[^>]*>", "\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"<h[1-6][^>]*>", "\n\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"</h[1-6]>", "\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"<li[^>]*>", "\n- ", html, flags=re.IGNORECASE)
 
         # Remove all other HTML tags
-        html = re.sub(r'<[^>]+>', '', html)
+        html = re.sub(r"<[^>]+>", "", html)
 
         # Unescape HTML entities
         text = unescape(html)
 
         # Clean up whitespace
-        text = re.sub(r'\n\s*\n', '\n\n', text)
-        text = re.sub(r' +', ' ', text)
+        text = re.sub(r"\n\s*\n", "\n\n", text)
+        text = re.sub(r" +", " ", text)
         text = text.strip()
 
         return text
