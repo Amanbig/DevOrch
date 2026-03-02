@@ -20,6 +20,8 @@ from utils.logger import get_console, print_error, print_success, print_panel, p
 from tools.shell import ShellTool
 from tools.filesystem import FilesystemTool
 from tools.search import SearchTool
+from tools.grep import GrepTool
+from tools.edit import EditTool
 
 from core.planner import Planner
 from schemas.message import Message
@@ -307,7 +309,7 @@ def start_repl(
     if not resume:
         session_id = session_manager.create_session(llm.name, llm.model)
 
-    tools = [ShellTool(), FilesystemTool(), SearchTool()]
+    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool()]
 
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
@@ -640,7 +642,7 @@ def ask(
 
     llm = create_provider(provider, model, settings)
 
-    tools = [ShellTool(), FilesystemTool(), SearchTool()]
+    tools = [ShellTool(), FilesystemTool(), SearchTool(), GrepTool(), EditTool()]
     executor = ToolExecutor(tools=tools)
     planner = SimplePlanner()
 
