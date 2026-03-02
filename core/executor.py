@@ -1,6 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
-from rich.prompt import Prompt
+
+import questionary
+from questionary import Style as QStyle
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.text import Text
 
 from tools.base import Tool
 from config.permissions import (
@@ -12,6 +17,16 @@ if TYPE_CHECKING:
     from core.modes import ModeManager
 
 console = get_console()
+
+# Custom style for questionary prompts
+PROMPT_STYLE = QStyle([
+    ('qmark', 'fg:yellow bold'),
+    ('question', 'fg:white bold'),
+    ('answer', 'fg:green bold'),
+    ('pointer', 'fg:cyan bold'),
+    ('highlighted', 'fg:cyan bold'),
+    ('selected', 'fg:green'),
+])
 
 
 class Executor(ABC):
@@ -60,51 +75,51 @@ class ToolExecutor(Executor):
         command: str,
         reason: Optional[str] = None
     ) -> PermissionChoice:
-        """Ask user for permission to execute a command."""
+        """Ask user for permission to execute a command using interactive selection."""
         console.print()
-        print_warning(f"DevPilot wants to use [bold]{tool_name}[/bold]:")
-        console.print(f"  [bold cyan]{command}[/bold cyan]")
+
+        # Create a nice panel for the command
+        command_display = Text()
+        command_display.append(f"Tool: ", style="dim")
+        command_display.append(f"{tool_name}\n", style="bold yellow")
+        command_display.append(f"Command: ", style="dim")
+        command_display.append(command, style="bold cyan")
 
         if reason:
-            console.print(f"  [dim]{reason}[/dim]")
+            command_display.append(f"\n{reason}", style="dim italic")
 
-        console.print()
-        console.print("  [green]y[/green]/[dim]1[/dim] - Allow once")
-        console.print("  [green]a[/green]/[dim]2[/dim] - Allow for this session")
-        console.print("  [green]s[/green]/[dim]3[/dim] - Always allow (save to config)")
-        console.print("  [red]n[/red]/[dim]4[/dim] - Deny")
-        console.print()
+        panel = Panel(
+            command_display,
+            title="[bold yellow]Permission Required[/bold yellow]",
+            border_style="yellow",
+            padding=(0, 1)
+        )
+        console.print(panel)
 
-        choice = Prompt.ask(
-            "[green]y[/green]/a/s/[red]n[/red]",
-            default="y"
-        ).lower().strip()
+        # Use questionary for interactive selection
+        choices = [
+            questionary.Choice("Allow once", value=PermissionChoice.ALLOW_ONCE),
+            questionary.Choice("Allow for this session", value=PermissionChoice.ALLOW_SESSION),
+            questionary.Choice("Always allow (save to config)", value=PermissionChoice.ALLOW_ALWAYS),
+            questionary.Choice("Deny", value=PermissionChoice.DENY),
+        ]
 
-        choice_map = {
-            # Allow once
-            "1": PermissionChoice.ALLOW_ONCE,
-            "y": PermissionChoice.ALLOW_ONCE,
-            "yes": PermissionChoice.ALLOW_ONCE,
-            "allow": PermissionChoice.ALLOW_ONCE,
-            "": PermissionChoice.ALLOW_ONCE,
-            # Allow session
-            "2": PermissionChoice.ALLOW_SESSION,
-            "a": PermissionChoice.ALLOW_SESSION,
-            "session": PermissionChoice.ALLOW_SESSION,
-            # Always allow
-            "3": PermissionChoice.ALLOW_ALWAYS,
-            "s": PermissionChoice.ALLOW_ALWAYS,
-            "save": PermissionChoice.ALLOW_ALWAYS,
-            "always": PermissionChoice.ALLOW_ALWAYS,
-            # Deny
-            "4": PermissionChoice.DENY,
-            "n": PermissionChoice.DENY,
-            "no": PermissionChoice.DENY,
-            "deny": PermissionChoice.DENY,
-            "d": PermissionChoice.DENY,
-        }
+        try:
+            result = questionary.select(
+                "Choose an action:",
+                choices=choices,
+                default=choices[0],
+                style=PROMPT_STYLE,
+                instruction="(Use arrow keys to navigate, Enter to select)"
+            ).ask()
 
-        return choice_map.get(choice, PermissionChoice.DENY)
+            if result is None:  # User pressed Ctrl+C
+                return PermissionChoice.DENY
+
+            return result
+
+        except (KeyboardInterrupt, EOFError):
+            return PermissionChoice.DENY
 
     def _handle_permission_choice(
         self,
@@ -114,13 +129,14 @@ class ToolExecutor(Executor):
     ) -> bool:
         """Handle the user's permission choice. Returns True if allowed."""
         if choice == PermissionChoice.ALLOW_ONCE:
+            print_success("Allowed once")
             return True
 
         elif choice == PermissionChoice.ALLOW_SESSION:
             # Create a pattern from the command
             pattern = self._create_pattern(command)
             self.permissions.add_allowed_pattern(tool_name, pattern, session_only=True)
-            print_info(f"Allowed for this session: {pattern}")
+            print_success(f"Allowed for session: {pattern}")
             return True
 
         elif choice == PermissionChoice.ALLOW_ALWAYS:
@@ -130,7 +146,7 @@ class ToolExecutor(Executor):
             return True
 
         else:  # DENY
-            print_warning("Command denied.")
+            print_warning("Command denied")
             return False
 
     def _create_pattern(self, command: str) -> str:

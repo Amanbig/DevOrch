@@ -1,13 +1,18 @@
 from typing import List, Optional, Callable
+import json
 
-from schemas.message import Message
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.text import Text
+from rich.table import Table
+
+from schemas.message import Message, ToolCall
 from providers.base import LLMProvider
 from core.planner import Planner
 from core.executor import Executor
 from core.sessions import SessionManager
 from core.modes import ModeManager, AgentMode, ExecutionPlan
 from utils.logger import get_console, print_panel, print_info, print_warning, print_success
-import json
 
 console = get_console()
 
@@ -66,6 +71,75 @@ class Agent:
     def set_context_summary(self, summary: str):
         """Set context summary from a previous session."""
         self._context_summary = summary
+
+    def _display_tool_call(self, call: ToolCall):
+        """Display a tool call in a nice formatted panel."""
+        # Format arguments nicely
+        args_formatted = json.dumps(call.arguments, indent=2)
+
+        # Create content with tool name and arguments
+        content = Text()
+        content.append(call.name, style="bold cyan")
+        content.append("\n")
+
+        # For shell commands, show the command prominently
+        if call.name == "shell" and "command" in call.arguments:
+            cmd = call.arguments["command"]
+            content.append("\n")
+            # Use syntax highlighting for shell commands
+            syntax = Syntax(cmd, "bash", theme="monokai", line_numbers=False, word_wrap=True)
+            console.print(Panel(
+                syntax,
+                title=f"[bold magenta]Tool Call[/bold magenta] [dim]({call.name})[/dim]",
+                border_style="magenta",
+                padding=(0, 1)
+            ))
+        else:
+            # For other tools, show formatted JSON arguments
+            syntax = Syntax(args_formatted, "json", theme="monokai", line_numbers=False)
+            console.print(Panel(
+                syntax,
+                title=f"[bold magenta]Tool Call[/bold magenta] [dim]({call.name})[/dim]",
+                border_style="magenta",
+                padding=(0, 1)
+            ))
+
+    def _display_tool_result(self, tool_name: str, result: str):
+        """Display tool result in a nice formatted panel."""
+        result_str = str(result)
+
+        # Truncate very long results
+        max_display = 500
+        if len(result_str) > max_display:
+            display_result = result_str[:max_display] + f"\n\n[dim]... ({len(result_str) - max_display} more characters)[/dim]"
+        else:
+            display_result = result_str
+
+        # Check if result looks like code/output
+        if result_str.startswith("STDOUT:") or result_str.startswith("STDERR:"):
+            # Shell output - use syntax highlighting
+            console.print(Panel(
+                Syntax(display_result, "text", theme="monokai", line_numbers=False, word_wrap=True),
+                title=f"[bold green]Result[/bold green]",
+                border_style="green",
+                padding=(0, 1)
+            ))
+        elif "Error:" in result_str:
+            # Error output
+            console.print(Panel(
+                Text(display_result, style="red"),
+                title=f"[bold red]Error[/bold red]",
+                border_style="red",
+                padding=(0, 1)
+            ))
+        else:
+            # Normal result
+            console.print(Panel(
+                display_result,
+                title=f"[bold green]Result[/bold green]",
+                border_style="green",
+                padding=(0, 1)
+            ))
 
     def _save_message(self, message: Message):
         """Save a message to history and session storage."""
@@ -255,15 +329,14 @@ class Agent:
                 return response.message.content
 
             for call in response.tool_calls:
-                args_str = json.dumps(call.arguments)
-                console.print(f"[bold magenta]🛠️  Tool Call:[/bold magenta] {call.name}({args_str})")
+                # Display tool call in a nice panel
+                self._display_tool_call(call)
 
                 # Execute without spinner - the spinner blocks input for permission prompts
                 result = self.executor.execute(call.name, call.arguments)
 
-                # Show a snippet of the result
-                snippet = str(result)[:200] + ("..." if len(str(result)) > 200 else "")
-                print_panel(snippet, title="Tool Result", border_style="green")
+                # Display result in a nice panel
+                self._display_tool_result(call.name, result)
 
                 # Save tool result message
                 tool_message = Message(
