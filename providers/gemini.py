@@ -4,7 +4,7 @@ import google.generativeai as genai
 from google.generativeai.types import FunctionDeclaration, Tool as GeminiTool
 
 from schemas.message import Message, LLMResponse, ToolCall
-from providers.base import LLMProvider
+from providers.base import LLMProvider, ModelInfo
 
 
 class GeminiProvider(LLMProvider):
@@ -12,11 +12,34 @@ class GeminiProvider(LLMProvider):
 
     name = "gemini"
 
+    DEFAULT_MODELS = [
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-2.0-flash-exp",
+        "gemini-pro",
+    ]
+
     def __init__(self, model: str = "gemini-1.5-pro", api_key: Optional[str] = None):
         if api_key:
             genai.configure(api_key=api_key)
         self.model_name = model
         self.model = model
+
+    def list_models(self) -> List[ModelInfo]:
+        """Fetch available models from Gemini API."""
+        try:
+            models = []
+            for m in genai.list_models():
+                if "generateContent" in m.supported_generation_methods:
+                    models.append(ModelInfo(
+                        id=m.name.replace("models/", ""),
+                        name=m.display_name,
+                        description=m.description,
+                    ))
+            return models if models else [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
+        except Exception:
+            return [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
 
     def generate(
         self,

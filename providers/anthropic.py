@@ -3,7 +3,7 @@ from typing import List, Optional
 from anthropic import Anthropic
 
 from schemas.message import Message, LLMResponse, ToolCall
-from providers.base import LLMProvider
+from providers.base import LLMProvider, ModelInfo
 
 
 class AnthropicProvider(LLMProvider):
@@ -11,9 +11,24 @@ class AnthropicProvider(LLMProvider):
 
     name = "anthropic"
 
+    DEFAULT_MODELS = [
+        "claude-sonnet-4-20250514",
+        "claude-opus-4-20250514",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
+        "claude-3-opus-20240229",
+        "claude-3-sonnet-20240229",
+        "claude-3-haiku-20240307",
+    ]
+
     def __init__(self, model: str = "claude-sonnet-4-20250514", api_key: Optional[str] = None):
         self.client = Anthropic(api_key=api_key)
         self.model = model
+
+    def list_models(self) -> List[ModelInfo]:
+        """Return available Claude models."""
+        # Anthropic doesn't have a models list API, use defaults
+        return [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
 
     def generate(
         self,

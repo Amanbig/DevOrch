@@ -1,16 +1,29 @@
 import json
 from typing import List, Optional
+import httpx
 
 from openai import OpenAI
 
 from schemas.message import Message, LLMResponse, ToolCall
-from providers.base import LLMProvider
+from providers.base import LLMProvider, ModelInfo
 
 
 class LocalProvider(LLMProvider):
     """Local LLM provider using Ollama's OpenAI-compatible API."""
 
     name = "local"
+
+    DEFAULT_MODELS = [
+        "llama3.1",
+        "llama3",
+        "llama2",
+        "codellama",
+        "mistral",
+        "mixtral",
+        "gemma2",
+        "qwen2",
+        "deepseek-coder-v2",
+    ]
 
     def __init__(
         self,
@@ -25,6 +38,27 @@ class LocalProvider(LLMProvider):
         )
         self.model = model
         self.base_url = base_url
+
+    def list_models(self) -> List[ModelInfo]:
+        """Fetch models from local Ollama instance."""
+        try:
+            # Ollama API endpoint for listing models
+            ollama_base = self.base_url.replace("/v1", "")
+            response = httpx.get(f"{ollama_base}/api/tags", timeout=5.0)
+            response.raise_for_status()
+            data = response.json()
+
+            models = []
+            for model in data.get("models", []):
+                models.append(ModelInfo(
+                    id=model.get("name"),
+                    name=model.get("name"),
+                ))
+
+            return models if models else [ModelInfo(id=m, name=m) for m in self.DEFAULT_MODELS]
+
+        except Exception:
+            return [ModelInfo(id=m, name=m + " (not pulled)") for m in self.DEFAULT_MODELS]
 
     def generate(
         self,
