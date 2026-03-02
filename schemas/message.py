@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 class ToolCall:
     name: str
     arguments: Dict[str, Any]
+    id: Optional[str] = None
 
 @dataclass
 class Message:

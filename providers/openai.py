@@ -57,8 +57,7 @@ class OpenAIProvider(LLMProvider):
                 # OpenAI returns arguments as a JSON string
                 args = json.loads(tc.function.arguments) if tc.function.arguments else {}
                 
-                tool_call = ToolCall(name=tc.function.name, arguments=args)
-                tool_call.id = tc.id # Attach id for OpenAI context matching
+                tool_call = ToolCall(name=tc.function.name, arguments=args, id=tc.id)
                 tool_calls.append(tool_call)
                 
         # Handle case where assistant message has no content but has tool calls
