@@ -4,13 +4,10 @@ from schemas.message import Message
 from providers.base import LLMProvider
 from core.planner import Planner
 from core.executor import Executor
-
-
-from rich.console import Console
-from rich.panel import Panel
+from utils.logger import get_console, print_panel
 import json
 
-console = Console()
+console = get_console()
 
 class Agent:
     def __init__(
@@ -54,7 +51,7 @@ class Agent:
 
                 # Show a snippet of the result
                 snippet = str(result)[:200] + ("..." if len(str(result)) > 200 else "")
-                console.print(Panel(snippet, title="Tool Result", border_style="green"))
+                print_panel(snippet, title="Tool Result", border_style="green")
 
                 self.history.append(
                     Message(

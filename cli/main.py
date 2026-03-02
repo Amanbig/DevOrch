@@ -1,12 +1,10 @@
 import os
 import typer
-from rich.console import Console
-from rich.panel import Panel
-from rich.markdown import Markdown
 
 from core.agent import Agent
 from core.executor import ToolExecutor
 from providers.openai import OpenAIProvider
+from utils.logger import get_console, print_error, print_success, print_panel
 # Import your custom tools
 from tools.shell import ShellTool
 from tools.filesystem import FilesystemTool
@@ -28,7 +26,7 @@ class SimplePlanner(Planner):
         return [system_prompt] + history
 
 app = typer.Typer(help="DevPilot - Your AI Coding Assistant")
-console = Console()
+console = get_console()
 
 @app.command()
 def ask(
@@ -42,12 +40,12 @@ def ask(
     if provider.lower() == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            console.print("[bold red]Please set OPENAI_API_KEY environment variable[/bold red]")
+            print_error("Please set OPENAI_API_KEY environment variable")
             raise typer.Exit(1)
             
         llm = OpenAIProvider(model=model, api_key=api_key)
     else:
-        console.print(f"[bold red]Provider {provider} is not fully implemented yet.[/bold red]")
+        print_error(f"Provider {provider} is not fully implemented yet.")
         raise typer.Exit(1)
         
     tools = [
@@ -69,10 +67,12 @@ def ask(
     console.print(f"[bold blue]DevPilot is thinking...[/bold blue]")
     try:
         result = agent.run(prompt, max_iterations=15)
-        console.print("\n[bold green]Response:[/bold green]")
-        console.print(Markdown(result))
+        print_success("Response:")
+        # For full markdown rendering you still need rich context or markdown parse.
+        # We'll just show it via print_panel
+        print_panel(result, title="DevPilot Response", border_style="green")
     except Exception as e:
-        console.print(f"\n[bold red]Error: {str(e)}[/bold red]")
+        print_error(str(e))
 
 @app.command()
 def repl(
@@ -85,11 +85,11 @@ def repl(
     if provider.lower() == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            console.print("[bold red]Please set OPENAI_API_KEY environment variable[/bold red]")
+            print_error("Please set OPENAI_API_KEY environment variable")
             raise typer.Exit(1)
         llm = OpenAIProvider(model=model, api_key=api_key)
     else:
-        console.print(f"[bold red]Provider {provider} is not fully implemented yet.[/bold red]")
+        print_error(f"Provider {provider} is not fully implemented yet.")
         raise typer.Exit(1)
         
     tools = [ShellTool(), FilesystemTool(), SearchTool()]
@@ -98,7 +98,7 @@ def repl(
     
     agent = Agent(provider=llm, planner=planner, executor=executor, tools=tools)
 
-    console.print(Panel.fit("[bold green]Welcome to DevPilot REPL![/bold green]\nType 'exit' or 'quit' to leave.\nType your message below.", border_style="blue"))
+    print_panel("Welcome to DevPilot REPL!\nType 'exit' or 'quit' to leave.\nType your message below.", title="DevPilot", border_style="blue", fit=True)
     
     while True:
         try:
@@ -106,20 +106,20 @@ def repl(
             user_input = typer.prompt("You")
             
             if user_input.lower() in ("exit", "quit", "q"):
-                console.print("[yellow]Goodbye![/yellow]")
+                print_warning("Goodbye!")
                 break
                 
             if not user_input.strip():
                 continue
                 
             result = agent.run(user_input, max_iterations=15)
-            console.print(Panel(Markdown(result), title="DevPilot", border_style="green"))
+            print_panel(result, title="DevPilot", border_style="green")
             
         except typer.Abort:
-            console.print("\n[yellow]Aborted.[/yellow]")
+            print_warning("Aborted.")
             break
         except Exception as e:
-            console.print(f"\n[bold red]Error: {str(e)}[/bold red]")
+            print_error(str(e))
 
 def main():
     app()

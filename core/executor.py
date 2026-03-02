@@ -2,13 +2,12 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 import json
 import logging
-from rich.console import Console
 from rich.prompt import Confirm
 
 from tools.base import Tool
+from utils.logger import get_console, print_warning
 
-logger = logging.getLogger(__name__)
-console = Console()
+console = get_console()
 
 class Executor(ABC):
     """
@@ -34,10 +33,10 @@ class ToolExecutor(Executor):
             # UI prompt for dangerous tools
             if self.require_confirmation and tool_name == "shell":
                 command = arguments.get("command", "")
-                console.print(f"\n[bold yellow]⚠️  DevPilot wants to run a shell command:[/bold yellow]")
+                print_warning("⚠️  DevPilot wants to run a shell command:")
                 console.print(f"  > [bold cyan]{command}[/bold cyan]")
                 if not Confirm.ask("Allow this command?"):
-                    console.print("[yellow]Command cancelled by user.[/yellow]")
+                    print_warning("Command cancelled by user.")
                     return "Error: User denied permission to execute this command."
 
             # We don't print the execution status here anymore, we'll let the agent handle the spinner.
