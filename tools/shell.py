@@ -8,6 +8,7 @@ from tools.base import Tool
 # Commands that are known to be interactive and need direct terminal access
 INTERACTIVE_COMMANDS = [
     "npx create-",
+    "npm create",
     "npm init",
     "yarn create",
     "pnpm create",
@@ -67,14 +68,16 @@ class ShellTool(Tool):
                 else:
                     return f"Command completed with exit code {result.returncode}."
 
-            # Non-interactive: capture output
+            # Non-interactive: capture output with UTF-8 encoding
             result = subprocess.run(
                 command,
                 shell=True,
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=120  # 2 minute timeout for non-interactive commands
+                timeout=120,  # 2 minute timeout for non-interactive commands
+                encoding='utf-8',
+                errors='replace'  # Replace undecodable chars instead of failing
             )
 
             output = ""
