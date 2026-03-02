@@ -1,7 +1,12 @@
 import typer
-from typing import List, Optional
+from typing import List, Optional, Dict, Callable, Any
 from rich.table import Table
 import os
+
+from prompt_toolkit import prompt as pt_prompt
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.styles import Style
 
 from core.agent import Agent
 from core.executor import ToolExecutor
@@ -33,6 +38,52 @@ BANNER = r"""
 BANNER_SMALL = "[bold blue]DevPilot[/bold blue] - AI Coding Assistant"
 
 VERSION = "0.1.0"
+
+# Slash commands with descriptions
+SLASH_COMMANDS = {
+    "/help": "Show available commands",
+    "/clear": "Clear conversation history",
+    "/session": "Show current session info",
+    "/config": "Show configuration settings",
+    "/permissions": "Show permission settings",
+    "/compact": "Summarize and compact history",
+    "/model": "Switch to a different model",
+    "/provider": "Switch to a different provider",
+    "/history": "Show conversation history",
+    "/undo": "Undo last message",
+    "/save": "Save conversation to file",
+}
+
+# Style for prompt_toolkit
+PROMPT_STYLE = Style.from_dict({
+    "prompt": "#00aa00 bold",
+    "command": "#0088ff",
+    "description": "#888888",
+})
+
+
+class SlashCommandCompleter(Completer):
+    """Autocomplete for slash commands."""
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+
+        # Only complete if starts with /
+        if not text.startswith("/"):
+            return
+
+        # Get the partial command
+        partial = text.lower()
+
+        for cmd, desc in SLASH_COMMANDS.items():
+            if cmd.startswith(partial):
+                # Calculate how much to complete
+                yield Completion(
+                    cmd,
+                    start_position=-len(text),
+                    display=HTML(f"<command>{cmd}</command> <description>- {desc}</description>"),
+                    display_meta=desc,
+                )
 
 
 def print_banner(small: bool = False):
@@ -280,11 +331,24 @@ def start_repl(
     # Show session info
     console.print(f"  [dim]Provider:[/dim] [cyan]{llm.name}[/cyan]  [dim]Model:[/dim] [cyan]{llm.model}[/cyan]")
     console.print(f"  [dim]Session:[/dim] {session_manager.current_session_id}  [dim]cwd:[/dim] {cwd_short}")
-    console.print(f"  [dim]Type[/dim] /help [dim]for commands,[/dim] exit [dim]to quit[/dim]\n")
+    console.print(f"  [dim]Type[/dim] / [dim]to see commands,[/dim] exit [dim]to quit[/dim]\n")
+
+    # Create completer for slash commands
+    completer = SlashCommandCompleter()
+
+    # Track current provider/model for switching
+    current_llm = llm
+    current_settings = settings
 
     while True:
         try:
-            user_input = typer.prompt(f"{cwd_short}")
+            # Use prompt_toolkit with autocomplete
+            user_input = pt_prompt(
+                f"{cwd_short}> ",
+                completer=completer,
+                complete_while_typing=True,
+                style=PROMPT_STYLE,
+            )
 
             if user_input.lower() in ("exit", "quit", "q"):
                 print_info(f"Session saved: {session_manager.current_session_id}")
@@ -293,49 +357,149 @@ def start_repl(
             if user_input.strip() == "":
                 continue
 
-            # Handle special commands
+            # Handle slash commands
             if user_input.startswith("/"):
-                cmd = user_input[1:].strip().lower()
+                cmd_parts = user_input[1:].strip().split(maxsplit=1)
+                cmd = cmd_parts[0].lower() if cmd_parts else ""
+                cmd_arg = cmd_parts[1] if len(cmd_parts) > 1 else None
+
                 if cmd == "help":
-                    console.print("\n[bold]Commands:[/bold]")
-                    console.print("  /help        - Show this help")
-                    console.print("  /clear       - Clear conversation history")
-                    console.print("  /session     - Show current session info")
-                    console.print("  /config      - Show configuration")
-                    console.print("  /permissions - Show permission settings")
-                    console.print("  exit         - Exit DevPilot\n")
+                    console.print("\n[bold]Available Commands:[/bold]")
+                    for slash_cmd, desc in SLASH_COMMANDS.items():
+                        console.print(f"  [cyan]{slash_cmd:<14}[/cyan] - {desc}")
+                    console.print(f"  [cyan]{'exit':<14}[/cyan] - Exit DevPilot")
+                    console.print("\n[dim]Tip: Type / and use Tab for autocomplete[/dim]\n")
                     continue
+
                 elif cmd == "clear":
                     agent.history = []
                     print_success("Conversation cleared.")
                     continue
+
                 elif cmd == "session":
+                    console.print("\n[bold]Current Session[/bold]")
                     print_info(f"Session ID: {session_manager.current_session_id}")
                     print_info(f"Messages: {len(agent.history)}")
+                    print_info(f"Provider: {current_llm.name}")
+                    print_info(f"Model: {current_llm.model}")
+                    console.print()
                     continue
+
                 elif cmd == "config":
-                    print_info(f"Provider: {llm.name}")
-                    print_info(f"Model: {llm.model}")
+                    console.print("\n[bold]Configuration[/bold]")
+                    print_info(f"Provider: {current_llm.name}")
+                    print_info(f"Model: {current_llm.model}")
+                    print_info(f"Session limit: {session_manager.message_limit} messages")
+                    print_info(f"Keyring: {'available' if keyring_available() else 'not available'}")
+                    console.print()
                     continue
+
                 elif cmd == "permissions":
                     perms = get_permissions()
                     console.print("\n[bold]Tool Permissions:[/bold]")
                     for tool_name, perm in perms.tools.items():
-                        console.print(f"  {tool_name}: {perm.level.value}")
+                        level_color = {"allow": "green", "deny": "red", "ask": "yellow"}.get(perm.level.value, "white")
+                        console.print(f"  {tool_name}: [{level_color}]{perm.level.value}[/{level_color}]")
                     if perms.session_allowed:
                         console.print(f"\n[green]Session allowed:[/green] {len(perms.session_allowed)} patterns")
                     console.print()
                     continue
 
+                elif cmd == "compact":
+                    print_info("Compacting conversation history...")
+                    summary = agent._generate_summary()
+                    agent.history = []
+                    agent.set_context_summary(summary)
+                    print_success("History compacted. Summary preserved.")
+                    continue
+
+                elif cmd == "model":
+                    if cmd_arg:
+                        try:
+                            new_llm = get_provider(current_llm.name, model=cmd_arg, api_key=current_settings.get_api_key(current_llm.name))
+                            current_llm = new_llm
+                            agent.provider = new_llm
+                            print_success(f"Switched to model: {cmd_arg}")
+                        except Exception as e:
+                            print_error(f"Failed to switch model: {e}")
+                    else:
+                        console.print(f"\n[bold]Current model:[/bold] {current_llm.model}")
+                        console.print("[dim]Usage: /model <model-name>[/dim]\n")
+                    continue
+
+                elif cmd == "provider":
+                    if cmd_arg:
+                        new_provider = cmd_arg.lower()
+                        if new_provider not in PROVIDERS:
+                            print_error(f"Unknown provider: {new_provider}")
+                        else:
+                            try:
+                                new_llm = create_provider(new_provider, None, current_settings)
+                                current_llm = new_llm
+                                agent.provider = new_llm
+                                print_success(f"Switched to provider: {new_provider} ({new_llm.model})")
+                            except Exception as e:
+                                print_error(f"Failed to switch provider: {e}")
+                    else:
+                        console.print(f"\n[bold]Current provider:[/bold] {current_llm.name}")
+                        console.print(f"[bold]Available:[/bold] {', '.join(PROVIDERS.keys())}")
+                        console.print("[dim]Usage: /provider <name>[/dim]\n")
+                    continue
+
+                elif cmd == "history":
+                    console.print("\n[bold]Conversation History[/bold]")
+                    if not agent.history:
+                        print_info("No messages yet.")
+                    else:
+                        for i, msg in enumerate(agent.history[-10:], 1):
+                            role_color = {"user": "green", "assistant": "blue", "tool": "yellow"}.get(msg.role, "white")
+                            content_preview = (msg.content[:80] + "...") if len(msg.content) > 80 else msg.content
+                            console.print(f"  [{role_color}]{msg.role}[/{role_color}]: {content_preview}")
+                        if len(agent.history) > 10:
+                            console.print(f"  [dim]... and {len(agent.history) - 10} more messages[/dim]")
+                    console.print()
+                    continue
+
+                elif cmd == "undo":
+                    if agent.history:
+                        # Remove last user message and any following assistant/tool messages
+                        removed = 0
+                        while agent.history and agent.history[-1].role != "user":
+                            agent.history.pop()
+                            removed += 1
+                        if agent.history and agent.history[-1].role == "user":
+                            agent.history.pop()
+                            removed += 1
+                        print_success(f"Removed {removed} message(s)")
+                    else:
+                        print_warning("No messages to undo")
+                    continue
+
+                elif cmd == "save":
+                    filename = cmd_arg or f"devpilot_session_{session_manager.current_session_id}.txt"
+                    try:
+                        with open(filename, "w") as f:
+                            for msg in agent.history:
+                                f.write(f"[{msg.role}]\n{msg.content}\n\n")
+                        print_success(f"Saved to: {filename}")
+                    except Exception as e:
+                        print_error(f"Failed to save: {e}")
+                    continue
+
+                else:
+                    print_warning(f"Unknown command: /{cmd}")
+                    print_info("Type /help to see available commands")
+                    continue
+
             result = agent.run(user_input, max_iterations=15)
             print_panel(result, title="DevPilot", border_style="green")
 
-        except typer.Abort:
-            print_warning("Aborted.")
-            break
-        except KeyboardInterrupt:
+        except (typer.Abort, EOFError):
             print_info(f"\nSession saved: {session_manager.current_session_id}")
             break
+        except KeyboardInterrupt:
+            console.print()  # New line after ^C
+            continue  # Don't exit on Ctrl+C, just cancel current input
         except Exception as e:
             print_error(str(e))
 
