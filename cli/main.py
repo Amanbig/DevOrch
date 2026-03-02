@@ -980,7 +980,8 @@ def config():
 
 @app.command("set-key")
 def set_key(
-    provider: str = typer.Argument(..., help="Provider name (openai, anthropic, gemini)")
+    provider: str = typer.Argument(..., help="Provider name (openai, anthropic, gemini)"),
+    set_default: bool = typer.Option(True, "--default/--no-default", help="Set as default provider")
 ):
     """
     Securely store an API key for a provider.
@@ -1006,6 +1007,16 @@ def set_key(
 
     if set_api_key(provider.lower(), api_key.strip()):
         print_success(f"API key for {provider} stored securely.")
+
+        # Also set as default provider
+        if set_default:
+            settings = Settings.load()
+            settings.default_provider = provider.lower()
+            try:
+                save_config(settings)
+                print_success(f"Set {provider} as default provider.")
+            except Exception:
+                print_warning(f"Key stored but couldn't save as default. Use: devpilot -p {provider}")
     else:
         print_error("Failed to store API key.")
         raise typer.Exit(1)
