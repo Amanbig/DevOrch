@@ -1,12 +1,27 @@
 import typer
 from typing import List, Optional, Dict, Callable, Any
 from rich.table import Table
+from rich.panel import Panel
 import os
+
+import questionary
+from questionary import Style as QStyle
 
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
+
+# Custom style for questionary prompts
+QUESTIONARY_STYLE = QStyle([
+    ('qmark', 'fg:yellow bold'),
+    ('question', 'fg:white bold'),
+    ('answer', 'fg:green bold'),
+    ('pointer', 'fg:cyan bold'),
+    ('highlighted', 'fg:cyan bold'),
+    ('selected', 'fg:green'),
+    ('instruction', 'fg:gray'),
+])
 
 from core.agent import Agent
 from core.executor import ToolExecutor
@@ -176,41 +191,43 @@ def has_any_provider_configured(settings: Settings) -> bool:
 
 
 def run_onboarding() -> Optional[str]:
-    """Run first-time setup. Returns the configured provider name or None."""
+    """Run first-time setup with interactive prompts. Returns the configured provider name or None."""
     print_banner()
-    console.print("[bold]First time setup[/bold] - Let's configure your AI provider.\n")
 
-    # Show available providers
-    console.print("[bold]Available providers:[/bold]")
-    console.print("  1. [cyan]openai[/cyan]      - GPT-4o, GPT-4, etc.")
-    console.print("  2. [cyan]anthropic[/cyan]   - Claude Sonnet, Opus, etc.")
-    console.print("  3. [cyan]gemini[/cyan]      - Gemini Pro, Flash, etc.")
-    console.print("  4. [cyan]groq[/cyan]        - Ultra-fast Llama, Mixtral")
-    console.print("  5. [cyan]openrouter[/cyan]  - Access 100+ models")
-    console.print("  6. [cyan]mistral[/cyan]     - Mistral Large, Codestral")
-    console.print("  7. [cyan]together[/cyan]    - Open source models")
-    console.print("  8. [cyan]local[/cyan]       - Ollama (no key needed)")
-    console.print("  9. [cyan]lmstudio[/cyan]    - LM Studio (no key needed)")
+    # Welcome panel
+    console.print(Panel(
+        "[bold]Welcome to DevPilot![/bold]\n\nLet's set up your AI provider to get started.",
+        border_style="blue",
+        padding=(1, 2)
+    ))
     console.print()
 
-    # Ask which provider to set up
-    choice = typer.prompt(
-        "Which provider? (1-9 or name)",
-        default="1"
-    )
+    # Provider selection with questionary
+    provider_choices = [
+        questionary.Choice("OpenAI (GPT-4o, GPT-4, etc.)", value="openai"),
+        questionary.Choice("Anthropic (Claude Sonnet, Opus, etc.)", value="anthropic"),
+        questionary.Choice("Google Gemini (Gemini Pro, Flash, etc.)", value="gemini"),
+        questionary.Choice("Groq (Ultra-fast Llama, Mixtral)", value="groq"),
+        questionary.Choice("OpenRouter (Access 100+ models)", value="openrouter"),
+        questionary.Choice("Mistral (Mistral Large, Codestral)", value="mistral"),
+        questionary.Choice("Together AI (Open source models)", value="together"),
+        questionary.Separator(),
+        questionary.Choice("Ollama - Local (No API key needed)", value="local"),
+        questionary.Choice("LM Studio - Local (No API key needed)", value="lmstudio"),
+    ]
 
-    provider_map = {
-        "1": "openai", "2": "anthropic", "3": "gemini", "4": "groq",
-        "5": "openrouter", "6": "mistral", "7": "together",
-        "8": "local", "9": "lmstudio",
-    }
-    # Add name mappings
-    for name in PROVIDERS.keys():
-        provider_map[name] = name
+    try:
+        provider = questionary.select(
+            "Select your AI provider:",
+            choices=provider_choices,
+            style=QUESTIONARY_STYLE,
+            instruction="(Use arrow keys to navigate, Enter to select)"
+        ).ask()
 
-    provider = provider_map.get(choice.lower().strip())
-    if not provider:
-        print_error(f"Unknown provider: {choice}")
+        if not provider:
+            return None
+
+    except (KeyboardInterrupt, EOFError):
         return None
 
     if provider in ("local", "lmstudio"):
@@ -223,36 +240,31 @@ def run_onboarding() -> Optional[str]:
         # Try to list available models and let user select
         settings = Settings.load()
         try:
-            temp_provider = get_provider(provider)
-            models = temp_provider.list_models()
+            with console.status("[bold cyan]Fetching available models...", spinner="dots"):
+                temp_provider = get_provider(provider)
+                models = temp_provider.list_models()
+
             if models:
-                console.print("\n[bold]Available models:[/bold]")
-                for i, m in enumerate(models[:10], 1):
-                    console.print(f"  {i}. [cyan]{m.id}[/cyan]")
-                console.print()
+                model_choices = [
+                    questionary.Choice(m.id, value=m.id)
+                    for m in models[:15]
+                ]
 
-                model_choice = typer.prompt(
-                    "Select a model (number or name)",
-                    default="1"
-                )
+                selected_model = questionary.select(
+                    "Select a model:",
+                    choices=model_choices,
+                    style=QUESTIONARY_STYLE,
+                    instruction="(Use arrow keys)"
+                ).ask()
 
-                # Parse selection
-                try:
-                    idx = int(model_choice) - 1
-                    if 0 <= idx < len(models):
-                        selected_model = models[idx].id
-                    else:
-                        selected_model = model_choice.strip()
-                except ValueError:
-                    selected_model = model_choice.strip()
+                if selected_model:
+                    if provider not in settings.providers:
+                        settings.providers[provider] = ProviderConfig()
+                    settings.providers[provider].default_model = selected_model
+                    settings.default_provider = provider
+                    save_config(settings)
+                    print_success(f"Saved: provider={provider}, model={selected_model}")
 
-                # Save the selection
-                if provider not in settings.providers:
-                    settings.providers[provider] = ProviderConfig()
-                settings.providers[provider].default_model = selected_model
-                settings.default_provider = provider
-                save_config(settings)
-                print_success(f"Saved: provider={provider}, model={selected_model}")
         except Exception as e:
             print_warning(f"Could not list models: {e}")
             settings.default_provider = provider
@@ -263,23 +275,34 @@ def run_onboarding() -> Optional[str]:
 
         return provider
 
-    # Get API key
+    # Get API key for cloud providers
     env_var = PROVIDER_ENV_VARS.get(provider, f"{provider.upper()}_API_KEY")
 
-    console.print(f"\n[bold]Setting up {provider}[/bold]")
-    if env_var:
-        console.print(f"You can also set the [cyan]{env_var}[/cyan] environment variable.\n")
+    console.print()
+    console.print(Panel(
+        f"[bold]Setting up {provider.title()}[/bold]\n\n"
+        f"You'll need an API key from {provider.title()}.\n"
+        f"Alternatively, set the [cyan]{env_var}[/cyan] environment variable.",
+        border_style="yellow",
+        padding=(0, 1)
+    ))
+    console.print()
 
-    api_key = typer.prompt(f"Enter your {provider} API key", hide_input=True)
+    api_key = questionary.password(
+        f"Enter your {provider} API key:",
+        style=QUESTIONARY_STYLE
+    ).ask()
 
-    if not api_key.strip():
+    if not api_key or not api_key.strip():
         print_error("API key cannot be empty.")
         return None
 
+    api_key = api_key.strip()
+
     # Try to store in keyring
     if keyring_available():
-        if set_api_key(provider, api_key.strip()):
-            print_success(f"API key stored securely in system keychain!")
+        if set_api_key(provider, api_key):
+            print_success("API key stored securely in system keychain!")
         else:
             print_warning("Could not store in keychain. Key will only be available this session.")
     else:
@@ -290,38 +313,31 @@ def run_onboarding() -> Optional[str]:
     settings.default_provider = provider
     if provider not in settings.providers:
         settings.providers[provider] = ProviderConfig()
-    settings.providers[provider].api_key = api_key.strip()
+    settings.providers[provider].api_key = api_key
 
     # Let user select a model
     selected_model = None
     try:
-        temp_provider = get_provider(provider, api_key=api_key.strip())
-        models = temp_provider.list_models()
+        with console.status("[bold cyan]Fetching available models...", spinner="dots"):
+            temp_provider = get_provider(provider, api_key=api_key)
+            models = temp_provider.list_models()
+
         if models:
-            console.print("\n[bold]Available models:[/bold]")
-            for i, m in enumerate(models[:10], 1):
-                desc = f" - {m.description[:50]}..." if m.description and len(m.description) > 50 else (f" - {m.description}" if m.description else "")
-                console.print(f"  {i}. [cyan]{m.id}[/cyan]{desc}")
-            if len(models) > 10:
-                console.print(f"  [dim]... and {len(models) - 10} more[/dim]")
-            console.print()
+            model_choices = []
+            for m in models[:15]:
+                desc = f" - {m.description[:40]}..." if m.description and len(m.description) > 40 else ""
+                model_choices.append(questionary.Choice(f"{m.id}{desc}", value=m.id))
 
-            model_choice = typer.prompt(
-                "Select a model (number or name, Enter for default)",
-                default="1"
-            )
+            selected_model = questionary.select(
+                "Select a model:",
+                choices=model_choices,
+                style=QUESTIONARY_STYLE,
+                instruction="(Use arrow keys)"
+            ).ask()
 
-            # Parse selection
-            try:
-                idx = int(model_choice) - 1
-                if 0 <= idx < len(models):
-                    selected_model = models[idx].id
-                else:
-                    selected_model = model_choice.strip()
-            except ValueError:
-                selected_model = model_choice.strip()
+            if selected_model:
+                settings.providers[provider].default_model = selected_model
 
-            settings.providers[provider].default_model = selected_model
     except Exception as e:
         print_warning(f"Could not fetch models: {e}")
 
@@ -333,6 +349,15 @@ def run_onboarding() -> Optional[str]:
             print_success(f"Default provider set to: {provider}")
     except Exception:
         pass  # Config save failed, but key is in memory
+
+    console.print()
+    console.print(Panel(
+        "[bold green]Setup complete![/bold green]\n\n"
+        "You're ready to start using DevPilot.\n"
+        "Type your questions or commands, or use /help for available commands.",
+        border_style="green",
+        padding=(0, 1)
+    ))
 
     return provider
 
@@ -533,21 +558,40 @@ def start_repl(
                 elif cmd == "mode":
                     if cmd_arg:
                         mode_name = cmd_arg.lower()
-                        if mode_name in ("plan", "auto", "ask"):
-                            mode_manager.mode = AgentMode(mode_name)
-                            print_success(f"Switched to {mode_name.upper()} mode")
-                            console.print(f"  [dim]{mode_manager.get_mode_description()}[/dim]")
-                        else:
-                            print_error(f"Unknown mode: {mode_name}")
-                            print_info("Available modes: plan, auto, ask")
                     else:
-                        console.print(f"\n[bold]Current mode:[/bold] {mode_manager.get_mode_display()}")
-                        console.print(f"  {mode_manager.get_mode_description()}")
-                        console.print("\n[bold]Available modes:[/bold]")
-                        console.print("  [yellow]plan[/yellow] - Shows plan before executing, asks for approval")
-                        console.print("  [green]auto[/green] - Executes tools automatically (trusted mode)")
-                        console.print("  [blue]ask[/blue]  - Asks before each tool execution (default)")
-                        console.print("\n[dim]Usage: /mode <plan|auto|ask>[/dim]\n")
+                        # Interactive mode selection
+                        mode_choices = [
+                            questionary.Choice(
+                                f"{'> ' if mode_manager.mode == AgentMode.PLAN else '  '}PLAN - Shows plan before executing, asks for approval",
+                                value="plan"
+                            ),
+                            questionary.Choice(
+                                f"{'> ' if mode_manager.mode == AgentMode.AUTO else '  '}AUTO - Executes tools automatically (trusted mode)",
+                                value="auto"
+                            ),
+                            questionary.Choice(
+                                f"{'> ' if mode_manager.mode == AgentMode.ASK else '  '}ASK - Asks before each tool execution (default)",
+                                value="ask"
+                            ),
+                        ]
+                        try:
+                            mode_name = questionary.select(
+                                "Select mode:",
+                                choices=mode_choices,
+                                style=QUESTIONARY_STYLE,
+                                instruction="(Use arrow keys)"
+                            ).ask()
+                            if not mode_name:
+                                continue
+                        except (KeyboardInterrupt, EOFError):
+                            continue
+
+                    if mode_name in ("plan", "auto", "ask"):
+                        mode_manager.mode = AgentMode(mode_name)
+                        print_success(f"Switched to {mode_name.upper()} mode")
+                        console.print(f"  [dim]{mode_manager.get_mode_description()}[/dim]")
+                    else:
+                        print_error(f"Unknown mode: {mode_name}")
                     continue
 
                 elif cmd == "plan":
@@ -645,42 +689,72 @@ def start_repl(
                     continue
 
                 elif cmd == "model":
-                    if cmd_arg:
+                    selected_model = cmd_arg
+
+                    if not selected_model:
+                        # Interactive model selection
                         try:
-                            # Build kwargs for provider (include base_url for local)
-                            provider_kwargs = {}
-                            if current_llm.name == "local":
-                                base_url = current_settings.get_base_url(current_llm.name)
-                                if base_url:
-                                    provider_kwargs["base_url"] = base_url
+                            with console.status("[cyan]Fetching models...", spinner="dots"):
+                                models = current_llm.list_models()
 
-                            # Get API key - prefer current provider's key, then settings
-                            api_key = getattr(current_llm, 'api_key', None) or current_settings.get_api_key(current_llm.name)
+                            if models:
+                                model_choices = []
+                                for m in models[:20]:
+                                    is_current = m.id == current_llm.model
+                                    prefix = "> " if is_current else "  "
+                                    ctx = f" ({m.context_length} ctx)" if m.context_length else ""
+                                    model_choices.append(questionary.Choice(
+                                        f"{prefix}{m.id}{ctx}",
+                                        value=m.id
+                                    ))
 
-                            new_llm = get_provider(
-                                current_llm.name,
-                                model=cmd_arg,
-                                api_key=api_key,
-                                **provider_kwargs
-                            )
-                            current_llm = new_llm
-                            agent.provider = new_llm
+                                selected_model = questionary.select(
+                                    f"Select model for {current_llm.name}:",
+                                    choices=model_choices,
+                                    style=QUESTIONARY_STYLE,
+                                    instruction="(Use arrow keys)"
+                                ).ask()
 
-                            # Save model selection to settings
-                            try:
-                                if current_llm.name not in current_settings.providers:
-                                    current_settings.providers[current_llm.name] = ProviderConfig()
-                                current_settings.providers[current_llm.name].default_model = cmd_arg
-                                save_config(current_settings)
-                                print_success(f"Switched to model: {cmd_arg} (saved as default)")
-                            except Exception:
-                                print_success(f"Switched to model: {cmd_arg}")
+                                if not selected_model:
+                                    continue
+                            else:
+                                print_warning("No models available")
+                                continue
                         except Exception as e:
-                            print_error(f"Failed to switch model: {e}")
-                    else:
-                        console.print(f"\n[bold]Current model:[/bold] {current_llm.model}")
-                        console.print("[dim]Usage: /model <model-name>[/dim]")
-                        console.print("[dim]Use /models to see available models[/dim]\n")
+                            print_error(f"Failed to fetch models: {e}")
+                            continue
+
+                    try:
+                        # Build kwargs for provider (include base_url for local)
+                        provider_kwargs = {}
+                        if current_llm.name == "local":
+                            base_url = current_settings.get_base_url(current_llm.name)
+                            if base_url:
+                                provider_kwargs["base_url"] = base_url
+
+                        # Get API key - prefer current provider's key, then settings
+                        api_key = getattr(current_llm, 'api_key', None) or current_settings.get_api_key(current_llm.name)
+
+                        new_llm = get_provider(
+                            current_llm.name,
+                            model=selected_model,
+                            api_key=api_key,
+                            **provider_kwargs
+                        )
+                        current_llm = new_llm
+                        agent.provider = new_llm
+
+                        # Save model selection to settings
+                        try:
+                            if current_llm.name not in current_settings.providers:
+                                current_settings.providers[current_llm.name] = ProviderConfig()
+                            current_settings.providers[current_llm.name].default_model = selected_model
+                            save_config(current_settings)
+                            print_success(f"Switched to model: {selected_model}")
+                        except Exception:
+                            print_success(f"Switched to model: {selected_model}")
+                    except Exception as e:
+                        print_error(f"Failed to switch model: {e}")
                     continue
 
                 elif cmd == "providers":
@@ -701,92 +775,122 @@ def start_repl(
                 elif cmd == "provider":
                     if cmd_arg:
                         new_provider = cmd_arg.lower()
-                        if new_provider not in PROVIDERS:
-                            print_error(f"Unknown provider: {new_provider}")
-                            console.print("[dim]Use /providers to see available providers[/dim]")
-                        else:
-                            # Check if provider needs API key and doesn't have one
-                            needs_key = new_provider not in ("local", "lmstudio")
-                            has_key = bool(current_settings.get_api_key(new_provider))
-
-                            entered_key = None
-                            selected_model = None
-
-                            if needs_key and not has_key:
-                                # Prompt for API key
-                                env_var = PROVIDER_ENV_VARS.get(new_provider, f"{new_provider.upper()}_API_KEY")
-                                console.print(f"\n[bold]Setting up {new_provider}[/bold]")
-                                console.print(f"[dim]You can also set {env_var} environment variable[/dim]\n")
-
-                                try:
-                                    api_key = typer.prompt(f"Enter your {new_provider} API key", hide_input=True)
-                                    if api_key.strip():
-                                        entered_key = api_key.strip()
-
-                                        # Store in keyring
-                                        if keyring_available():
-                                            set_api_key(new_provider, entered_key)
-                                            print_success("API key stored in keychain!")
-
-                                        # Update settings
-                                        if new_provider not in current_settings.providers:
-                                            current_settings.providers[new_provider] = ProviderConfig()
-                                        current_settings.providers[new_provider].api_key = entered_key
-
-                                        # Offer model selection
-                                        try:
-                                            temp_llm = get_provider(new_provider, api_key=entered_key)
-                                            models = temp_llm.list_models()
-                                            if models:
-                                                console.print("\n[bold]Available models:[/bold]")
-                                                for i, m in enumerate(models[:8], 1):
-                                                    console.print(f"  {i}. [cyan]{m.id}[/cyan]")
-                                                console.print()
-                                                model_choice = typer.prompt("Select model (number or name)", default="1")
-                                                try:
-                                                    idx = int(model_choice) - 1
-                                                    if 0 <= idx < len(models):
-                                                        selected_model = models[idx].id
-                                                    else:
-                                                        selected_model = model_choice.strip()
-                                                except ValueError:
-                                                    selected_model = model_choice.strip()
-                                                current_settings.providers[new_provider].default_model = selected_model
-                                        except Exception:
-                                            pass  # Model selection is optional
-                                    else:
-                                        print_error("API key cannot be empty.")
-                                        continue
-                                except (KeyboardInterrupt, EOFError):
-                                    console.print("\nCancelled.")
-                                    continue
-
-                            try:
-                                # Use entered key directly if we just got it, otherwise use settings
-                                if entered_key:
-                                    new_llm = get_provider(
-                                        new_provider,
-                                        model=selected_model,
-                                        api_key=entered_key
-                                    )
-                                else:
-                                    new_llm = create_provider(new_provider, None, current_settings)
-                                current_llm = new_llm
-                                agent.provider = new_llm
-
-                                # Save provider selection to settings
-                                try:
-                                    current_settings.default_provider = new_provider
-                                    save_config(current_settings)
-                                    print_success(f"Switched to provider: {new_provider} ({new_llm.model}) (saved as default)")
-                                except Exception:
-                                    print_success(f"Switched to provider: {new_provider} ({new_llm.model})")
-                            except Exception as e:
-                                print_error(f"Failed to switch provider: {e}")
                     else:
-                        console.print(f"\n[bold]Current provider:[/bold] {current_llm.name}")
-                        console.print("[dim]Use /providers to see all available providers[/dim]")
-                        console.print("[dim]Use /provider <name> to switch[/dim]\n")
+                        # Interactive provider selection
+                        provider_choices = []
+                        for name, desc in PROVIDER_INFO.items():
+                            has_key = bool(current_settings.get_api_key(name))
+                            status = ""
+                            if name in ("local", "lmstudio"):
+                                status = " (local)"
+                            elif has_key:
+                                status = " (configured)"
+                            else:
+                                status = " (needs key)"
+
+                            is_current = name == current_llm.name
+                            display = f"{'> ' if is_current else '  '}{name} - {desc}{status}"
+                            provider_choices.append(questionary.Choice(display, value=name))
+
+                        try:
+                            new_provider = questionary.select(
+                                "Select provider:",
+                                choices=provider_choices,
+                                style=QUESTIONARY_STYLE,
+                                instruction="(Use arrow keys)"
+                            ).ask()
+                            if not new_provider:
+                                continue
+                        except (KeyboardInterrupt, EOFError):
+                            continue
+
+                    if new_provider not in PROVIDERS:
+                        print_error(f"Unknown provider: {new_provider}")
+                        continue
+
+                    # Check if provider needs API key and doesn't have one
+                    needs_key = new_provider not in ("local", "lmstudio")
+                    has_key = bool(current_settings.get_api_key(new_provider))
+
+                    entered_key = None
+                    selected_model = None
+
+                    if needs_key and not has_key:
+                        # Prompt for API key with questionary
+                        env_var = PROVIDER_ENV_VARS.get(new_provider, f"{new_provider.upper()}_API_KEY")
+                        console.print(Panel(
+                            f"[bold]Setting up {new_provider}[/bold]\n"
+                            f"[dim]You can also set {env_var} environment variable[/dim]",
+                            border_style="yellow"
+                        ))
+
+                        try:
+                            api_key = questionary.password(
+                                f"Enter your {new_provider} API key:",
+                                style=QUESTIONARY_STYLE
+                            ).ask()
+
+                            if api_key and api_key.strip():
+                                entered_key = api_key.strip()
+
+                                # Store in keyring
+                                if keyring_available():
+                                    set_api_key(new_provider, entered_key)
+                                    print_success("API key stored in keychain!")
+
+                                # Update settings
+                                if new_provider not in current_settings.providers:
+                                    current_settings.providers[new_provider] = ProviderConfig()
+                                current_settings.providers[new_provider].api_key = entered_key
+
+                                # Offer model selection with questionary
+                                try:
+                                    with console.status("[cyan]Fetching models...", spinner="dots"):
+                                        temp_llm = get_provider(new_provider, api_key=entered_key)
+                                        models = temp_llm.list_models()
+                                    if models:
+                                        model_choices = [
+                                            questionary.Choice(m.id, value=m.id)
+                                            for m in models[:12]
+                                        ]
+                                        selected_model = questionary.select(
+                                            "Select a model:",
+                                            choices=model_choices,
+                                            style=QUESTIONARY_STYLE
+                                        ).ask()
+                                        if selected_model:
+                                            current_settings.providers[new_provider].default_model = selected_model
+                                except Exception:
+                                    pass  # Model selection is optional
+                            else:
+                                print_error("API key cannot be empty.")
+                                continue
+                        except (KeyboardInterrupt, EOFError):
+                            console.print("\nCancelled.")
+                            continue
+
+                    try:
+                        # Use entered key directly if we just got it, otherwise use settings
+                        if entered_key:
+                            new_llm = get_provider(
+                                new_provider,
+                                model=selected_model,
+                                api_key=entered_key
+                            )
+                        else:
+                            new_llm = create_provider(new_provider, None, current_settings)
+                        current_llm = new_llm
+                        agent.provider = new_llm
+
+                        # Save provider selection to settings
+                        try:
+                            current_settings.default_provider = new_provider
+                            save_config(current_settings)
+                            print_success(f"Switched to: {new_provider} ({new_llm.model})")
+                        except Exception:
+                            print_success(f"Switched to: {new_provider} ({new_llm.model})")
+                    except Exception as e:
+                        print_error(f"Failed to switch provider: {e}")
                     continue
 
                 elif cmd == "history":
