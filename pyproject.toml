@@ -1,0 +1,19 @@
+version="0.1.0"
+
+[project]
+name="devpilot"
+description="AI Coding Assistant"
+requires-python=">=3.10"
+authors=[
+    {name="Aman", email="[EMAIL_ADDRESS]"}
+]
+dependencies = [
+    "typer>=0.12.3",
+    "pydantic>=2.7.1",
+    "openai>=1.28.1",
+    "anthropic>=0.25.8",
+    "google-generativeai>=0.5.3",
+]
+
+[project.scripts]
+devpilot = "devpilot.cli:main"

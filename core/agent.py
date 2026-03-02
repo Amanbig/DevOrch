@@ -20,19 +20,24 @@ class Agent:
         self.tools = tools
         self.history: List[Message] = []
 
-    def run(self, user_input: str):
+    def run(self, user_input: str, max_iterations: int = 10):
         self.history.append(Message(role="user", content=user_input))
 
-        planned_messages = self.planner.plan(self.history)
+        iteration = 0
+        while iteration < max_iterations:
+            planned_messages = self.planner.plan(self.history)
 
-        response = self.provider.generate(
-            planned_messages,
-            tools=[tool.schema() for tool in self.tools],
-        )
+            response = self.provider.generate(
+                planned_messages,
+                tools=[tool.schema() for tool in self.tools],
+            )
 
-        self.history.append(response.message)
+            self.history.append(response.message)
 
-        if response.tool_calls:
+            if not response.tool_calls:
+                # The LLM didn't call any tools, so we have a final answer
+                return response.message.content
+
             for call in response.tool_calls:
                 result = self.executor.execute(call.name, call.arguments)
 
@@ -41,7 +46,10 @@ class Agent:
                         role="tool",
                         content=str(result),
                         name=call.name,
+                        tool_call_id=getattr(call, 'id', None) # If the provider gives tool call IDs
                     )
                 )
+            
+            iteration += 1
 
-        return response.message.content
+        return "Error: Maximum iterations reached without a final answer."
