@@ -4,7 +4,7 @@ from rich.table import Table
 
 from core.agent import Agent
 from core.executor import ToolExecutor
-from core.sessions import SessionManager
+from core.sessions import SessionManager, DEFAULT_MESSAGE_LIMIT
 from providers import get_provider, PROVIDERS
 from config.settings import Settings, set_api_key, keyring_available
 from utils.logger import get_console, print_error, print_success, print_panel, print_warning, print_info
@@ -111,13 +111,20 @@ def ask(
 def repl(
     provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider (openai, anthropic, gemini, local)"),
     model: str = typer.Option(None, "--model", "-m", help="Model name to use"),
-    resume: str = typer.Option(None, "--resume", "-r", help="Resume a previous session by ID")
+    resume: str = typer.Option(None, "--resume", "-r", help="Resume a previous session by ID"),
+    message_limit: int = typer.Option(DEFAULT_MESSAGE_LIMIT, "--limit", "-l", help="Messages before auto-summarization")
 ):
     """
     Start an interactive DevPilot REPL session.
+
+    Sessions are automatically saved. When the message limit is reached,
+    the conversation is summarized and continued in a new session.
     """
     settings = Settings.load()
-    session_manager = SessionManager()
+    session_manager = SessionManager(message_limit=message_limit)
+
+    context_summary = None
+    session_info = None
 
     # Handle session resumption
     if resume:
@@ -125,8 +132,18 @@ def repl(
             session_info, messages = session_manager.load_session(resume)
             provider = session_info["provider"]
             model = session_info["model"]
+            context_summary = session_info.get("summary")
+
             print_success(f"Resumed session: {resume}")
             print_info(f"Provider: {provider} | Model: {model} | Messages: {len(messages)}")
+
+            if context_summary:
+                print_info("Session has context from previous conversation")
+
+            # Check if this is a continuation session
+            if session_info.get("parent_session_id"):
+                print_info(f"Continuation of session: {session_info['parent_session_id']}")
+
         except ValueError as e:
             print_error(str(e))
             raise typer.Exit(1)
@@ -147,20 +164,33 @@ def repl(
     executor = ToolExecutor(tools=tools, require_confirmation=True)
     planner = SimplePlanner()
 
+    # Callback for when session continues to a new one
+    def on_session_continue(new_session_id: str):
+        print_info(f"Session continued: {new_session_id}")
+
     agent = Agent(
         provider=llm,
         planner=planner,
         executor=executor,
         tools=tools,
-        session_manager=session_manager
+        session_manager=session_manager,
+        on_session_continue=on_session_continue
     )
 
     # Restore history if resuming
     if messages:
         agent.set_history(messages)
 
+    # Set context summary if available
+    if context_summary:
+        agent.set_context_summary(context_summary)
+
     print_panel(
-        f"Welcome to DevPilot REPL!\nProvider: {llm.name} | Model: {llm.model}\nSession: {session_manager.current_session_id}\nType 'exit' or 'quit' to leave.",
+        f"Welcome to DevPilot REPL!\n"
+        f"Provider: {llm.name} | Model: {llm.model}\n"
+        f"Session: {session_manager.current_session_id}\n"
+        f"Auto-summarize at: {message_limit} messages\n"
+        f"Type 'exit' or 'quit' to leave.",
         title="DevPilot",
         border_style="blue",
         fit=True
@@ -280,20 +310,59 @@ def sessions_list(
     table.add_column("Name", style="white")
     table.add_column("Provider", style="green")
     table.add_column("Model", style="blue")
-    table.add_column("Messages", justify="right")
+    table.add_column("Msgs", justify="right")
+    table.add_column("Parent", style="dim")
     table.add_column("Updated", style="dim")
 
     for session in sessions:
+        parent = session.get("parent_session_id") or "-"
         table.add_row(
             session["id"],
-            session["name"] or "-",
+            (session["name"] or "-")[:20],
             session["provider"],
-            session["model"],
+            session["model"][:15],
             str(session["message_count"]),
-            session["updated_at"]
+            parent[:8] if parent != "-" else "-",
+            session["updated_at"][:16]
         )
 
     console.print(table)
+
+
+@sessions_app.command("show")
+def sessions_show(
+    session_id: str = typer.Argument(..., help="Session ID to show details")
+):
+    """
+    Show details of a specific session.
+    """
+    session_manager = SessionManager()
+
+    try:
+        session_info, messages = session_manager.load_session(session_id)
+    except ValueError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+    console.print(f"\n[bold]Session: {session_id}[/bold]")
+    console.print(f"Name: {session_info.get('name', '-')}")
+    console.print(f"Provider: {session_info['provider']}")
+    console.print(f"Model: {session_info['model']}")
+    console.print(f"Messages: {len(messages)}")
+    console.print(f"Created: {session_info['created_at']}")
+    console.print(f"Updated: {session_info['updated_at']}")
+
+    if session_info.get("parent_session_id"):
+        console.print(f"Parent Session: {session_info['parent_session_id']}")
+
+    if session_info.get("summary"):
+        console.print("\n[bold]Context Summary:[/bold]")
+        print_panel(session_info["summary"][:500] + "..." if len(session_info.get("summary", "")) > 500 else session_info.get("summary", ""), border_style="dim")
+
+    # Show session chain if this is a continuation
+    chain = session_manager.get_session_chain(session_id)
+    if len(chain) > 1:
+        console.print(f"\n[bold]Session Chain:[/bold] {' -> '.join(s['id'] for s in chain)}")
 
 
 @sessions_app.command("delete")
