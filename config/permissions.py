@@ -21,7 +21,7 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
-CONFIG_DIR = Path.home() / ".devpilot"
+CONFIG_DIR = Path.home() / ".devorch"
 PERMISSIONS_FILE = CONFIG_DIR / "permissions.yaml"
 
 

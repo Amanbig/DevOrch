@@ -30,7 +30,7 @@ Use this tool whenever you need to:
 - Run an interactive scaffold that prompts the user (e.g. `npm create vite@latest`, `npx create-next-app`, `ng new myapp`)
 - Run any long-running process that should NOT block the current session
 
-The main DevPilot session remains fully interactive while the command runs in its own window.
+The main DevOrch session remains fully interactive while the command runs in its own window.
 After calling this tool, continue the conversation normally — do NOT wait for the command to finish."""
     args_schema = OpenTerminalSchema
 

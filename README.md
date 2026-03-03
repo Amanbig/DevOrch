@@ -1,8 +1,8 @@
-# DevPilot
+# DevOrch
 
 A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
 
-![DevPilot Banner](https://img.shields.io/badge/DevPilot-AI%20Coding%20Assistant-blue)
+![DevOrch Banner](https://img.shields.io/badge/DevOrch-AI%20Coding%20Assistant-blue)
 ![Python](https://img.shields.io/badge/Python-3.10+-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
@@ -27,25 +27,25 @@ A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
 # Install pipx if you don't have it
 pip install pipx
 
-# Install DevPilot
-pipx install devpilot
+# Install DevOrch
+pipx install devorch
 
-# DevPilot is now available globally
-devpilot --help
+# DevOrch is now available globally
+devorch --help
 ```
 
 ### Option 2: Install with pip
 
 ```bash
-pip install devpilot
+pip install devorch
 ```
 
 ### Option 3: Install from source
 
 ```bash
 # Clone the repository
-git clone https://github.com/Amanbig/DevPilot.git
-cd DevPilot
+git clone https://github.com/Amanbig/DevOrch.git
+cd DevOrch
 
 # Install with pip
 pip install -e .
@@ -55,29 +55,29 @@ pip install -e .
 
 - ✅ Isolated environment (no conflicts with other packages)
 - ✅ Available globally like `npm install -g`
-- ✅ Easy to uninstall: `pipx uninstall devpilot`
-- ✅ Easy to upgrade: `pipx upgrade devpilot`
+- ✅ Easy to uninstall: `pipx uninstall devorch`
+- ✅ Easy to upgrade: `pipx upgrade devorch`
 
 ## Quick Start
 
 ```bash
-# Start DevPilot (first run will show interactive setup)
-devpilot
+# Start DevOrch (first run will show interactive setup)
+devorch
 
 # Or specify a provider
-devpilot -p openai
-devpilot -p anthropic
-devpilot -p groq
-devpilot -p local  # Ollama
+devorch -p openai
+devorch -p anthropic
+devorch -p groq
+devorch -p local  # Ollama
 ```
 
 ## Interactive Onboarding
 
-On first run, DevPilot guides you through setup with an interactive UI:
+On first run, DevOrch guides you through setup with an interactive UI:
 
 ```
 ╭─────────────────────────────────────────────────╮
-│ Welcome to DevPilot!                            │
+│ Welcome to DevOrch!                             │
 │                                                 │
 │ Let's set up your AI provider to get started.  │
 ╰─────────────────────────────────────────────────╯
@@ -97,10 +97,10 @@ On first run, DevPilot guides you through setup with an interactive UI:
 ### Interactive REPL
 
 ```bash
-devpilot                    # Start interactive session
-devpilot -p groq            # Use specific provider
-devpilot -m gpt-4o          # Use specific model
-devpilot --resume abc123    # Resume a previous session
+devorch                    # Start interactive session
+devorch -p groq            # Use specific provider
+devorch -m gpt-4o          # Use specific model
+devorch --resume abc123    # Resume a previous session
 ```
 
 ### Slash Commands
@@ -138,7 +138,7 @@ Switch modes interactively:
 
 ## Tool Permissions
 
-DevPilot uses an interactive permission system with arrow-key navigation:
+DevOrch uses an interactive permission system with arrow-key navigation:
 
 ```
 ╭─────────── Permission Required ───────────╮
@@ -189,8 +189,8 @@ Use your GitHub Copilot subscription to access multiple premium models:
 export GITHUB_TOKEN=ghp_your_token
 
 # Use Copilot
-devpilot -p github_copilot
-devpilot -p github_copilot -m claude-3.5-sonnet
+devorch -p github_copilot
+devorch -p github_copilot -m claude-3.5-sonnet
 ```
 
 **Available models:** GPT-4o, GPT-4o-mini, Claude 3.5 Sonnet, o1-preview, o1-mini
@@ -201,7 +201,7 @@ Powerful reasoning and coding models from DeepSeek:
 
 ```bash
 export DEEPSEEK_API_KEY=sk-...
-devpilot -p deepseek -m deepseek-reasoner
+devorch -p deepseek -m deepseek-reasoner
 ```
 
 **Models:** deepseek-chat, deepseek-coder, deepseek-reasoner (R1)
@@ -212,7 +212,7 @@ Long context models with up to 128K tokens:
 
 ```bash
 export MOONSHOT_API_KEY=sk-...
-devpilot -p kimi -m moonshot-v1-128k
+devorch -p kimi -m moonshot-v1-128k
 ```
 
 **Models:** moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k
@@ -224,7 +224,7 @@ Connect to ANY OpenAI-compatible API:
 #### Self-Hosted vLLM
 
 ```yaml
-# ~/.devpilot/config.yaml
+# ~/.devorch/config.yaml
 providers:
   my_vllm:
     default_model: meta-llama/Meta-Llama-3-70B-Instruct
@@ -238,7 +238,7 @@ python -m vllm.entrypoints.openai.api_server \
     --port 8000
 
 # Use it
-devpilot -p my_vllm
+devorch -p my_vllm
 ```
 
 #### Text Generation Inference (TGI)
@@ -275,9 +275,9 @@ All providers now fetch available models from their APIs automatically:
 
 ```bash
 # List available models
-devpilot models list -p deepseek
-devpilot models list -p github_copilot
-devpilot models list -p my_vllm
+devorch models list -p deepseek
+devorch models list -p github_copilot
+devorch models list -p my_vllm
 ```
 
 Models are fetched in real-time from provider APIs, so you always see the latest available models!
@@ -288,12 +288,12 @@ Models are fetched in real-time from provider APIs, so you always see the latest
 
 ```bash
 # Store API keys securely in system keyring
-devpilot set-key openai
-devpilot set-key anthropic
-devpilot set-key groq
-devpilot set-key github_copilot  # Uses GITHUB_TOKEN
-devpilot set-key deepseek
-devpilot set-key kimi
+devorch set-key openai
+devorch set-key anthropic
+devorch set-key groq
+devorch set-key github_copilot  # Uses GITHUB_TOKEN
+devorch set-key deepseek
+devorch set-key kimi
 
 # Or use environment variables
 export OPENAI_API_KEY=sk-...
@@ -311,12 +311,12 @@ export MOONSHOT_API_KEY=sk-...
 ### View Configuration
 
 ```bash
-devpilot config
+devorch config
 ```
 
 ### Configuration File
 
-Create `~/.devpilot/config.yaml` to configure providers:
+Create `~/.devorch/config.yaml` to configure providers:
 
 ```yaml
 # Set default provider
@@ -354,20 +354,20 @@ providers:
 ### Session Management
 
 ```bash
-devpilot sessions list           # List all sessions
-devpilot sessions show <id>      # Show session details
-devpilot sessions delete <id>    # Delete a session
-devpilot sessions clear          # Delete all sessions
+devorch sessions list           # List all sessions
+devorch sessions show <id>      # Show session details
+devorch sessions delete <id>    # Delete a session
+devorch sessions clear          # Delete all sessions
 ```
 
 ### Permissions
 
 ```bash
-devpilot permissions list                    # Show permissions
-devpilot permissions set shell allow         # Always allow shell commands
-devpilot permissions allow shell "git *"     # Allow git commands
-devpilot permissions deny shell "rm -rf *"   # Block dangerous commands
-devpilot permissions reset                   # Reset to defaults
+devorch permissions list                    # Show permissions
+devorch permissions set shell allow         # Always allow shell commands
+devorch permissions allow shell "git *"     # Allow git commands
+devorch permissions deny shell "rm -rf *"   # Block dangerous commands
+devorch permissions reset                   # Reset to defaults
 ```
 
 ## Supported Providers
@@ -409,7 +409,7 @@ devpilot permissions reset                   # Reset to defaults
 
 ## Tools
 
-DevPilot has access to these tools:
+DevOrch has access to these tools:
 
 | Tool | Description |
 |------|-------------|
@@ -450,7 +450,7 @@ VITE v5.0.0 ready in 450 ms
 
 ## Task Tracking
 
-DevPilot can track progress on complex tasks:
+DevOrch can track progress on complex tasks:
 
 ```
 ╭─────────── Tasks (2/4) ───────────╮
@@ -465,10 +465,10 @@ Use `/tasks` to view current task list anytime.
 
 ## Config Files
 
-DevPilot stores configuration in `~/.devpilot/`:
+DevOrch stores configuration in `~/.devorch/`:
 
 ```
-~/.devpilot/
+~/.devorch/
 ├── config.yaml       # Provider settings and default models
 ├── permissions.yaml  # Tool permission rules
 └── sessions.db       # SQLite database for chat history

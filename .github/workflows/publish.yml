@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/devpilot
+      url: https://pypi.org/p/devorch
     steps:
       - name: Download distribution artifacts
         uses: actions/download-artifact@v4
@@ -75,6 +75,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create ${{ github.ref_name }} \
-            --title "DevPilot v${{ steps.get_version.outputs.VERSION }}" \
+            --title "DevOrch v${{ steps.get_version.outputs.VERSION }}" \
             --generate-notes \
             dist/*

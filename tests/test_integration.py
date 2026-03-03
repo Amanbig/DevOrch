@@ -1,4 +1,4 @@
-"""Integration tests for DevPilot components working together."""
+"""Integration tests for DevOrch components working together."""
 
 import os
 import tempfile
@@ -103,14 +103,14 @@ def test_main():
                 "action": "replace",
                 "path": file_path,
                 "find": "Hello, World!",
-                "replace_with": "Hello, DevPilot!",
+                "replace_with": "Hello, DevOrch!",
             },
         )
         assert "Replaced" in edit_result
 
         # Verify the change
         verify_result = executor.execute("filesystem", {"action": "read", "path": file_path})
-        assert "Hello, DevPilot!" in verify_result
+        assert "Hello, DevOrch!" in verify_result
 
     def test_search_then_grep_workflow(self, executor, temp_workspace):
         """Test searching for files, then grepping content."""

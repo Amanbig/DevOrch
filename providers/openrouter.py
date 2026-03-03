@@ -36,8 +36,8 @@ class OpenRouterProvider(LLMProvider):
         self,
         model: str = "anthropic/claude-3.5-sonnet",
         api_key: str | None = None,
-        site_url: str = "https://github.com/devpilot",
-        site_name: str = "DevPilot",
+        site_url: str = "https://github.com/Amanbig/DevOrch",
+        site_name: str = "DevOrch",
     ):
         self.model = model
         self.api_key = api_key

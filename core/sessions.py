@@ -6,7 +6,7 @@ from pathlib import Path
 
 from schemas.message import Message
 
-DATA_DIR = Path.home() / ".devpilot"
+DATA_DIR = Path.home() / ".devorch"
 DB_PATH = DATA_DIR / "sessions.db"
 
 # Default limits

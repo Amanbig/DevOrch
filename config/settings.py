@@ -16,9 +16,9 @@ try:
 except ImportError:
     KEYRING_AVAILABLE = False
 
-CONFIG_DIR = Path.home() / ".devpilot"
+CONFIG_DIR = Path.home() / ".devorch"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
-KEYRING_SERVICE = "devpilot"
+KEYRING_SERVICE = "devorch"
 
 
 @dataclass

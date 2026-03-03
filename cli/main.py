@@ -74,7 +74,7 @@ BANNER = r"""
 [/bold blue]
 """
 
-BANNER_SMALL = "[bold blue]DevPilot[/bold blue] - AI Coding Assistant"
+BANNER_SMALL = "[bold blue]DevOrch[/bold blue] - AI Coding Assistant"
 
 VERSION = "0.1.0"
 
@@ -145,7 +145,7 @@ class SlashCommandCompleter(Completer):
 
 
 def print_banner(small: bool = False):
-    """Print the DevPilot banner."""
+    """Print the DevOrch banner."""
     if small:
         console.print(BANNER_SMALL)
     else:
@@ -153,7 +153,7 @@ def print_banner(small: bool = False):
         console.print(f"  [dim]v{VERSION} - Your AI Coding Assistant[/dim]\n")
 
 
-SYSTEM_PROMPT = """You are DevPilot, an AI coding assistant with access to tools for interacting with the user's computer.
+SYSTEM_PROMPT = """You are DevOrch, an AI coding assistant with access to tools for interacting with the user's computer.
 
 IMPORTANT: You have the following tools available and MUST use them to help the user:
 
@@ -227,9 +227,9 @@ class SimplePlanner(Planner):
         return [system_prompt] + history
 
 
-# Main app with invoke_without_command=True so we can handle bare `devpilot`
+# Main app with invoke_without_command=True so we can handle bare `devorch`
 app = typer.Typer(
-    help="DevPilot - Your AI Coding Assistant", invoke_without_command=True, no_args_is_help=False
+    help="DevOrch - Your AI Coding Assistant", invoke_without_command=True, no_args_is_help=False
 )
 sessions_app = typer.Typer(help="Manage chat sessions")
 app.add_typer(sessions_app, name="sessions")
@@ -271,7 +271,7 @@ def run_onboarding() -> str | None:
     # Welcome panel
     console.print(
         Panel(
-            "[bold]Welcome to DevPilot![/bold]\n\nLet's set up your AI provider to get started.",
+            "[bold]Welcome to DevOrch![/bold]\n\nLet's set up your AI provider to get started.",
             border_style="blue",
             padding=(1, 2),
         )
@@ -430,7 +430,7 @@ def run_onboarding() -> str | None:
     console.print(
         Panel(
             "[bold green]Setup complete![/bold green]\n\n"
-            "You're ready to start using DevPilot.\n"
+            "You're ready to start using DevOrch.\n"
             "Type your questions or commands, or use /help for available commands.",
             border_style="green",
             padding=(0, 1),
@@ -483,7 +483,7 @@ def create_provider(provider_name: str, model: str, settings: Settings):
 
         print_error(f"No API key found for {provider_name}.")
         print_error(
-            f"Use 'devpilot set-key {provider_name}' or set {env_var_name} environment variable"
+            f"Use 'devorch set-key {provider_name}' or set {env_var_name} environment variable"
         )
         raise typer.Exit(1)
 
@@ -647,7 +647,7 @@ def start_repl(
                     console.print("\n[bold]Available Commands:[/bold]")
                     for slash_cmd, desc in SLASH_COMMANDS.items():
                         console.print(f"  [cyan]{slash_cmd:<14}[/cyan] - {desc}")
-                    console.print(f"  [cyan]{'exit':<14}[/cyan] - Exit DevPilot")
+                    console.print(f"  [cyan]{'exit':<14}[/cyan] - Exit DevOrch")
                     console.print("\n[bold]Modes:[/bold]")
                     console.print(
                         "  [yellow]PLAN[/yellow] - Shows plan before executing, asks for approval"
@@ -1060,7 +1060,7 @@ def start_repl(
 
                 elif cmd == "save":
                     filename = (
-                        cmd_arg or f"devpilot_session_{session_manager.current_session_id}.txt"
+                        cmd_arg or f"devorch_session_{session_manager.current_session_id}.txt"
                     )
                     try:
                         with open(filename, "w") as f:
@@ -1086,7 +1086,7 @@ def start_repl(
                     continue
 
             result = agent.run(user_input, max_iterations=15)
-            print_panel(result, title="DevPilot", border_style="green")
+            print_panel(result, title="DevOrch", border_style="green")
 
         except (typer.Abort, EOFError):
             print_info(f"\nSession saved: {session_manager.current_session_id}")
@@ -1103,7 +1103,7 @@ def start_repl(
                 console.print("[dim]  Tip: Your API key may be invalid. Try:[/dim]")
                 console.print("[dim]  - /provider <name> to switch providers[/dim]")
                 console.print(
-                    f"[dim]  - devpilot set-key {current_llm.name} to update the key[/dim]"
+                    f"[dim]  - devorch set-key {current_llm.name} to update the key[/dim]"
                 )
             elif (
                 "402" in error_str
@@ -1127,9 +1127,9 @@ def main_callback(
     resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID"),
 ):
     """
-    DevPilot - Your AI Coding Assistant
+    DevOrch - Your AI Coding Assistant
 
-    Just run 'devpilot' to start chatting!
+    Just run 'devorch' to start chatting!
     """
     # If a subcommand is being invoked, don't run the default behavior
     if ctx.invoked_subcommand is not None:
@@ -1161,7 +1161,7 @@ def chat(
     ),
 ):
     """
-    Start an interactive chat session (alias for running devpilot directly).
+    Start an interactive chat session (alias for running devorch directly).
     """
     settings = Settings.load()
 
@@ -1177,12 +1177,12 @@ def chat(
 
 @app.command()
 def ask(
-    prompt: str = typer.Argument(..., help="The prompt or question for DevPilot"),
+    prompt: str = typer.Argument(..., help="The prompt or question for DevOrch"),
     provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
     model: str = typer.Option(None, "--model", "-m", help="Model name"),
 ):
     """
-    Ask DevPilot a single question (non-interactive).
+    Ask DevOrch a single question (non-interactive).
     """
     settings = Settings.load()
 
@@ -1211,7 +1211,7 @@ def ask(
     console.print(f"[dim]Using {llm.name}/{llm.model}[/dim]")
     try:
         result = agent.run(prompt, max_iterations=15)
-        print_panel(result, title="DevPilot", border_style="green")
+        print_panel(result, title="DevOrch", border_style="green")
     except Exception as e:
         print_error(str(e))
 
@@ -1223,7 +1223,7 @@ def config():
     """
     settings = Settings.load()
 
-    console.print("\n[bold]DevPilot Configuration[/bold]\n")
+    console.print("\n[bold]DevOrch Configuration[/bold]\n")
     console.print(f"Default Provider: [cyan]{settings.default_provider}[/cyan]")
     console.print(
         f"Keyring Available: {'[green]yes[/green]' if keyring_available() else '[yellow]no[/yellow]'}"
@@ -1287,7 +1287,7 @@ def set_key(
                 print_success(f"Set {provider} as default provider.")
             except Exception:
                 print_warning(
-                    f"Key stored but couldn't save as default. Use: devpilot -p {provider}"
+                    f"Key stored but couldn't save as default. Use: devorch -p {provider}"
                 )
     else:
         print_error("Failed to store API key.")

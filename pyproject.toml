@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "devpilot"
+name = "devorch"
 version = "0.1.2"
 description = "Multi-provider AI coding assistant CLI with 13+ providers"
 readme = "README.md"
@@ -12,7 +12,7 @@ license = {text = "MIT"}
 authors = [
     { name = "Aman", email = "amanpreetsinghjhiwant@outlook.com" }
 ]
-keywords = ["ai", "coding", "assistant", "cli", "llm", "openai", "anthropic", "claude", "gpt", "gemini"]
+keywords = ["ai", "coding", "assistant", "cli", "llm", "openai", "anthropic", "claude", "gpt", "gemini","kimi", "copilot", "openrouter", "llmstudio", "deepseek", "mistral", "together"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -40,9 +40,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Amanbig/DevPilot"
-Repository = "https://github.com/Amanbig/DevPilot"
-Issues = "https://github.com/Amanbig/DevPilot/issues"
+Homepage = "https://github.com/Amanbig/DevOrch"
+Repository = "https://github.com/Amanbig/DevOrch"
+Issues = "https://github.com/Amanbig/DevOrch/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -54,7 +54,7 @@ dev = [
 ]
 
 [project.scripts]
-devpilot = "cli.main:main"
+devorch = "cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cli", "core", "providers", "schemas", "tools", "config", "utils"]

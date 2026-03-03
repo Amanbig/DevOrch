@@ -3,7 +3,7 @@ Managed terminal session tool — lets the LLM start long-running processes,
 read their output, send input, and stop them, all within the conversation.
 
 Session data is stored as a simple in-process dict (sessions survive for the
-lifetime of one DevPilot run). Each session gets a temp log file so the LLM
+lifetime of one DevOrch run). Each session gets a temp log file so the LLM
 can poll output without blocking.
 """
 
@@ -124,7 +124,7 @@ Use this tool when you need programmatic access to a process (check output, send
                 del _SESSIONS[session_id]
 
         # Create a temp log file for stdout+stderr
-        log_fd, log_path = tempfile.mkstemp(prefix=f"devpilot_{session_id}_", suffix=".log")
+        log_fd, log_path = tempfile.mkstemp(prefix=f"devorch_{session_id}_", suffix=".log")
         os.close(log_fd)
 
         try:
@@ -146,7 +146,7 @@ Use this tool when you need programmatic access to a process (check output, send
             target=_stream_to_file,
             args=(process, log_path),
             daemon=True,
-            name=f"devpilot-session-{session_id}",
+            name=f"devorch-session-{session_id}",
         )
         t.start()
 

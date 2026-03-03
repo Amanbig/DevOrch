@@ -370,10 +370,10 @@ class Agent:
             if is_plan_mode and not plan_created:
                 # In planning phase, don't provide tools so LLM creates plan first
                 tools_for_call = None
-                status_msg = "[bold yellow]DevPilot is planning..."
+                status_msg = "[bold yellow]DevOrch is planning..."
             else:
                 tools_for_call = [tool.schema() for tool in self.tools]
-                status_msg = "[bold blue]DevPilot is thinking..."
+                status_msg = "[bold blue]DevOrch is thinking..."
 
             with console.status(status_msg, spinner="dots"):
                 response = self.provider.generate(

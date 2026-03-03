@@ -1,5 +1,5 @@
 """
-Agent execution modes - controls how DevPilot handles tool execution.
+Agent execution modes - controls how DevOrch handles tool execution.
 
 Modes:
 - PLAN: Create a plan first, show it, ask for approval, then execute

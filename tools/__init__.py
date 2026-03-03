@@ -1,5 +1,5 @@
 """
-DevPilot Tools - Tools for interacting with the system.
+DevOrch Tools - Tools for interacting with the system.
 
 Available tools:
 - ShellTool: Execute shell commands
