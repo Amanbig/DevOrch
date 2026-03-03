@@ -22,8 +22,9 @@ PROMPT_STYLE = QStyle(
         ("question", "fg:white bold"),
         ("answer", "fg:green bold"),
         ("pointer", "fg:cyan bold"),
-        ("highlighted", "fg:white bg:default"),  # Explicitly clear bg - the » pointer already shows selection
-        ("selected", "fg:white"),
+        ("highlighted", "noreverse fg:cyan bold bg:default"),  # cyan text like pointer, no box
+        ("selected", "noreverse fg:cyan bold bg:default"),  # default item — same as highlighted
+        ("text", "fg:white"),                              # plain items
     ]
 )
 
