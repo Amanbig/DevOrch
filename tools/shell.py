@@ -94,7 +94,12 @@ Special handling:
             for pattern in SERVER_COMMANDS:
                 # Match if the part equals the pattern, starts with it (space/end), or contains it
                 p = pattern.lower()
-                if part == p or part.startswith(p + " ") or part.startswith(p + "\t") or (" " + p + " ") in (" " + part + " "):
+                if (
+                    part == p
+                    or part.startswith(p + " ")
+                    or part.startswith(p + "\t")
+                    or (" " + p + " ") in (" " + part + " ")
+                ):
                     return True
         return False
 
@@ -138,10 +143,22 @@ Special handling:
             else:
                 # Linux: try common terminal emulators
                 terminals = [
-                    ["gnome-terminal", "--working-directory", working_dir, "--", "bash", "-c", f"{command}; exec bash"],
+                    [
+                        "gnome-terminal",
+                        "--working-directory",
+                        working_dir,
+                        "--",
+                        "bash",
+                        "-c",
+                        f"{command}; exec bash",
+                    ],
                     ["konsole", "--workdir", working_dir, "-e", f"bash -c '{command}; exec bash'"],
                     ["xterm", "-e", f"bash -c 'cd \"{working_dir}\" && {command}; exec bash'"],
-                    ["x-terminal-emulator", "-e", f"bash -c 'cd \"{working_dir}\" && {command}; exec bash'"],
+                    [
+                        "x-terminal-emulator",
+                        "-e",
+                        f"bash -c 'cd \"{working_dir}\" && {command}; exec bash'",
+                    ],
                 ]
 
                 for term_cmd in terminals:

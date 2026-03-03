@@ -109,7 +109,6 @@ class WebFetchTool(Tool):
             return "Error: No URL provided."
 
         try:
-
             import httpx
 
             # Fetch the page
