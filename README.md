@@ -21,6 +21,27 @@ A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
 
 ## Installation
 
+### Option 1: Install with pipx (Recommended)
+
+```bash
+# Install pipx if you don't have it
+pip install pipx
+
+# Install DevPilot
+pipx install devpilot
+
+# DevPilot is now available globally
+devpilot --help
+```
+
+### Option 2: Install with pip
+
+```bash
+pip install devpilot
+```
+
+### Option 3: Install from source
+
 ```bash
 # Clone the repository
 git clone https://github.com/Amanbig/DevPilot.git
@@ -29,6 +50,13 @@ cd DevPilot
 # Install with pip
 pip install -e .
 ```
+
+### Why pipx?
+
+- ✅ Isolated environment (no conflicts with other packages)
+- ✅ Available globally like `npm install -g`
+- ✅ Easy to uninstall: `pipx uninstall devpilot`
+- ✅ Easy to upgrade: `pipx upgrade devpilot`
 
 ## Quick Start
 
