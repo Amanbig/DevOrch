@@ -45,9 +45,9 @@ from tools.filesystem import FilesystemTool
 from tools.grep import GrepTool
 from tools.search import SearchTool
 from tools.shell import ShellTool
+from tools.task import TaskTool
 from tools.terminal import OpenTerminalTool
 from tools.terminal_session import TerminalSessionTool
-from tools.task import TaskTool
 from tools.websearch import WebFetchTool, WebSearchTool
 from utils.logger import (
     get_console,

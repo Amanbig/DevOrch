@@ -2,8 +2,12 @@ from typing import Dict, List, Optional, Type
 
 from providers.anthropic import AnthropicProvider
 from providers.base import LLMProvider, ModelInfo
+from providers.custom import CustomProvider
+from providers.deepseek import DeepSeekProvider
 from providers.gemini import GeminiProvider
+from providers.github_copilot import GitHubCopilotProvider
 from providers.groq import GroqProvider
+from providers.kimi import KimiProvider
 from providers.lmstudio import LMStudioProvider
 from providers.local import LocalProvider
 from providers.mistral import MistralProvider
@@ -22,6 +26,10 @@ PROVIDERS: dict[str, type[LLMProvider]] = {
     "groq": GroqProvider,
     "lmstudio": LMStudioProvider,
     "together": TogetherProvider,
+    "github_copilot": GitHubCopilotProvider,
+    "deepseek": DeepSeekProvider,
+    "kimi": KimiProvider,
+    "custom": CustomProvider,
 }
 
 # Provider descriptions for help
@@ -35,6 +43,10 @@ PROVIDER_INFO = {
     "groq": "Groq - Ultra-fast inference (Llama, Mixtral)",
     "lmstudio": "LM Studio - Run local models with UI",
     "together": "Together AI - Open source models at scale",
+    "github_copilot": "GitHub Copilot - Multiple models via GitHub subscription",
+    "deepseek": "DeepSeek - Powerful reasoning and coding models",
+    "kimi": "Kimi (Moonshot) - Long context models up to 128K",
+    "custom": "Custom - Any OpenAI-compatible API endpoint",
 }
 
 # Environment variable names for API keys
@@ -48,6 +60,10 @@ PROVIDER_ENV_VARS = {
     "groq": "GROQ_API_KEY",
     "lmstudio": None,
     "together": "TOGETHER_API_KEY",
+    "github_copilot": "GITHUB_TOKEN",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "kimi": "MOONSHOT_API_KEY",
+    "custom": "CUSTOM_API_KEY",
 }
 
 
@@ -104,6 +120,10 @@ __all__ = [
     "GroqProvider",
     "LMStudioProvider",
     "TogetherProvider",
+    "GitHubCopilotProvider",
+    "DeepSeekProvider",
+    "KimiProvider",
+    "CustomProvider",
     "get_provider",
     "get_default_models",
     "PROVIDERS",

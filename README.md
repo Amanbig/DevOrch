@@ -8,13 +8,15 @@ A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
 
 ## Features
 
-- **Multi-Provider Support** - OpenAI, Anthropic, Google Gemini, Groq, Mistral, Together AI, OpenRouter, Ollama (local), and LM Studio
+- **13 AI Providers** - OpenAI, Anthropic, Gemini, Groq, Mistral, Together AI, OpenRouter, GitHub Copilot, DeepSeek, Kimi, Ollama, LM Studio, and Custom
+- **Custom Provider Support** - Connect to ANY OpenAI-compatible API (vLLM, TGI, llama.cpp, etc.)
+- **Dynamic Model Listing** - Fetches latest available models from provider APIs
 - **Secure API Key Storage** - Uses system keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service)
 - **Session Persistence** - SQLite-based chat history with resume capability
-- **Tool Execution** - Shell commands, file operations, search, grep, code editing, and web search
+- **Powerful Tools** - Shell, terminal sessions, file operations, search, grep, code editing, and web access
 - **Interactive UI** - Arrow-key navigation for selections, syntax-highlighted output
 - **Permission System** - Configurable allow/deny rules with interactive prompts
-- **Interactive Commands** - Full support for interactive CLI tools (npx, npm create, etc.)
+- **Terminal Session Management** - Run long-running servers and background processes
 - **Multiple Modes** - Plan mode, Auto mode, and Ask mode
 
 ## Installation
@@ -146,20 +148,136 @@ Tool calls are displayed in a clean, compact format:
     ✓ Read 32 lines
 ```
 
+## New Provider Features
+
+### GitHub Copilot Integration
+
+Use your GitHub Copilot subscription to access multiple premium models:
+
+```bash
+# Get GitHub token with 'copilot' scope from:
+# https://github.com/settings/tokens
+
+export GITHUB_TOKEN=ghp_your_token
+
+# Use Copilot
+devpilot -p github_copilot
+devpilot -p github_copilot -m claude-3.5-sonnet
+```
+
+**Available models:** GPT-4o, GPT-4o-mini, Claude 3.5 Sonnet, o1-preview, o1-mini
+
+### DeepSeek AI
+
+Powerful reasoning and coding models from DeepSeek:
+
+```bash
+export DEEPSEEK_API_KEY=sk-...
+devpilot -p deepseek -m deepseek-reasoner
+```
+
+**Models:** deepseek-chat, deepseek-coder, deepseek-reasoner (R1)
+
+### Kimi (Moonshot AI)
+
+Long context models with up to 128K tokens:
+
+```bash
+export MOONSHOT_API_KEY=sk-...
+devpilot -p kimi -m moonshot-v1-128k
+```
+
+**Models:** moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k
+
+### Custom Providers
+
+Connect to ANY OpenAI-compatible API:
+
+#### Self-Hosted vLLM
+
+```yaml
+# ~/.devpilot/config.yaml
+providers:
+  my_vllm:
+    default_model: meta-llama/Meta-Llama-3-70B-Instruct
+    base_url: http://localhost:8000/v1
+```
+
+```bash
+# Start vLLM server
+python -m vllm.entrypoints.openai.api_server \
+    --model meta-llama/Meta-Llama-3-70B-Instruct \
+    --port 8000
+
+# Use it
+devpilot -p my_vllm
+```
+
+#### Text Generation Inference (TGI)
+
+```yaml
+providers:
+  my_tgi:
+    default_model: mistralai/Mistral-7B-Instruct
+    base_url: http://localhost:8080/v1
+```
+
+#### llama.cpp Server
+
+```yaml
+providers:
+  llamacpp:
+    default_model: llama-3-8b
+    base_url: http://localhost:8080/v1
+```
+
+#### Private API Endpoint
+
+```yaml
+providers:
+  company_api:
+    default_model: custom-model-v1
+    base_url: https://api.company.com/v1
+    # Set CUSTOM_API_KEY environment variable
+```
+
+### Dynamic Model Listing
+
+All providers now fetch available models from their APIs automatically:
+
+```bash
+# List available models
+devpilot models list -p deepseek
+devpilot models list -p github_copilot
+devpilot models list -p my_vllm
+```
+
+Models are fetched in real-time from provider APIs, so you always see the latest available models!
+
 ## Configuration
 
 ### API Keys
 
 ```bash
-# Store API key securely (also sets as default provider)
+# Store API keys securely in system keyring
 devpilot set-key openai
 devpilot set-key anthropic
 devpilot set-key groq
+devpilot set-key github_copilot  # Uses GITHUB_TOKEN
+devpilot set-key deepseek
+devpilot set-key kimi
 
 # Or use environment variables
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
+export GOOGLE_API_KEY=...
 export GROQ_API_KEY=gsk_...
+export MISTRAL_API_KEY=...
+export OPENROUTER_API_KEY=sk-or-...
+export TOGETHER_API_KEY=...
+export GITHUB_TOKEN=ghp_...
+export DEEPSEEK_API_KEY=sk-...
+export MOONSHOT_API_KEY=sk-...
 ```
 
 ### View Configuration
@@ -167,6 +285,43 @@ export GROQ_API_KEY=gsk_...
 ```bash
 devpilot config
 ```
+
+### Configuration File
+
+Create `~/.devpilot/config.yaml` to configure providers:
+
+```yaml
+# Set default provider
+default_provider: openai
+
+# Configure each provider
+providers:
+  openai:
+    default_model: gpt-4o
+
+  anthropic:
+    default_model: claude-sonnet-4-20250514
+
+  github_copilot:
+    default_model: gpt-4o
+
+  deepseek:
+    default_model: deepseek-chat
+
+  kimi:
+    default_model: moonshot-v1-32k
+
+  # Custom providers
+  my_vllm:
+    default_model: meta-llama/Meta-Llama-3-70B-Instruct
+    base_url: http://localhost:8000/v1
+
+  company_api:
+    default_model: custom-model-v1
+    base_url: https://api.company.com/v1
+```
+
+**Note:** Don't put API keys in config files! Use environment variables or keyring.
 
 ### Session Management
 
@@ -189,17 +344,40 @@ devpilot permissions reset                   # Reset to defaults
 
 ## Supported Providers
 
-| Provider | Models | API Key Env Var |
-|----------|--------|-----------------|
-| OpenAI | gpt-4o, gpt-4, gpt-3.5-turbo | `OPENAI_API_KEY` |
-| Anthropic | claude-sonnet-4, claude-opus-4 | `ANTHROPIC_API_KEY` |
-| Google Gemini | gemini-1.5-pro, gemini-1.5-flash | `GOOGLE_API_KEY` |
-| Groq | llama-3.1-70b, mixtral-8x7b | `GROQ_API_KEY` |
-| Mistral | mistral-large, codestral | `MISTRAL_API_KEY` |
-| Together AI | llama-3-70b, mixtral | `TOGETHER_API_KEY` |
-| OpenRouter | 100+ models | `OPENROUTER_API_KEY` |
-| Ollama (local) | llama3, codellama, mistral | None (local) |
-| LM Studio | Any loaded model | None (local) |
+### Cloud Providers
+
+| Provider | Models | API Key | Notes |
+|----------|--------|---------|-------|
+| **OpenAI** | GPT-4o, GPT-4, o1-preview | `OPENAI_API_KEY` | Full support with tool calling |
+| **Anthropic** | Claude 4.5, Claude 3.5, Claude 3 | `ANTHROPIC_API_KEY` | Best for coding tasks |
+| **Google Gemini** | Gemini 2.0, 1.5 Pro/Flash | `GOOGLE_API_KEY` | 2M token context |
+| **Groq** | Llama 3.3, Mixtral, Gemma | `GROQ_API_KEY` | Ultra-fast inference |
+| **Mistral** | Large, Medium, Codestral | `MISTRAL_API_KEY` | Specialized for code |
+| **Together AI** | Llama 3, Mixtral, Qwen | `TOGETHER_API_KEY` | Open source models |
+| **OpenRouter** | 100+ models | `OPENROUTER_API_KEY` | Access many providers via one API |
+
+### Developer Tools
+
+| Provider | Models | API Key | Notes |
+|----------|--------|---------|-------|
+| **GitHub Copilot** ⭐ | GPT-4o, Claude 3.5, o1 | `GITHUB_TOKEN` | Requires Copilot subscription |
+
+### International Providers
+
+| Provider | Models | API Key | Notes |
+|----------|--------|---------|-------|
+| **DeepSeek** ⭐ | Chat, Coder, Reasoner | `DEEPSEEK_API_KEY` | Powerful reasoning models |
+| **Kimi (Moonshot)** ⭐ | 8K, 32K, 128K | `MOONSHOT_API_KEY` | Long context (128K tokens) |
+
+### Local & Self-Hosted
+
+| Provider | Models | Setup | Notes |
+|----------|--------|-------|-------|
+| **Ollama** | Llama 3, Mistral, CodeLlama | Install Ollama | Run models locally |
+| **LM Studio** | Any GGUF model | Install LM Studio | GUI for local models |
+| **Custom** ⭐ | Your choice | Configure endpoint | vLLM, TGI, llama.cpp, etc. |
+
+⭐ = New providers
 
 ## Tools
 
@@ -207,7 +385,9 @@ DevPilot has access to these tools:
 
 | Tool | Description |
 |------|-------------|
-| **shell** | Execute shell commands (supports interactive commands like `npm create`) |
+| **shell** | Execute shell commands (quick commands with output capture) |
+| **open_terminal** ⭐ | Open new terminal window for interactive/long-running commands |
+| **terminal_session** ⭐ | Managed background sessions (start, read, send input, stop) |
 | **filesystem** | Read, write, and list files |
 | **search** | Find files by name patterns (glob) |
 | **grep** | Search for text patterns in files |
@@ -215,6 +395,30 @@ DevPilot has access to these tools:
 | **task** | Track progress on multi-step work with visual task list |
 | **websearch** | Search the web for current information (uses DuckDuckGo) |
 | **webfetch** | Fetch and read content from a URL |
+
+### Terminal Session Management
+
+Run long-running servers and interact with them without blocking the chat:
+
+```bash
+# LLM can start a dev server in background
+> terminal_session start vite_server "npm run dev"
+✓ Session 'vite_server' started (PID 12345)
+
+# Continue chatting while server runs
+
+# Check server output
+> terminal_session read vite_server
+[Session 'vite_server' — running]
+VITE v5.0.0 ready in 450 ms
+➜ Local: http://localhost:5173/
+
+# Send input to the process
+> terminal_session send vite_server "rs\n"  # Restart
+
+# Stop when done
+> terminal_session stop vite_server
+```
 
 ## Task Tracking
 

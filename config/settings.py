@@ -61,6 +61,10 @@ class Settings:
             "mistral": ("MISTRAL_API_KEY", "mistral-large-latest"),
             "together": ("TOGETHER_API_KEY", "meta-llama/Llama-3-70b-chat-hf"),
             "lmstudio": (None, ""),
+            "github_copilot": ("GITHUB_TOKEN", "gpt-4o"),
+            "deepseek": ("DEEPSEEK_API_KEY", "deepseek-chat"),
+            "kimi": ("MOONSHOT_API_KEY", "moonshot-v1-32k"),
+            "custom": ("CUSTOM_API_KEY", ""),
         }
 
         for provider, (env_var, default_model) in env_mappings.items():
