@@ -10,20 +10,12 @@ from questionary import Style as QStyle
 from rich.panel import Panel
 from rich.table import Table
 
-# Custom style for questionary prompts
-QUESTIONARY_STYLE = QStyle(
-    [
-        ("qmark", "fg:yellow bold"),
-        ("question", "fg:white bold"),
-        ("answer", "fg:green bold"),
-        ("pointer", "fg:cyan bold"),
-        ("highlighted", "fg:white"),  # Normal white text, no background - arrow shows selection
-        ("selected", "fg:white"),
-        ("instruction", "fg:gray"),
-    ]
+from config.permissions import (
+    PERMISSIONS_FILE,
+    PermissionLevel,
+    get_permissions,
+    reset_permissions,
 )
-
-from config.permissions import PERMISSIONS_FILE, PermissionLevel, get_permissions, reset_permissions
 from config.settings import (
     CONFIG_FILE,
     ProviderConfig,
@@ -56,6 +48,19 @@ from utils.logger import (
     print_panel,
     print_success,
     print_warning,
+)
+
+# Custom style for questionary prompts
+QUESTIONARY_STYLE = QStyle(
+    [
+        ("qmark", "fg:yellow bold"),
+        ("question", "fg:white bold"),
+        ("answer", "fg:green bold"),
+        ("pointer", "fg:cyan bold"),
+        ("highlighted", "fg:white"),  # Normal white text, no background - arrow shows selection
+        ("selected", "fg:white"),
+        ("instruction", "fg:gray"),
+    ]
 )
 
 # ASCII Art Banner
@@ -529,7 +534,7 @@ def start_repl(
 
         except ValueError as e:
             print_error(str(e))
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
     else:
         messages = []
 
@@ -540,7 +545,7 @@ def start_repl(
 
     # Create new session if not resuming
     if not resume:
-        session_id = session_manager.create_session(llm.name, llm.model)
+        session_manager.create_session(llm.name, llm.model)
 
     tools = [
         ShellTool(),
@@ -1019,7 +1024,7 @@ def start_repl(
                     if not agent.history:
                         print_info("No messages yet.")
                     else:
-                        for i, msg in enumerate(agent.history[-10:], 1):
+                        for _i, msg in enumerate(agent.history[-10:], 1):
                             role_color = {
                                 "user": "green",
                                 "assistant": "blue",
@@ -1349,7 +1354,7 @@ def sessions_show(session_id: str = typer.Argument(..., help="Session ID to show
         session_info, messages = session_manager.load_session(session_id)
     except ValueError as e:
         print_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     console.print(f"\n[bold]Session: {session_id}[/bold]")
     console.print(f"Name: {session_info.get('name', '-')}")
@@ -1492,7 +1497,7 @@ def permissions_set(
         perm_level = PermissionLevel(level.lower())
     except ValueError:
         print_error(f"Invalid level: {level}. Use: allow, deny, or ask")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     permissions = get_permissions()
     permissions.set_tool_permission(tool, perm_level)

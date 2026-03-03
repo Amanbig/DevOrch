@@ -90,7 +90,7 @@ Always use dry_run=true first to preview significant changes!"""
                 else:
                     new_content, replacements = pattern.subn(replace_with, content, count=count)
             except re.error as e:
-                raise ValueError(f"Invalid regex: {e}")
+                raise ValueError(f"Invalid regex: {e}") from e
         else:
             if count == 0:
                 replacements = content.count(find)
