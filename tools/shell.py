@@ -29,27 +29,29 @@ INTERACTIVE_COMMANDS = [
     "more ",
 ]
 
-# Commands that start long-running servers/daemons
+# Commands that start long-running servers/daemons.
+# Note: no trailing spaces — matching is done against each word-token/subcommand.
 SERVER_COMMANDS = [
     "npm run dev",
-    "npm start",
     "npm run serve",
+    "npm start",
     "yarn dev",
     "yarn start",
     "pnpm dev",
     "pnpm start",
     "python -m http.server",
-    "python -m SimpleHTTPServer",
+    "python -m simplehttpserver",
     "flask run",
     "django runserver",
     "manage.py runserver",
-    "uvicorn ",
-    "gunicorn ",
+    "uvicorn",
+    "gunicorn",
     "node server",
-    "nodemon ",
+    "nodemon",
     "ng serve",
     "next dev",
-    "vite ",
+    "vite",
+    "npx vite",
     "webpack serve",
     "rails server",
     "cargo run",
@@ -82,11 +84,18 @@ Special handling:
         return False
 
     def _is_server_command(self, command: str) -> bool:
-        """Check if a command starts a long-running server."""
-        cmd_lower = command.lower()
-        for pattern in SERVER_COMMANDS:
-            if pattern in cmd_lower:
-                return True
+        """Check if a command (or any part of a chained command) starts a long-running server."""
+        # Split on && and ; to check each subcommand independently
+        parts = []
+        for chunk in command.replace(";", "&&").split("&&"):
+            parts.append(chunk.strip().lower())
+
+        for part in parts:
+            for pattern in SERVER_COMMANDS:
+                # Match if the part equals the pattern, starts with it (space/end), or contains it
+                p = pattern.lower()
+                if part == p or part.startswith(p + " ") or part.startswith(p + "\t") or (" " + p + " ") in (" " + part + " "):
+                    return True
         return False
 
     def _run_in_new_terminal(self, command: str, cwd: str | None = None) -> str:
