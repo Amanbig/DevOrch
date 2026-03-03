@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from typing import Any
@@ -28,6 +29,35 @@ INTERACTIVE_COMMANDS = [
     "more ",
 ]
 
+# Commands that start long-running servers/daemons
+SERVER_COMMANDS = [
+    "npm run dev",
+    "npm start",
+    "npm run serve",
+    "yarn dev",
+    "yarn start",
+    "pnpm dev",
+    "pnpm start",
+    "python -m http.server",
+    "python -m SimpleHTTPServer",
+    "flask run",
+    "django runserver",
+    "manage.py runserver",
+    "uvicorn ",
+    "gunicorn ",
+    "node server",
+    "nodemon ",
+    "ng serve",
+    "next dev",
+    "vite ",
+    "webpack serve",
+    "rails server",
+    "cargo run",
+    "go run",
+    "docker-compose up",
+    "docker compose up",
+]
+
 
 class ShellToolSchema(BaseModel):
     command: str = Field(..., description="The shell command to execute.")
@@ -35,7 +65,12 @@ class ShellToolSchema(BaseModel):
 
 class ShellTool(Tool):
     name = "shell"
-    description = "Executes a shell command on the user's system. For interactive commands (like npx create-next-app), the command will run directly in the terminal allowing user interaction."
+    description = """Executes a shell command on the user's system.
+
+Special handling:
+- Interactive commands (like npx create-next-app) run directly in the terminal allowing user interaction
+- Server/daemon commands (like npm run dev, python -m http.server) automatically open in a new terminal window, allowing the conversation to continue
+- Regular commands are executed and their output is captured"""
     args_schema = ShellToolSchema
 
     def _is_interactive(self, command: str) -> bool:
@@ -46,11 +81,74 @@ class ShellTool(Tool):
                 return True
         return False
 
+    def _is_server_command(self, command: str) -> bool:
+        """Check if a command starts a long-running server."""
+        cmd_lower = command.lower()
+        for pattern in SERVER_COMMANDS:
+            if pattern in cmd_lower:
+                return True
+        return False
+
+    def _run_in_new_terminal(self, command: str) -> str:
+        """Run a command in a new terminal window."""
+        system = sys.platform
+
+        try:
+            if system == "win32":
+                # Windows: use 'start' to open new cmd window
+                subprocess.Popen(
+                    f'start cmd /k "{command}"',
+                    shell=True,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, "CREATE_NEW_CONSOLE") else 0,
+                )
+                return f"✓ Server started in new terminal window\n\nCommand: {command}\n\nThe server is now running in a separate window. You can continue our conversation here."
+
+            elif system == "darwin":
+                # macOS: use osascript to open Terminal
+                escaped_command = command.replace('"', '\\"')
+                subprocess.Popen(
+                    ["osascript", "-e", f'tell app "Terminal" to do script "{escaped_command}"']
+                )
+                return f"✓ Server started in new Terminal window\n\nCommand: {command}\n\nThe server is now running in a separate window. You can continue our conversation here."
+
+            else:
+                # Linux: try common terminal emulators
+                terminals = [
+                    ["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"],
+                    ["konsole", "-e", f"bash -c '{command}; exec bash'"],
+                    ["xterm", "-e", f"bash -c '{command}; exec bash'"],
+                    ["x-terminal-emulator", "-e", f"bash -c '{command}; exec bash'"],
+                ]
+
+                for term_cmd in terminals:
+                    try:
+                        subprocess.Popen(term_cmd)
+                        return f"✓ Server started in new terminal window\n\nCommand: {command}\n\nThe server is now running in a separate window. You can continue our conversation here."
+                    except FileNotFoundError:
+                        continue
+
+                # Fallback: run in background
+                process = subprocess.Popen(
+                    command,
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                return f"✓ Server started in background (PID: {process.pid})\n\nCommand: {command}\n\nNote: Could not open a new terminal. The server is running in the background."
+
+        except Exception as e:
+            return f"Error starting server in new terminal: {str(e)}\n\nTry running the command manually: {command}"
+
     def run(self, arguments: dict[str, Any]) -> Any:
         try:
             command = arguments.get("command")
             if not command:
                 return "Error: No command provided."
+
+            # Check if this is a long-running server command
+            if self._is_server_command(command):
+                return self._run_in_new_terminal(command)
 
             # Check if this is an interactive command
             if self._is_interactive(command):
