@@ -89,41 +89,60 @@ Special handling:
                 return True
         return False
 
-    def _run_in_new_terminal(self, command: str) -> str:
+    def _run_in_new_terminal(self, command: str, cwd: str | None = None) -> str:
         """Run a command in a new terminal window."""
         system = sys.platform
+        working_dir = cwd or os.getcwd()
 
         try:
             if system == "win32":
-                # Windows: use 'start' to open new cmd window
+                # Windows: 'start' is a cmd built-in, so we must invoke it via
+                # `cmd /c start ...` as a list — using shell=True with a plain
+                # string is unreliable for built-in commands.
                 subprocess.Popen(
-                    f'start cmd /k "{command}"',
-                    shell=True,
-                    creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, "CREATE_NEW_CONSOLE") else 0,
+                    ["cmd", "/c", "start", "cmd", "/k", command],
+                    cwd=working_dir,
                 )
-                return f"✓ Server started in new terminal window\n\nCommand: {command}\n\nThe server is now running in a separate window. You can continue our conversation here."
+                return (
+                    f"✓ Server started in new terminal window\n\n"
+                    f"Command: {command}\n\n"
+                    f"The server is now running in a separate window. You can continue our conversation here."
+                )
 
             elif system == "darwin":
                 # macOS: use osascript to open Terminal
                 escaped_command = command.replace('"', '\\"')
+                escaped_dir = working_dir.replace('"', '\\"')
                 subprocess.Popen(
-                    ["osascript", "-e", f'tell app "Terminal" to do script "{escaped_command}"']
+                    [
+                        "osascript",
+                        "-e",
+                        f'tell app "Terminal" to do script "cd \\"{escaped_dir}\\" && {escaped_command}"',
+                    ]
                 )
-                return f"✓ Server started in new Terminal window\n\nCommand: {command}\n\nThe server is now running in a separate window. You can continue our conversation here."
+                return (
+                    f"✓ Server started in new Terminal window\n\n"
+                    f"Command: {command}\n\n"
+                    f"The server is now running in a separate window. You can continue our conversation here."
+                )
 
             else:
                 # Linux: try common terminal emulators
                 terminals = [
-                    ["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"],
-                    ["konsole", "-e", f"bash -c '{command}; exec bash'"],
-                    ["xterm", "-e", f"bash -c '{command}; exec bash'"],
-                    ["x-terminal-emulator", "-e", f"bash -c '{command}; exec bash'"],
+                    ["gnome-terminal", "--working-directory", working_dir, "--", "bash", "-c", f"{command}; exec bash"],
+                    ["konsole", "--workdir", working_dir, "-e", f"bash -c '{command}; exec bash'"],
+                    ["xterm", "-e", f"bash -c 'cd \"{working_dir}\" && {command}; exec bash'"],
+                    ["x-terminal-emulator", "-e", f"bash -c 'cd \"{working_dir}\" && {command}; exec bash'"],
                 ]
 
                 for term_cmd in terminals:
                     try:
                         subprocess.Popen(term_cmd)
-                        return f"✓ Server started in new terminal window\n\nCommand: {command}\n\nThe server is now running in a separate window. You can continue our conversation here."
+                        return (
+                            f"✓ Server started in new terminal window\n\n"
+                            f"Command: {command}\n\n"
+                            f"The server is now running in a separate window. You can continue our conversation here."
+                        )
                     except FileNotFoundError:
                         continue
 
@@ -134,8 +153,13 @@ Special handling:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     start_new_session=True,
+                    cwd=working_dir,
                 )
-                return f"✓ Server started in background (PID: {process.pid})\n\nCommand: {command}\n\nNote: Could not open a new terminal. The server is running in the background."
+                return (
+                    f"✓ Server started in background (PID: {process.pid})\n\n"
+                    f"Command: {command}\n\n"
+                    f"Note: Could not open a new terminal. The server is running in the background."
+                )
 
         except Exception as e:
             return f"Error starting server in new terminal: {str(e)}\n\nTry running the command manually: {command}"

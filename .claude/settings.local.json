@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c:*)",
+      "Bash(python -m cli.main:*)",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:github.com)"
+    ]
+  }
+}

@@ -23,7 +23,7 @@ PROMPT_STYLE = QStyle(
         ("answer", "fg:green bold"),
         ("pointer", "fg:cyan bold"),
         ("highlighted", "fg:cyan bold"),  # Normal white text, no background - arrow shows selection
-        ("selected", "fg:cyan bold"),
+        ("selected", "fg:white"),
     ]
 )
 
