@@ -45,6 +45,7 @@ from tools.filesystem import FilesystemTool
 from tools.grep import GrepTool
 from tools.search import SearchTool
 from tools.shell import ShellTool
+from tools.terminal import OpenTerminalTool
 from tools.task import TaskTool
 from tools.websearch import WebFetchTool, WebSearchTool
 from utils.logger import (
@@ -151,22 +152,28 @@ SYSTEM_PROMPT = """You are DevPilot, an AI coding assistant with access to tools
 IMPORTANT: You have the following tools available and MUST use them to help the user:
 
 1. **shell** - Execute shell commands (bash/powershell). Use this to:
-   - Run commands like `npx create-next-app`, `npm install`, `git clone`, etc.
+   - Run commands like `npm install`, `git clone`, `git status`, etc.
    - Navigate directories, create files, run scripts
-   - Execute any terminal command the user needs
+   - Any short-lived terminal command that returns output
 
-2. **filesystem** - Read/write/list files. Use this to:
+2. **open_terminal** - Open a NEW terminal window and run a command inside it. Use this for:
+   - Starting dev servers or daemons: `npm run dev`, `vite`, `uvicorn`, `flask run`, `next dev`, `ng serve`
+   - Interactive scaffold tools that prompt the user: `npm create vite@latest`, `npx create-next-app`, `ng new`, `django-admin startproject`
+   - Any long-running process that should NOT block the current session
+   - ALWAYS prefer this over `shell` for servers and scaffolds
+
+3. **filesystem** - Read/write/list files. Use this to:
    - Read file contents to understand code
    - Write or create new files
    - List directory contents
 
-3. **search** - Find files by name patterns (like glob)
+4. **search** - Find files by name patterns (like glob)
 
-4. **grep** - Search for text patterns within files
+5. **grep** - Search for text patterns within files
 
-5. **edit** - Make targeted edits to existing files
+6. **edit** - Make targeted edits to existing files
 
-6. **task** - Track progress on multi-step work. Use this to:
+7. **task** - Track progress on multi-step work. Use this to:
    - Create a task list when working on complex requests (3+ steps)
    - Show the user what you're currently working on
    - Mark tasks complete as you finish them
@@ -178,13 +185,13 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
    - content: imperative form (e.g., "Fix bug", "Run tests")
    - activeForm: present continuous (e.g., "Fixing bug", "Running tests")
 
-7. **websearch** - Search the web for current information. Use when:
+8. **websearch** - Search the web for current information. Use when:
    - You need up-to-date information (news, docs, releases)
    - Looking up programming solutions or best practices
    - Finding package/library documentation
    - User asks about something you're unsure about
 
-8. **webfetch** - Fetch content from a specific URL. Use when:
+9. **webfetch** - Fetch content from a specific URL. Use when:
    - You need to read a documentation page
    - User provides a URL to check
    - You found a relevant URL from search results
@@ -195,6 +202,7 @@ RULES:
 - Do NOT ask the user to run commands manually - run them for the user
 - Always prefer action over explanation
 - For multi-step tasks, use the task tool to track and show progress
+- IMPORTANT: Use `open_terminal` (not `shell`) for dev servers and interactive scaffold commands
 
 When executing shell commands, use the shell tool with the command to run."""
 
@@ -527,6 +535,7 @@ def start_repl(
 
     tools = [
         ShellTool(),
+        OpenTerminalTool(),
         FilesystemTool(),
         SearchTool(),
         GrepTool(),
@@ -1169,6 +1178,7 @@ def ask(
 
     tools = [
         ShellTool(),
+        OpenTerminalTool(),
         FilesystemTool(),
         SearchTool(),
         GrepTool(),
