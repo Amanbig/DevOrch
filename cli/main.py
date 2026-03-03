@@ -46,6 +46,7 @@ from tools.grep import GrepTool
 from tools.search import SearchTool
 from tools.shell import ShellTool
 from tools.terminal import OpenTerminalTool
+from tools.terminal_session import TerminalSessionTool
 from tools.task import TaskTool
 from tools.websearch import WebFetchTool, WebSearchTool
 from utils.logger import (
@@ -162,18 +163,26 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
    - Any long-running process that should NOT block the current session
    - ALWAYS prefer this over `shell` for servers and scaffolds
 
-3. **filesystem** - Read/write/list files. Use this to:
+3. **terminal_session** — Manage a long-running background process across turns:
+   - `start` — launch command in a named background session
+   - `read`  — read recent stdout/stderr output
+   - `send`  — send input to the process stdin
+   - `stop`  — terminate the session
+   - `list`  — show all active sessions
+   Use this when you need to check server logs, send commands to a running process, or manage multiple background processes.
+
+4. **filesystem** - Read/write/list files. Use this to:
    - Read file contents to understand code
    - Write or create new files
    - List directory contents
 
-4. **search** - Find files by name patterns (like glob)
+5. **search** - Find files by name patterns (like glob)
 
-5. **grep** - Search for text patterns within files
+6. **grep** - Search for text patterns within files
 
-6. **edit** - Make targeted edits to existing files
+7. **edit** - Make targeted edits to existing files
 
-7. **task** - Track progress on multi-step work. Use this to:
+8. **task** - Track progress on multi-step work. Use this to:
    - Create a task list when working on complex requests (3+ steps)
    - Show the user what you're currently working on
    - Mark tasks complete as you finish them
@@ -185,13 +194,13 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
    - content: imperative form (e.g., "Fix bug", "Run tests")
    - activeForm: present continuous (e.g., "Fixing bug", "Running tests")
 
-8. **websearch** - Search the web for current information. Use when:
+9. **websearch** - Search the web for current information. Use when:
    - You need up-to-date information (news, docs, releases)
    - Looking up programming solutions or best practices
    - Finding package/library documentation
    - User asks about something you're unsure about
 
-9. **webfetch** - Fetch content from a specific URL. Use when:
+10. **webfetch** - Fetch content from a specific URL. Use when:
    - You need to read a documentation page
    - User provides a URL to check
    - You found a relevant URL from search results
@@ -536,6 +545,7 @@ def start_repl(
     tools = [
         ShellTool(),
         OpenTerminalTool(),
+        TerminalSessionTool(),
         FilesystemTool(),
         SearchTool(),
         GrepTool(),
@@ -1179,6 +1189,7 @@ def ask(
     tools = [
         ShellTool(),
         OpenTerminalTool(),
+        TerminalSessionTool(),
         FilesystemTool(),
         SearchTool(),
         GrepTool(),

@@ -75,10 +75,22 @@ After calling this tool, continue the conversation normally — do NOT wait for 
             else:
                 # Linux: try common terminal emulators in order
                 terminals = [
-                    ["gnome-terminal", "--working-directory", working_dir, "--", "bash", "-c", f"{command}; exec bash"],
+                    [
+                        "gnome-terminal",
+                        "--working-directory",
+                        working_dir,
+                        "--",
+                        "bash",
+                        "-c",
+                        f"{command}; exec bash",
+                    ],
                     ["konsole", "--workdir", working_dir, "-e", f"bash -c '{command}; exec bash'"],
                     ["xterm", "-e", f"bash -c 'cd \"{working_dir}\" && {command}; exec bash'"],
-                    ["x-terminal-emulator", "-e", f"bash -c 'cd \"{working_dir}\" && {command}; exec bash'"],
+                    [
+                        "x-terminal-emulator",
+                        "-e",
+                        f"bash -c 'cd \"{working_dir}\" && {command}; exec bash'",
+                    ],
                 ]
                 for term_cmd in terminals:
                     try:
