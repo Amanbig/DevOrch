@@ -76,7 +76,7 @@ BANNER = r"""
 
 BANNER_SMALL = "[bold blue]DevOrch[/bold blue] - AI Coding Assistant"
 
-VERSION = "0.1.0"
+VERSION = "0.3.0"
 
 # Slash commands with descriptions
 SLASH_COMMANDS = {
