@@ -4,11 +4,12 @@ DevOrch Tools - Tools for interacting with the system.
 Available tools:
 - ShellTool: Execute shell commands
 - OpenTerminalTool: Run a command in a new terminal window (servers, scaffolds, long-running processes)
-- TerminalSessionTool: Managed background sessions with read/send/stop/list
+- TerminalSessionTool: Managed background sessions with read/send/stop/list (persistent across restarts)
 - FilesystemTool: Read, write, list files with line-specific control
 - SearchTool: Find files by glob patterns
 - GrepTool: Search file contents with regex
 - EditTool: Make targeted edits to files
+- MemoryTool: Persistent memory across conversations
 """
 
 from tools.edit import EditTool

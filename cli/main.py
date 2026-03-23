@@ -26,9 +26,12 @@ from config.settings import (
 )
 from core.agent import Agent
 from core.executor import ToolExecutor
+from core.mcp import MCPManager
+from core.memory import MemoryManager, MemoryTool
 from core.modes import AgentMode, ModeManager
 from core.planner import Planner
 from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
+from core.skills import SkillManager
 from core.tasks import get_task_manager, reset_task_manager
 from providers import PROVIDER_ENV_VARS, PROVIDER_INFO, PROVIDERS, get_provider
 from schemas.message import Message
@@ -99,6 +102,12 @@ SLASH_COMMANDS = {
     "/save": "Save conversation to file",
     "/status": "Show current provider, model, and mode",
     "/tasks": "Show current task list",
+    "/memory": "Show saved memories",
+    "/remember": "Save something to memory",
+    "/forget": "Delete a memory",
+    "/skills": "List available skills",
+    "/skill": "Run a skill (e.g. /skill commit)",
+    "/mcp": "Show MCP server status",
 }
 
 # Style for prompt_toolkit (including completion menu)
@@ -169,12 +178,13 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
    - ALWAYS prefer this over `shell` for servers and scaffolds
 
 3. **terminal_session** — Manage a long-running background process across turns:
-   - `start` — launch command in a named background session
+   - `start` — launch command in a named background session (unique name auto-generated)
    - `read`  — read recent stdout/stderr output
    - `send`  — send input to the process stdin
    - `stop`  — terminate the session
-   - `list`  — show all active sessions
-   Use this when you need to check server logs, send commands to a running process, or manage multiple background processes.
+   - `list`  — show all active sessions (includes orphaned sessions from previous runs)
+   - `reconnect` — reconnect to sessions from previous DevOrch runs
+   Sessions persist across DevOrch restarts with unique names (e.g. 'swift-fox-a3f2').
 
 4. **filesystem** - Read/write/list files. Use this to:
    - Read file contents to understand code
@@ -206,9 +216,16 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
    - User asks about something you're unsure about
 
 10. **webfetch** - Fetch content from a specific URL. Use when:
-   - You need to read a documentation page
-   - User provides a URL to check
-   - You found a relevant URL from search results
+    - You need to read a documentation page
+    - User provides a URL to check
+    - You found a relevant URL from search results
+
+11. **memory** - Persistent memory across conversations. Use to:
+    - Save important context: user preferences, project decisions, feedback
+    - Search/load memories from previous conversations
+    - Memory types: user (profile), feedback (corrections), project (context), reference (links)
+    - Proactively save memories when you learn something important about the user or project
+    - Check memories at the start of conversations for relevant context
 
 RULES:
 - When the user asks you to CREATE something (app, file, project), USE THE TOOLS to actually do it
@@ -217,13 +234,21 @@ RULES:
 - Always prefer action over explanation
 - For multi-step tasks, use the task tool to track and show progress
 - IMPORTANT: Use `open_terminal` (not `shell`) for dev servers and interactive scaffold commands
+- When the user corrects you or gives feedback, save it to memory for future conversations
+- When you learn about the user's role, preferences, or project context, save it to memory
 
 When executing shell commands, use the shell tool with the command to run."""
 
 
 class SimplePlanner(Planner):
+    def __init__(self, memory_context: str = ""):
+        self.memory_context = memory_context
+
     def plan(self, history: list[Message]) -> list[Message]:
-        system_prompt = Message(role="system", content=SYSTEM_PROMPT)
+        prompt = SYSTEM_PROMPT
+        if self.memory_context:
+            prompt += "\n" + self.memory_context
+        system_prompt = Message(role="system", content=prompt)
         return [system_prompt] + history
 
 
@@ -558,13 +583,34 @@ def start_repl(
         TaskTool(),
         WebSearchTool(),
         WebFetchTool(),
+        MemoryTool(),
     ]
+
+    # Initialize memory manager and load context
+    memory_manager = MemoryManager()
+    memory_context = memory_manager.get_context_prompt()
+
+    # Initialize skill manager
+    skill_manager = SkillManager()
+
+    # Initialize MCP servers from config
+    mcp_manager = MCPManager()
+    mcp_config = settings.mcp_servers or {}
+
+    mcp_tools = []
+    if mcp_config:
+        with console.status("[bold cyan]Connecting MCP servers...", spinner="dots"):
+            started = mcp_manager.load_from_config(mcp_config)
+        if started:
+            print_success(f"MCP servers connected: {', '.join(started)}")
+            mcp_tools = mcp_manager.get_all_tools()
+            tools.extend(mcp_tools)
 
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
 
     executor = ToolExecutor(tools=tools, require_confirmation=True, mode_manager=mode_manager)
-    planner = SimplePlanner()
+    planner = SimplePlanner(memory_context=memory_context)
 
     def on_session_continue(new_session_id: str):
         print_info(f"Session continued: {new_session_id}")
@@ -596,6 +642,17 @@ def start_repl(
     console.print(
         f"  [dim]Session:[/dim] {session_manager.current_session_id}  [dim]cwd:[/dim] {cwd_short}"
     )
+    # Show memory/skills/MCP status
+    mem_count = len(memory_manager.list_all())
+    skill_count = len(skill_manager.list_skills())
+    mcp_count = len(mcp_manager.servers)
+    extras = []
+    if mem_count:
+        extras.append(f"[dim]memories:[/dim] {mem_count}")
+    extras.append(f"[dim]skills:[/dim] {skill_count}")
+    if mcp_count:
+        extras.append(f"[dim]MCP:[/dim] {mcp_count}")
+    console.print(f"  {' | '.join(extras)}")
     console.print(
         f"  [dim]Mode:[/dim] {mode_manager.get_mode_display()}  [dim]- Type[/dim] / [dim]to see commands[/dim]\n"
     )
@@ -631,6 +688,7 @@ def start_repl(
             )
 
             if user_input.lower() in ("exit", "quit", "q"):
+                mcp_manager.stop_all()
                 print_info(f"Session saved: {session_manager.current_session_id}")
                 break
 
@@ -1080,6 +1138,142 @@ def start_repl(
                         console.print(panel)
                     continue
 
+                elif cmd == "memory":
+                    memories = memory_manager.list_all()
+                    if not memories:
+                        print_info("No memories saved yet.")
+                    else:
+                        console.print(f"\n[bold]Saved Memories ({len(memories)}):[/bold]")
+                        for mem in memories:
+                            type_color = {
+                                "user": "cyan", "feedback": "yellow",
+                                "project": "green", "reference": "blue",
+                            }.get(mem["type"], "white")
+                            console.print(
+                                f"  [{type_color}][{mem['type']}][/{type_color}] "
+                                f"[bold]{mem['name']}[/bold]"
+                            )
+                            console.print(f"    [dim]{mem['description']}[/dim]")
+                            console.print(f"    [dim]File: {mem['filename']}[/dim]")
+                    console.print()
+                    continue
+
+                elif cmd == "remember":
+                    if not cmd_arg:
+                        print_warning("Usage: /remember <what to remember>")
+                        print_info("Example: /remember I prefer tabs over spaces")
+                        continue
+                    # Feed it to the agent as a memory save instruction
+                    remember_prompt = (
+                        f"The user wants you to remember this: \"{cmd_arg}\"\n"
+                        f"Save this to memory using the memory tool. Choose the appropriate "
+                        f"memory type (user/feedback/project/reference) and write a clear "
+                        f"name and description."
+                    )
+                    result = agent.run(remember_prompt, max_iterations=5)
+                    print_panel(result, title="Memory", border_style="cyan")
+                    continue
+
+                elif cmd == "forget":
+                    if not cmd_arg:
+                        memories = memory_manager.list_all()
+                        if not memories:
+                            print_info("No memories to forget.")
+                            continue
+                        # Let user pick which to delete
+                        memory_choices = [
+                            questionary.Choice(
+                                f"[{mem['type']}] {mem['name']}",
+                                value=mem['filename'],
+                            )
+                            for mem in memories
+                        ]
+                        try:
+                            to_delete = questionary.select(
+                                "Select memory to forget:",
+                                choices=memory_choices,
+                                style=QUESTIONARY_STYLE,
+                            ).ask()
+                            if to_delete and memory_manager.delete(to_delete):
+                                print_success(f"Forgot: {to_delete}")
+                            else:
+                                print_info("Cancelled.")
+                        except (KeyboardInterrupt, EOFError):
+                            continue
+                    else:
+                        # Try to find and delete by name match
+                        memories = memory_manager.search(query=cmd_arg)
+                        if memories:
+                            if memory_manager.delete(memories[0]["filename"]):
+                                print_success(f"Forgot: {memories[0]['name']}")
+                            else:
+                                print_error("Failed to delete memory.")
+                        else:
+                            print_warning(f"No memory found matching '{cmd_arg}'")
+                    continue
+
+                elif cmd == "skills":
+                    skills = skill_manager.list_skills()
+                    console.print(f"\n[bold]Available Skills ({len(skills)}):[/bold]")
+                    for sk in skills:
+                        source = "[dim](built-in)[/dim]" if sk["source"] == "built-in" else "[dim](custom)[/dim]"
+                        console.print(
+                            f"  [cyan]/{sk['name']}[/cyan] - {sk['description']} {source}"
+                        )
+                    console.print(
+                        "\n[dim]Use /skill <name> to run a skill. "
+                        "Add custom skills in ~/.devorch/skills/[/dim]\n"
+                    )
+                    continue
+
+                elif cmd == "skill":
+                    if not cmd_arg:
+                        print_warning("Usage: /skill <name>")
+                        print_info("Use /skills to see available skills")
+                        continue
+                    skill_name = cmd_arg.split()[0]
+                    skill = skill_manager.get(skill_name)
+                    if not skill:
+                        print_error(f"Unknown skill: {skill_name}")
+                        print_info("Use /skills to see available skills")
+                        continue
+                    console.print(f"  [dim]Running skill:[/dim] [cyan]{skill_name}[/cyan] - {skill['description']}")
+                    result = agent.run(skill["prompt"], max_iterations=15)
+                    print_panel(result, title=f"Skill: {skill_name}", border_style="cyan")
+                    continue
+
+                elif cmd == "mcp":
+                    servers = mcp_manager.list_servers()
+                    if not servers:
+                        console.print("\n[bold]MCP Servers:[/bold] None connected")
+                        console.print(
+                            "[dim]Configure MCP servers in ~/.devorch/config.yaml:[/dim]"
+                        )
+                        console.print(
+                            "[dim]  mcp_servers:\n"
+                            "    my-server:\n"
+                            "      command: npx\n"
+                            "      args: [\"-y\", \"@modelcontextprotocol/server-xxx\"][/dim]\n"
+                        )
+                    else:
+                        console.print(f"\n[bold]MCP Servers ({len(servers)}):[/bold]")
+                        for srv in servers:
+                            status = "[green]running[/green]" if srv["running"] else "[red]stopped[/red]"
+                            console.print(f"  [cyan]{srv['name']}[/cyan] - {status}")
+                            if srv["tools"]:
+                                console.print(f"    Tools: {', '.join(srv['tools'])}")
+                    console.print()
+                    continue
+
+                # Also handle direct skill invocation (e.g. /commit, /review)
+                elif cmd in [s["name"] for s in skill_manager.list_skills()]:
+                    skill = skill_manager.get(cmd)
+                    if skill:
+                        console.print(f"  [dim]Running skill:[/dim] [cyan]{cmd}[/cyan] - {skill['description']}")
+                        result = agent.run(skill["prompt"], max_iterations=15)
+                        print_panel(result, title=f"Skill: {cmd}", border_style="cyan")
+                        continue
+
                 else:
                     print_warning(f"Unknown command: /{cmd}")
                     print_info("Type /help to see available commands")
@@ -1089,6 +1283,7 @@ def start_repl(
             print_panel(result, title="DevOrch", border_style="green")
 
         except (typer.Abort, EOFError):
+            mcp_manager.stop_all()
             print_info(f"\nSession saved: {session_manager.current_session_id}")
             break
         except KeyboardInterrupt:
@@ -1202,9 +1397,14 @@ def ask(
         TaskTool(),
         WebSearchTool(),
         WebFetchTool(),
+        MemoryTool(),
     ]
+
+    memory_mgr = MemoryManager()
+    memory_ctx = memory_mgr.get_context_prompt()
+
     executor = ToolExecutor(tools=tools)
-    planner = SimplePlanner()
+    planner = SimplePlanner(memory_context=memory_ctx)
 
     agent = Agent(provider=llm, planner=planner, executor=executor, tools=tools)
 

@@ -33,6 +33,7 @@ class ProviderConfig:
 class Settings:
     default_provider: str = "openai"
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
+    mcp_servers: dict[str, dict] = field(default_factory=dict)
 
     @classmethod
     def load(cls) -> "Settings":
@@ -47,6 +48,7 @@ class Settings:
                 settings.default_provider = data.get("default_provider", "openai")
                 for name, config in data.get("providers", {}).items():
                     settings.providers[name] = ProviderConfig(**config)
+                settings.mcp_servers = data.get("mcp_servers", {})
             except Exception:
                 pass  # Fall back to defaults if config is invalid
 
@@ -168,6 +170,10 @@ def save_config(settings: Settings):
             provider_data["base_url"] = config.base_url
         if provider_data:
             data["providers"][name] = provider_data
+
+    # Include MCP server config
+    if settings.mcp_servers:
+        data["mcp_servers"] = settings.mcp_servers
 
     with open(CONFIG_FILE, "w") as f:
         yaml.safe_dump(data, f, default_flow_style=False)

@@ -133,6 +133,25 @@ class Agent:
             display_url = url[:60] + "..." if len(url) > 60 else url
             console.print(f"  [dim]>[/dim] [cyan]fetching[/cyan] [bold]{display_url}[/bold]")
 
+        elif call.name == "memory":
+            action = args.get("action", "")
+            name = args.get("name", "")
+            query = args.get("query", "")
+            if action == "save":
+                console.print(f"  [dim]>[/dim] [cyan]saving memory[/cyan] [bold]{name}[/bold]")
+            elif action == "search":
+                console.print(f"  [dim]>[/dim] [cyan]searching memory[/cyan] [bold]{query}[/bold]")
+            elif action == "list":
+                console.print(f"  [dim]>[/dim] [cyan]listing memories[/cyan]")
+            elif action == "delete":
+                console.print(f"  [dim]>[/dim] [cyan]deleting memory[/cyan] [bold]{args.get('filename', '')}[/bold]")
+            else:
+                console.print(f"  [dim]>[/dim] [cyan]memory {action}[/cyan]")
+
+        elif call.name.startswith("mcp_"):
+            # MCP tool call
+            console.print(f"  [dim]>[/dim] [magenta]MCP[/magenta] [cyan]{call.name}[/cyan]")
+
         else:
             # Generic fallback - show tool name and brief args
             brief_args = {
