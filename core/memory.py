@@ -6,7 +6,6 @@ Memory files are stored as markdown with YAML frontmatter under
 ~/.devorch/memory/, with a MEMORY.md index file.
 """
 
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -58,7 +57,7 @@ def _create_frontmatter(name: str, description: str, mem_type: str) -> str:
 name: {name}
 description: {description}
 type: {mem_type}
-created: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+created: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 ---"""
 
 
@@ -137,14 +136,16 @@ class MemoryManager:
                 if query.lower() not in searchable.lower():
                     continue
 
-            results.append({
-                "filename": filepath.name,
-                "name": metadata.get("name", ""),
-                "description": metadata.get("description", ""),
-                "type": metadata.get("type", ""),
-                "created": metadata.get("created", ""),
-                "content": body,
-            })
+            results.append(
+                {
+                    "filename": filepath.name,
+                    "name": metadata.get("name", ""),
+                    "description": metadata.get("description", ""),
+                    "type": metadata.get("type", ""),
+                    "created": metadata.get("created", ""),
+                    "content": body,
+                }
+            )
 
         return results
 
@@ -171,13 +172,15 @@ class MemoryManager:
             content = filepath.read_text(encoding="utf-8")
             metadata, _ = _parse_frontmatter(content)
 
-            results.append({
-                "filename": filepath.name,
-                "name": metadata.get("name", ""),
-                "description": metadata.get("description", ""),
-                "type": metadata.get("type", ""),
-                "created": metadata.get("created", ""),
-            })
+            results.append(
+                {
+                    "filename": filepath.name,
+                    "name": metadata.get("name", ""),
+                    "description": metadata.get("description", ""),
+                    "type": metadata.get("type", ""),
+                    "created": metadata.get("created", ""),
+                }
+            )
 
         return results
 

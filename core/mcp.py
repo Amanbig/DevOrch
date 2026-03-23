@@ -23,10 +23,8 @@ Each server communicates via JSON-RPC over stdio.
 import json
 import os
 import subprocess
-import sys
 import threading
 import time
-from pathlib import Path
 from typing import Any
 
 from tools.base import Tool
@@ -70,8 +68,14 @@ def _jsonrpc_notification(method: str, params: dict | None = None) -> bytes:
 class MCPServer:
     """Manages a connection to a single MCP server process."""
 
-    def __init__(self, name: str, command: str, args: list[str] | None = None,
-                 env: dict[str, str] | None = None, cwd: str | None = None):
+    def __init__(
+        self,
+        name: str,
+        command: str,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+    ):
         self.name = name
         self.command = command
         self.args = args or []
@@ -330,12 +334,14 @@ class MCPManager:
         """List all connected servers and their tools."""
         result = []
         for name, server in self.servers.items():
-            result.append({
-                "name": name,
-                "running": server._running,
-                "tools": [t.get("name", "") for t in server.tools],
-                "server_info": server._server_info,
-            })
+            result.append(
+                {
+                    "name": name,
+                    "running": server._running,
+                    "tools": [t.get("name", "") for t in server.tools],
+                    "server_info": server._server_info,
+                }
+            )
         return result
 
 
@@ -352,17 +358,18 @@ class MCPToolProxy(Tool):
 
         # Set tool name with server prefix to avoid conflicts
         self.name = f"mcp_{server_name}_{tool_def.get('name', 'unknown')}"
-        self.description = (
-            f"[MCP: {server_name}] {tool_def.get('description', 'No description')}"
-        )
+        self.description = f"[MCP: {server_name}] {tool_def.get('description', 'No description')}"
         self.args_schema = None  # MCP tools use raw JSON schema
 
     def schema(self) -> dict[str, Any]:
         """Return the tool schema for LLM consumption."""
-        input_schema = self._tool_def.get("inputSchema", {
-            "type": "object",
-            "properties": {},
-        })
+        input_schema = self._tool_def.get(
+            "inputSchema",
+            {
+                "type": "object",
+                "properties": {},
+            },
+        )
 
         return {
             "name": self.name,

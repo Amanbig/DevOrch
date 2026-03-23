@@ -142,9 +142,11 @@ class Agent:
             elif action == "search":
                 console.print(f"  [dim]>[/dim] [cyan]searching memory[/cyan] [bold]{query}[/bold]")
             elif action == "list":
-                console.print(f"  [dim]>[/dim] [cyan]listing memories[/cyan]")
+                console.print("  [dim]>[/dim] [cyan]listing memories[/cyan]")
             elif action == "delete":
-                console.print(f"  [dim]>[/dim] [cyan]deleting memory[/cyan] [bold]{args.get('filename', '')}[/bold]")
+                console.print(
+                    f"  [dim]>[/dim] [cyan]deleting memory[/cyan] [bold]{args.get('filename', '')}[/bold]"
+                )
             else:
                 console.print(f"  [dim]>[/dim] [cyan]memory {action}[/cyan]")
 

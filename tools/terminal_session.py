@@ -14,7 +14,6 @@ import random
 import signal
 import string
 import subprocess
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -35,14 +34,56 @@ _LOCK = threading.Lock()
 
 # Adjectives and nouns for human-readable unique names
 _ADJECTIVES = [
-    "swift", "bright", "calm", "dark", "eager", "fast", "green", "happy",
-    "iron", "keen", "light", "merry", "noble", "proud", "quick", "red",
-    "sharp", "tall", "vivid", "warm", "bold", "cool", "deep", "fine",
+    "swift",
+    "bright",
+    "calm",
+    "dark",
+    "eager",
+    "fast",
+    "green",
+    "happy",
+    "iron",
+    "keen",
+    "light",
+    "merry",
+    "noble",
+    "proud",
+    "quick",
+    "red",
+    "sharp",
+    "tall",
+    "vivid",
+    "warm",
+    "bold",
+    "cool",
+    "deep",
+    "fine",
 ]
 _NOUNS = [
-    "fox", "hawk", "lion", "wolf", "bear", "deer", "dove", "eagle",
-    "frog", "goat", "hare", "kite", "lark", "mole", "newt", "owl",
-    "pike", "ram", "seal", "toad", "wren", "crow", "lynx", "orca",
+    "fox",
+    "hawk",
+    "lion",
+    "wolf",
+    "bear",
+    "deer",
+    "dove",
+    "eagle",
+    "frog",
+    "goat",
+    "hare",
+    "kite",
+    "lark",
+    "mole",
+    "newt",
+    "owl",
+    "pike",
+    "ram",
+    "seal",
+    "toad",
+    "wren",
+    "crow",
+    "lynx",
+    "orca",
 ]
 
 

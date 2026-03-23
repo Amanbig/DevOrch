@@ -34,6 +34,7 @@ from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
 from core.skills import SkillManager
 from core.tasks import get_task_manager, reset_task_manager
 from providers import PROVIDER_ENV_VARS, PROVIDER_INFO, PROVIDERS, get_provider
+from providers.base import ModelInfo
 from schemas.message import Message
 from tools.edit import EditTool
 from tools.filesystem import FilesystemTool
@@ -130,7 +131,10 @@ PROMPT_STYLE = Style.from_dict(
 
 
 class SlashCommandCompleter(Completer):
-    """Autocomplete for slash commands."""
+    """Autocomplete for slash commands and skill shortcuts."""
+
+    def __init__(self, skill_manager=None):
+        self._skill_manager = skill_manager
 
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
@@ -142,15 +146,30 @@ class SlashCommandCompleter(Completer):
         # Get the partial command
         partial = text.lower()
 
+        # Built-in slash commands
         for cmd, desc in SLASH_COMMANDS.items():
             if cmd.startswith(partial):
-                # Calculate how much to complete
                 yield Completion(
                     cmd,
                     start_position=-len(text),
                     display=HTML(f"<command>{cmd}</command> <description>- {desc}</description>"),
                     display_meta=desc,
                 )
+
+        # Skill shortcuts (e.g. /commit, /review)
+        if self._skill_manager:
+            for skill in self._skill_manager.list_skills():
+                skill_cmd = f"/{skill['name']}"
+                if skill_cmd.startswith(partial) and skill_cmd not in SLASH_COMMANDS:
+                    yield Completion(
+                        skill_cmd,
+                        start_position=-len(text),
+                        display=HTML(
+                            f"<command>{skill_cmd}</command> "
+                            f"<description>- {skill['description']}</description>"
+                        ),
+                        display_meta=f"skill: {skill['description']}",
+                    )
 
 
 def print_banner(small: bool = False):
@@ -238,6 +257,125 @@ RULES:
 - When you learn about the user's role, preferences, or project context, save it to memory
 
 When executing shell commands, use the shell tool with the command to run."""
+
+
+def _format_model_choice(model: ModelInfo, current_model: str = "") -> questionary.Choice:
+    """Build a rich questionary choice for a model."""
+    is_current = model.id == current_model
+    prefix = "[current] " if is_current else ""
+
+    parts = [prefix, model.id]
+    if model.context_length:
+        parts.append(f" ({model.context_length:,} ctx)")
+    if model.description:
+        parts.append(f" - {model.description[:50]}")
+
+    display = "".join(parts)
+    return questionary.Choice(display, value=model.id)
+
+
+def _interactive_model_select(
+    models: list[ModelInfo],
+    provider_name: str,
+    current_model: str = "",
+    prompt_text: str | None = None,
+) -> str | None:
+    """Interactive model selection with search/filter support.
+
+    Shows ALL models (no truncation), uses questionary fuzzy select
+    for large lists, regular select for small ones.
+    """
+    if not models:
+        print_warning("No models available.")
+        return None
+
+    prompt_text = prompt_text or f"Select model for {provider_name}:"
+
+    choices = [_format_model_choice(m, current_model) for m in models]
+
+    try:
+        # Use fuzzy select for large lists (searchable), regular for small
+        if len(models) > 15:
+            # questionary.autocomplete / fuzzy for large lists
+            # Build a name->value map for autocomplete
+            model_ids = [m.id for m in models]
+            selected = questionary.autocomplete(
+                prompt_text,
+                choices=model_ids,
+                style=QUESTIONARY_STYLE,
+                meta_information={
+                    m.id: (m.description or f"{m.context_length or '?'} ctx") for m in models
+                },
+                instruction="(Type to filter, Enter to select)",
+            ).ask()
+            return selected
+        else:
+            selected = questionary.select(
+                prompt_text,
+                choices=choices,
+                style=QUESTIONARY_STYLE,
+                instruction="(Use arrow keys, Enter to select)",
+            ).ask()
+            return selected
+    except (KeyboardInterrupt, EOFError):
+        return None
+
+
+def _interactive_provider_select(
+    current_provider: str,
+    current_settings: "Settings",
+) -> str | None:
+    """Interactive provider selection with status indicators."""
+    provider_choices = []
+    for name, desc in PROVIDER_INFO.items():
+        has_key = bool(current_settings.get_api_key(name))
+        is_current = name == current_provider
+
+        # Status indicator
+        if is_current:
+            status_icon = " [green]● active[/green]"
+        elif name in ("local", "lmstudio"):
+            status_icon = " [dim](local)[/dim]"
+        elif has_key:
+            status_icon = " [green](ready)[/green]"
+        else:
+            status_icon = " [yellow](needs key)[/yellow]"
+
+        display = f"{'> ' if is_current else '  '}{name:<14} {desc}{status_icon}"
+        provider_choices.append(questionary.Choice(display, value=name))
+
+    try:
+        return questionary.select(
+            "Select provider:",
+            choices=provider_choices,
+            style=QUESTIONARY_STYLE,
+            instruction="(Use arrow keys, Enter to select)",
+        ).ask()
+    except (KeyboardInterrupt, EOFError):
+        return None
+
+
+def _fuzzy_match_model(query: str, models: list[ModelInfo]) -> ModelInfo | None:
+    """Find the best model match for a partial name query."""
+    query_lower = query.lower()
+
+    # Exact match
+    for m in models:
+        if m.id.lower() == query_lower:
+            return m
+
+    # Prefix match
+    prefix_matches = [m for m in models if m.id.lower().startswith(query_lower)]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
+
+    # Contains match
+    contains_matches = [m for m in models if query_lower in m.id.lower()]
+    if len(contains_matches) == 1:
+        return contains_matches[0]
+
+    # If multiple matches, return None (ambiguous)
+    return None
 
 
 class SimplePlanner(Planner):
@@ -346,14 +484,9 @@ def run_onboarding() -> str | None:
                 models = temp_provider.list_models()
 
             if models:
-                model_choices = [questionary.Choice(m.id, value=m.id) for m in models[:15]]
-
-                selected_model = questionary.select(
-                    "Select a model:",
-                    choices=model_choices,
-                    style=QUESTIONARY_STYLE,
-                    instruction="(Use arrow keys)",
-                ).ask()
+                selected_model = _interactive_model_select(
+                    models, provider, prompt_text="Select a model:"
+                )
 
                 if selected_model:
                     if provider not in settings.providers:
@@ -420,21 +553,9 @@ def run_onboarding() -> str | None:
             models = temp_provider.list_models()
 
         if models:
-            model_choices = []
-            for m in models[:15]:
-                desc = (
-                    f" - {m.description[:40]}..."
-                    if m.description and len(m.description) > 40
-                    else ""
-                )
-                model_choices.append(questionary.Choice(f"{m.id}{desc}", value=m.id))
-
-            selected_model = questionary.select(
-                "Select a model:",
-                choices=model_choices,
-                style=QUESTIONARY_STYLE,
-                instruction="(Use arrow keys)",
-            ).ask()
+            selected_model = _interactive_model_select(
+                models, provider, prompt_text="Select a model:"
+            )
 
             if selected_model:
                 settings.providers[provider].default_model = selected_model
@@ -658,7 +779,7 @@ def start_repl(
     )
 
     # Create completer for slash commands
-    completer = SlashCommandCompleter()
+    completer = SlashCommandCompleter(skill_manager=skill_manager)
 
     # Track current provider/model for switching
     current_llm = llm
@@ -702,19 +823,47 @@ def start_repl(
                 cmd_arg = cmd_parts[1] if len(cmd_parts) > 1 else None
 
                 if cmd == "help":
-                    console.print("\n[bold]Available Commands:[/bold]")
-                    for slash_cmd, desc in SLASH_COMMANDS.items():
-                        console.print(f"  [cyan]{slash_cmd:<14}[/cyan] - {desc}")
-                    console.print(f"  [cyan]{'exit':<14}[/cyan] - Exit DevOrch")
-                    console.print("\n[bold]Modes:[/bold]")
+                    console.print()
+
+                    # Group commands by category
+                    categories = {
+                        "Modes": ["/mode", "/plan", "/auto", "/ask"],
+                        "Provider & Model": ["/providers", "/provider", "/models", "/model"],
+                        "Session": ["/session", "/history", "/undo", "/clear", "/compact", "/save"],
+                        "Memory": ["/memory", "/remember", "/forget"],
+                        "Skills": ["/skills", "/skill"],
+                        "Tools & Config": ["/tasks", "/config", "/permissions", "/mcp", "/status"],
+                    }
+
+                    for category, cmds in categories.items():
+                        console.print(f"  [bold]{category}[/bold]")
+                        for slash_cmd in cmds:
+                            desc = SLASH_COMMANDS.get(slash_cmd, "")
+                            console.print(f"    [cyan]{slash_cmd:<16}[/cyan] {desc}")
+                        console.print()
+
+                    console.print(f"    [cyan]{'exit':<16}[/cyan] Exit DevOrch")
+
+                    # Show available skills as shortcuts
+                    skill_names = [s["name"] for s in skill_manager.list_skills()]
+                    if skill_names:
+                        console.print(
+                            f"\n  [bold]Skill Shortcuts:[/bold]  /{', /'.join(skill_names)}"
+                        )
+
+                    console.print("\n  [bold]Modes:[/bold]")
                     console.print(
-                        "  [yellow]PLAN[/yellow] - Shows plan before executing, asks for approval"
+                        "    [yellow]PLAN[/yellow] - Shows plan before executing, asks for approval"
                     )
                     console.print(
-                        "  [green]AUTO[/green] - Executes tools automatically (trusted mode)"
+                        "    [green]AUTO[/green] - Executes tools automatically (trusted mode)"
                     )
-                    console.print("  [blue]ASK[/blue]  - Asks before each tool execution (default)")
-                    console.print("\n[dim]Tip: Type / and use Tab for autocomplete[/dim]\n")
+                    console.print(
+                        "    [blue]ASK[/blue]  - Asks before each tool execution (default)"
+                    )
+                    console.print(
+                        "\n[dim]  Tip: Type / and Tab for autocomplete | /model supports partial match[/dim]\n"
+                    )
                     continue
 
                 elif cmd == "mode":
@@ -783,9 +932,17 @@ def start_repl(
 
                 elif cmd == "status":
                     console.print("\n[bold]Status[/bold]")
-                    console.print(f"  [dim]Provider:[/dim] [cyan]{current_llm.name}[/cyan]")
-                    console.print(f"  [dim]Model:[/dim]    [cyan]{current_llm.model}[/cyan]")
-                    console.print(f"  [dim]Mode:[/dim]     {mode_manager.get_mode_display()}")
+                    console.print(f"  [dim]Provider:[/dim]  [cyan]{current_llm.name}[/cyan]")
+                    console.print(f"  [dim]Model:[/dim]     [cyan]{current_llm.model}[/cyan]")
+                    console.print(f"  [dim]Mode:[/dim]      {mode_manager.get_mode_display()}")
+                    console.print(f"  [dim]Session:[/dim]   {session_manager.current_session_id}")
+                    console.print(f"  [dim]Messages:[/dim]  {len(agent.history)}")
+                    _mem_count = len(memory_manager.list_all())
+                    console.print(f"  [dim]Memories:[/dim]  {_mem_count}")
+                    console.print(f"  [dim]Skills:[/dim]    {len(skill_manager.list_skills())}")
+                    _mcp_count = len(mcp_manager.servers)
+                    if _mcp_count:
+                        console.print(f"  [dim]MCP:[/dim]       {_mcp_count} server(s)")
                     console.print()
                     continue
 
@@ -836,65 +993,94 @@ def start_repl(
                     continue
 
                 elif cmd == "models":
-                    console.print(f"\n[bold]Available models for {current_llm.name}:[/bold]")
                     try:
                         with console.status("[dim]Fetching models...", spinner="dots"):
                             models = current_llm.list_models()
-                        for m in models[:30]:  # Limit display
+
+                        if not models:
+                            print_warning("No models available.")
+                            continue
+
+                        # Use a rich table for clean display
+                        table = Table(
+                            title=f"Models for {current_llm.name} ({len(models)} available)",
+                            show_lines=False,
+                            padding=(0, 1),
+                        )
+                        table.add_column("", width=2)
+                        table.add_column("Model ID", style="cyan", no_wrap=True)
+                        table.add_column("Context", style="dim", justify="right")
+                        table.add_column("Info", style="dim")
+
+                        for m in models:
                             marker = "[green]>[/green]" if m.id == current_llm.model else " "
-                            ctx = f" ({m.context_length} ctx)" if m.context_length else ""
-                            # Show tool capability warning for local models
-                            desc = ""
-                            if m.description:
-                                if "no tool" in m.description.lower():
-                                    desc = f" [yellow]{m.description}[/yellow]"
-                                else:
-                                    desc = f" [dim]{m.description}[/dim]"
-                            console.print(f"  {marker} {m.id}{ctx}{desc}")
-                        if len(models) > 30:
-                            console.print(f"  [dim]... and {len(models) - 30} more[/dim]")
+                            ctx = f"{m.context_length:,}" if m.context_length else ""
+                            desc = m.description or ""
+                            if "no tool" in desc.lower():
+                                desc = f"[yellow]{desc}[/yellow]"
+                            table.add_row(marker, m.id, ctx, desc)
+
+                        console.print()
+                        console.print(table)
+
                         if current_llm.name == "local":
                             console.print(
                                 "\n  [dim]For tool/function calling, use 7B+ models[/dim]"
                             )
                     except Exception as e:
                         print_error(f"Failed to fetch models: {e}")
-                    console.print("\n[dim]Use /model <name> to switch[/dim]\n")
+                    console.print(
+                        "\n[dim]Use /model <name> to switch (supports partial match)[/dim]\n"
+                    )
                     continue
 
                 elif cmd == "model":
                     selected_model = cmd_arg
 
-                    if not selected_model:
-                        # Interactive model selection
-                        try:
-                            with console.status("[cyan]Fetching models...", spinner="dots"):
-                                models = current_llm.list_models()
+                    try:
+                        with console.status("[cyan]Fetching models...", spinner="dots"):
+                            models = current_llm.list_models()
+                    except Exception as e:
+                        print_error(f"Failed to fetch models: {e}")
+                        continue
 
-                            if models:
-                                model_choices = []
-                                for m in models[:20]:
-                                    is_current = m.id == current_llm.model
-                                    prefix = "> " if is_current else "  "
-                                    ctx = f" ({m.context_length} ctx)" if m.context_length else ""
-                                    model_choices.append(
-                                        questionary.Choice(f"{prefix}{m.id}{ctx}", value=m.id)
-                                    )
+                    if not models:
+                        print_warning("No models available")
+                        continue
 
-                                selected_model = questionary.select(
-                                    f"Select model for {current_llm.name}:",
-                                    choices=model_choices,
-                                    style=QUESTIONARY_STYLE,
-                                    instruction="(Use arrow keys)",
-                                ).ask()
-
+                    if selected_model:
+                        # User typed /model <name> — try fuzzy match
+                        match = _fuzzy_match_model(selected_model, models)
+                        if match:
+                            selected_model = match.id
+                            if match.id != cmd_arg:
+                                print_info(f"Matched: {match.id}")
+                        else:
+                            # Check if there are multiple partial matches
+                            partial = [m for m in models if cmd_arg.lower() in m.id.lower()]
+                            if partial:
+                                console.print(
+                                    f"\n[yellow]Multiple matches for '{cmd_arg}':[/yellow]"
+                                )
+                                selected_model = _interactive_model_select(
+                                    partial,
+                                    current_llm.name,
+                                    current_llm.model,
+                                    prompt_text="Select from matches:",
+                                )
                                 if not selected_model:
                                     continue
                             else:
-                                print_warning("No models available")
-                                continue
-                        except Exception as e:
-                            print_error(f"Failed to fetch models: {e}")
+                                # No match at all — use it as-is (user might know what they want)
+                                selected_model = cmd_arg
+                    else:
+                        # Interactive selection — show ALL models
+                        selected_model = _interactive_model_select(
+                            models,
+                            current_llm.name,
+                            current_llm.model,
+                        )
+                        if not selected_model:
                             continue
 
                     try:
@@ -935,21 +1121,40 @@ def start_repl(
                     continue
 
                 elif cmd == "providers":
-                    console.print("\n[bold]Available Providers:[/bold]")
+                    table = Table(
+                        title=f"Available Providers ({len(PROVIDER_INFO)})",
+                        show_lines=False,
+                        padding=(0, 1),
+                    )
+                    table.add_column("", width=2)
+                    table.add_column("Provider", style="cyan", no_wrap=True, min_width=12)
+                    table.add_column("Description", style="white")
+                    table.add_column("Status", justify="right")
+                    table.add_column("Model", style="dim")
+
                     for name, desc in PROVIDER_INFO.items():
                         marker = "[green]>[/green]" if name == current_llm.name else " "
                         env_var = PROVIDER_ENV_VARS.get(name)
-                        key_status = ""
-                        if env_var:
-                            has_key = bool(current_settings.get_api_key(name))
-                            key_status = (
-                                " [green](configured)[/green]"
-                                if has_key
-                                else " [yellow](needs key)[/yellow]"
-                            )
+
+                        if name == current_llm.name:
+                            status = "[green]active[/green]"
+                            model = current_llm.model
                         elif name in ("local", "lmstudio"):
-                            key_status = " [dim](no key needed)[/dim]"
-                        console.print(f"  {marker} [cyan]{name:<12}[/cyan] - {desc}{key_status}")
+                            status = "[dim]local[/dim]"
+                            model = current_settings.get_default_model(name) or ""
+                        elif env_var and current_settings.get_api_key(name):
+                            status = "[green]ready[/green]"
+                            model = current_settings.get_default_model(name) or ""
+                        else:
+                            status = "[yellow]needs key[/yellow]"
+                            model = ""
+
+                        # Clean description (remove provider name prefix)
+                        short_desc = desc.split(" - ", 1)[1] if " - " in desc else desc
+                        table.add_row(marker, name, short_desc, status, model[:25])
+
+                    console.print()
+                    console.print(table)
                     console.print("\n[dim]Use /provider <name> to switch[/dim]\n")
                     continue
 
@@ -957,32 +1162,10 @@ def start_repl(
                     if cmd_arg:
                         new_provider = cmd_arg.lower()
                     else:
-                        # Interactive provider selection
-                        provider_choices = []
-                        for name, desc in PROVIDER_INFO.items():
-                            has_key = bool(current_settings.get_api_key(name))
-                            status = ""
-                            if name in ("local", "lmstudio"):
-                                status = " (local)"
-                            elif has_key:
-                                status = " (configured)"
-                            else:
-                                status = " (needs key)"
-
-                            is_current = name == current_llm.name
-                            display = f"{'> ' if is_current else '  '}{name} - {desc}{status}"
-                            provider_choices.append(questionary.Choice(display, value=name))
-
-                        try:
-                            new_provider = questionary.select(
-                                "Select provider:",
-                                choices=provider_choices,
-                                style=QUESTIONARY_STYLE,
-                                instruction="(Use arrow keys)",
-                            ).ask()
-                            if not new_provider:
-                                continue
-                        except (KeyboardInterrupt, EOFError):
+                        new_provider = _interactive_provider_select(
+                            current_llm.name, current_settings
+                        )
+                        if not new_provider:
                             continue
 
                     if new_provider not in PROVIDERS:
@@ -1027,21 +1210,17 @@ def start_repl(
                                     current_settings.providers[new_provider] = ProviderConfig()
                                 current_settings.providers[new_provider].api_key = entered_key
 
-                                # Offer model selection with questionary
+                                # Offer model selection
                                 try:
                                     with console.status("[cyan]Fetching models...", spinner="dots"):
                                         temp_llm = get_provider(new_provider, api_key=entered_key)
                                         models = temp_llm.list_models()
                                     if models:
-                                        model_choices = [
-                                            questionary.Choice(m.id, value=m.id)
-                                            for m in models[:12]
-                                        ]
-                                        selected_model = questionary.select(
-                                            "Select a model:",
-                                            choices=model_choices,
-                                            style=QUESTIONARY_STYLE,
-                                        ).ask()
+                                        selected_model = _interactive_model_select(
+                                            models,
+                                            new_provider,
+                                            prompt_text="Select a model:",
+                                        )
                                         if selected_model:
                                             current_settings.providers[
                                                 new_provider
@@ -1146,8 +1325,10 @@ def start_repl(
                         console.print(f"\n[bold]Saved Memories ({len(memories)}):[/bold]")
                         for mem in memories:
                             type_color = {
-                                "user": "cyan", "feedback": "yellow",
-                                "project": "green", "reference": "blue",
+                                "user": "cyan",
+                                "feedback": "yellow",
+                                "project": "green",
+                                "reference": "blue",
                             }.get(mem["type"], "white")
                             console.print(
                                 f"  [{type_color}][{mem['type']}][/{type_color}] "
@@ -1165,7 +1346,7 @@ def start_repl(
                         continue
                     # Feed it to the agent as a memory save instruction
                     remember_prompt = (
-                        f"The user wants you to remember this: \"{cmd_arg}\"\n"
+                        f'The user wants you to remember this: "{cmd_arg}"\n'
                         f"Save this to memory using the memory tool. Choose the appropriate "
                         f"memory type (user/feedback/project/reference) and write a clear "
                         f"name and description."
@@ -1184,7 +1365,7 @@ def start_repl(
                         memory_choices = [
                             questionary.Choice(
                                 f"[{mem['type']}] {mem['name']}",
-                                value=mem['filename'],
+                                value=mem["filename"],
                             )
                             for mem in memories
                         ]
@@ -1216,7 +1397,11 @@ def start_repl(
                     skills = skill_manager.list_skills()
                     console.print(f"\n[bold]Available Skills ({len(skills)}):[/bold]")
                     for sk in skills:
-                        source = "[dim](built-in)[/dim]" if sk["source"] == "built-in" else "[dim](custom)[/dim]"
+                        source = (
+                            "[dim](built-in)[/dim]"
+                            if sk["source"] == "built-in"
+                            else "[dim](custom)[/dim]"
+                        )
                         console.print(
                             f"  [cyan]/{sk['name']}[/cyan] - {sk['description']} {source}"
                         )
@@ -1237,7 +1422,9 @@ def start_repl(
                         print_error(f"Unknown skill: {skill_name}")
                         print_info("Use /skills to see available skills")
                         continue
-                    console.print(f"  [dim]Running skill:[/dim] [cyan]{skill_name}[/cyan] - {skill['description']}")
+                    console.print(
+                        f"  [dim]Running skill:[/dim] [cyan]{skill_name}[/cyan] - {skill['description']}"
+                    )
                     result = agent.run(skill["prompt"], max_iterations=15)
                     print_panel(result, title=f"Skill: {skill_name}", border_style="cyan")
                     continue
@@ -1246,19 +1433,19 @@ def start_repl(
                     servers = mcp_manager.list_servers()
                     if not servers:
                         console.print("\n[bold]MCP Servers:[/bold] None connected")
-                        console.print(
-                            "[dim]Configure MCP servers in ~/.devorch/config.yaml:[/dim]"
-                        )
+                        console.print("[dim]Configure MCP servers in ~/.devorch/config.yaml:[/dim]")
                         console.print(
                             "[dim]  mcp_servers:\n"
                             "    my-server:\n"
                             "      command: npx\n"
-                            "      args: [\"-y\", \"@modelcontextprotocol/server-xxx\"][/dim]\n"
+                            '      args: ["-y", "@modelcontextprotocol/server-xxx"][/dim]\n'
                         )
                     else:
                         console.print(f"\n[bold]MCP Servers ({len(servers)}):[/bold]")
                         for srv in servers:
-                            status = "[green]running[/green]" if srv["running"] else "[red]stopped[/red]"
+                            status = (
+                                "[green]running[/green]" if srv["running"] else "[red]stopped[/red]"
+                            )
                             console.print(f"  [cyan]{srv['name']}[/cyan] - {status}")
                             if srv["tools"]:
                                 console.print(f"    Tools: {', '.join(srv['tools'])}")
@@ -1269,7 +1456,9 @@ def start_repl(
                 elif cmd in [s["name"] for s in skill_manager.list_skills()]:
                     skill = skill_manager.get(cmd)
                     if skill:
-                        console.print(f"  [dim]Running skill:[/dim] [cyan]{cmd}[/cyan] - {skill['description']}")
+                        console.print(
+                            f"  [dim]Running skill:[/dim] [cyan]{cmd}[/cyan] - {skill['description']}"
+                        )
                         result = agent.run(skill["prompt"], max_iterations=15)
                         print_panel(result, title=f"Skill: {cmd}", border_style="cyan")
                         continue

@@ -28,10 +28,10 @@ Built-in skills are also provided for common workflows.
 
 import os
 from pathlib import Path
-from typing import Any
 
 try:
     import yaml
+
     YAML_AVAILABLE = True
 except ImportError:
     YAML_AVAILABLE = False
@@ -169,12 +169,14 @@ class SkillManager:
     def list_skills(self) -> list[dict]:
         """List all available skills."""
         result = []
-        for name, skill in sorted(self._skills.items()):
-            result.append({
-                "name": skill["name"],
-                "description": skill.get("description", ""),
-                "source": skill.get("source", "built-in"),
-            })
+        for _name, skill in sorted(self._skills.items()):
+            result.append(
+                {
+                    "name": skill["name"],
+                    "description": skill.get("description", ""),
+                    "source": skill.get("source", "built-in"),
+                }
+            )
         return result
 
     def create_skill(self, name: str, description: str, prompt: str) -> str:
