@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import questionary
 import typer
@@ -50,6 +51,7 @@ from utils.logger import (
     print_error,
     print_info,
     print_panel,
+    print_response,
     print_success,
     print_warning,
 )
@@ -57,28 +59,26 @@ from utils.logger import (
 # Custom style for questionary prompts
 QUESTIONARY_STYLE = QStyle(
     [
-        ("qmark", "fg:yellow bold"),
-        ("question", "fg:white bold"),
-        ("answer", "fg:green bold"),
-        ("pointer", "fg:cyan bold"),
-        ("highlighted", "fg:white"),  # Normal white text, no background - arrow shows selection
-        ("selected", "fg:white"),
-        ("instruction", "fg:gray"),
+        ("qmark", "fg:#55aaff bold"),  # question mark
+        ("question", "fg:#ffffff bold"),  # question text
+        ("answer", "fg:#44ddaa bold"),  # confirmed answer
+        ("pointer", "fg:#55ccff bold"),  # » arrow
+        ("highlighted", "fg:#55ccff bold"),  # selected item text — matches pointer
+        ("selected", "fg:#55ccff"),  # multi-select selected
+        ("text", "fg:#bbbbbb"),  # unselected items
+        ("disabled", "fg:#555555"),  # disabled items
+        ("instruction", "fg:#666666 italic"),  # instruction hint
+        ("separator", "fg:#444444"),  # separator lines
     ]
 )
 
-# ASCII Art Banner
-BANNER = r"""
-[bold blue]
- ____             ___            _
-|  _ \  _____   _/ _ \ _ __ ___| |__
-| | | |/ _ \ \ / / | | | '__/ __| '_ \
-| |_| |  __/\ V /| |_| | | | (__| | | |
-|____/ \___| \_/  \___/|_|  \___|_| |_|
-[/bold blue]
-"""
+# ASCII Art Banner — clean, compact
+BANNER = """
+[bold cyan]  ╔╦╗┌─┐┬  ┬╔═╗┬─┐┌─┐┬ ┬
+   ║║├┤ └┐┌┘║ ║├┬┘│  ├─┤
+  ═╩╝└─┘ └┘ ╚═╝┴└─└─┘┴ ┴[/bold cyan]"""
 
-BANNER_SMALL = "[bold blue]DevOrch[/bold blue] - AI Coding Assistant"
+BANNER_SMALL = "[bold cyan]DevOrch[/bold cyan]"
 
 VERSION = "0.1.3"
 
@@ -94,10 +94,10 @@ SLASH_COMMANDS = {
     "/config": "Show configuration settings",
     "/permissions": "Show permission settings",
     "/compact": "Summarize and compact history",
-    "/models": "List available models for current provider",
-    "/model": "Switch to a different model",
-    "/providers": "List all available providers",
-    "/provider": "Switch to a different provider",
+    "/models": "Browse and switch models (interactive)",
+    "/model": "Switch model (/model <name> or interactive)",
+    "/providers": "Browse and switch providers (interactive)",
+    "/provider": "Switch provider (/provider <name> or interactive)",
     "/history": "Show conversation history",
     "/undo": "Undo last message",
     "/save": "Save conversation to file",
@@ -114,20 +114,30 @@ SLASH_COMMANDS = {
 # Style for prompt_toolkit (including completion menu)
 PROMPT_STYLE = Style.from_dict(
     {
-        "prompt": "#00aa00 bold",
-        "command": "#00aaff bold",
+        "prompt": "#55cc55 bold",
+        "prompt-arrow": "#55cc55 bold",
+        "": "#eeeeee",  # input text color
+        "command": "#66ccff bold",
         "description": "#888888",
         # Completion menu styling
-        "completion-menu": "bg:#1a1a2e",
-        "completion-menu.completion": "bg:#1a1a2e #e0e0e0",
-        "completion-menu.completion.current": "bg:#0066cc #ffffff bold",
-        "completion-menu.meta": "bg:#1a1a2e #666666 italic",
-        "completion-menu.meta.current": "bg:#0066cc #cccccc italic",
+        "completion-menu": "bg:#252530",
+        "completion-menu.completion": "bg:#252530 #cccccc",
+        "completion-menu.completion.current": "bg:#334466 #ffffff bold",
+        "completion-menu.meta": "bg:#252530 #555555",
+        "completion-menu.meta.current": "bg:#334466 #99bbdd",
         # Scrollbar
-        "scrollbar.background": "bg:#333344",
-        "scrollbar.button": "bg:#0066cc",
+        "scrollbar.background": "bg:#2a2a3a",
+        "scrollbar.button": "bg:#5588bb",
+        # Bottom toolbar — near-invisible bg, just text
+        "bottom-toolbar": "bg:#0e0e18 #556677",
+        "bottom-toolbar.text": "bg:#0e0e18 #556677",
     }
 )
+
+
+def _xml_escape(text: str) -> str:
+    """Escape text for use in prompt_toolkit HTML."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 class SlashCommandCompleter(Completer):
@@ -149,10 +159,15 @@ class SlashCommandCompleter(Completer):
         # Built-in slash commands
         for cmd, desc in SLASH_COMMANDS.items():
             if cmd.startswith(partial):
+                # Pad command name for alignment (Gemini-like layout)
+                padded_cmd = cmd[1:].ljust(16)  # strip / for display, pad
+                safe_desc = _xml_escape(desc)
                 yield Completion(
                     cmd,
                     start_position=-len(text),
-                    display=HTML(f"<command>{cmd}</command> <description>- {desc}</description>"),
+                    display=HTML(
+                        f"<command>{padded_cmd}</command><description>{safe_desc}</description>"
+                    ),
                     display_meta=desc,
                 )
 
@@ -161,12 +176,13 @@ class SlashCommandCompleter(Completer):
             for skill in self._skill_manager.list_skills():
                 skill_cmd = f"/{skill['name']}"
                 if skill_cmd.startswith(partial) and skill_cmd not in SLASH_COMMANDS:
+                    padded_cmd = skill["name"].ljust(16)
+                    safe_desc = _xml_escape(skill["description"])
                     yield Completion(
                         skill_cmd,
                         start_position=-len(text),
                         display=HTML(
-                            f"<command>{skill_cmd}</command> "
-                            f"<description>- {skill['description']}</description>"
+                            f"<command>{padded_cmd}</command><description>{safe_desc}</description>"
                         ),
                         display_meta=f"skill: {skill['description']}",
                     )
@@ -175,10 +191,11 @@ class SlashCommandCompleter(Completer):
 def print_banner(small: bool = False):
     """Print the DevOrch banner."""
     if small:
-        console.print(BANNER_SMALL)
+        console.print(f"\n  {BANNER_SMALL} [dim]v{VERSION}[/dim]\n")
     else:
         console.print(BANNER)
-        console.print(f"  [dim]v{VERSION} - Your AI Coding Assistant[/dim]\n")
+        console.print(f"  [dim]v{VERSION}[/dim]")
+        console.print()
 
 
 SYSTEM_PROMPT = """You are DevOrch, an AI coding assistant with access to tools for interacting with the user's computer.
@@ -294,29 +311,13 @@ def _interactive_model_select(
     choices = [_format_model_choice(m, current_model) for m in models]
 
     try:
-        # Use fuzzy select for large lists (searchable), regular for small
-        if len(models) > 15:
-            # questionary.autocomplete / fuzzy for large lists
-            # Build a name->value map for autocomplete
-            model_ids = [m.id for m in models]
-            selected = questionary.autocomplete(
-                prompt_text,
-                choices=model_ids,
-                style=QUESTIONARY_STYLE,
-                meta_information={
-                    m.id: (m.description or f"{m.context_length or '?'} ctx") for m in models
-                },
-                instruction="(Type to filter, Enter to select)",
-            ).ask()
-            return selected
-        else:
-            selected = questionary.select(
-                prompt_text,
-                choices=choices,
-                style=QUESTIONARY_STYLE,
-                instruction="(Use arrow keys, Enter to select)",
-            ).ask()
-            return selected
+        selected = questionary.select(
+            prompt_text,
+            choices=choices,
+            style=QUESTIONARY_STYLE,
+            instruction="(↑↓ navigate, Enter to select, Ctrl+C to cancel)",
+        ).ask()
+        return selected
     except (KeyboardInterrupt, EOFError):
         return None
 
@@ -324,32 +325,66 @@ def _interactive_model_select(
 def _interactive_provider_select(
     current_provider: str,
     current_settings: "Settings",
+    prompt_text: str = "Select provider:",
 ) -> str | None:
     """Interactive provider selection with status indicators."""
-    provider_choices = []
+    # Nice display names
+    display_names = {
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "gemini": "Google Gemini",
+        "groq": "Groq",
+        "openrouter": "OpenRouter",
+        "mistral": "Mistral",
+        "together": "Together AI",
+        "github_copilot": "GitHub Copilot",
+        "deepseek": "DeepSeek",
+        "kimi": "Kimi (Moonshot)",
+        "custom": "Custom",
+        "local": "Ollama",
+        "lmstudio": "LM Studio",
+    }
+
+    cloud_choices = []
+    local_choices = []
+
     for name, desc in PROVIDER_INFO.items():
         has_key = bool(current_settings.get_api_key(name))
         is_current = name == current_provider
+        nice_name = display_names.get(name, name.title())
+        short_desc = desc.split(" - ", 1)[1] if " - " in desc else desc
 
         # Status indicator
         if is_current:
-            status_icon = " [green]● active[/green]"
+            status = "● active"
         elif name in ("local", "lmstudio"):
-            status_icon = " [dim](local)[/dim]"
+            status = "local"
         elif has_key:
-            status_icon = " [green](ready)[/green]"
+            status = "ready"
         else:
-            status_icon = " [yellow](needs key)[/yellow]"
+            status = "needs key"
 
-        display = f"{'> ' if is_current else '  '}{name:<14} {desc}{status_icon}"
-        provider_choices.append(questionary.Choice(display, value=name))
+        # Current model info
+        model_info = ""
+        if is_current:
+            model_info = f"  [{current_settings.get_default_model(name)}]"
+
+        display = f"{nice_name:<16} {short_desc:<40} ({status}){model_info}"
+        choice = questionary.Choice(display, value=name)
+
+        if name in ("local", "lmstudio"):
+            local_choices.append(choice)
+        else:
+            cloud_choices.append(choice)
+
+    provider_choices = cloud_choices + [questionary.Separator("── Local ──")] + local_choices
 
     try:
         return questionary.select(
-            "Select provider:",
+            prompt_text,
             choices=provider_choices,
             style=QUESTIONARY_STYLE,
-            instruction="(Use arrow keys, Enter to select)",
+            instruction="(↑↓ navigate, Enter to select, Ctrl+C to cancel)",
         ).ask()
     except (KeyboardInterrupt, EOFError):
         return None
@@ -441,26 +476,43 @@ def run_onboarding() -> str | None:
     )
     console.print()
 
-    # Provider selection with questionary
-    provider_choices = [
-        questionary.Choice("OpenAI (GPT-4o, GPT-4, etc.)", value="openai"),
-        questionary.Choice("Anthropic (Claude Sonnet, Opus, etc.)", value="anthropic"),
-        questionary.Choice("Google Gemini (Gemini Pro, Flash, etc.)", value="gemini"),
-        questionary.Choice("Groq (Ultra-fast Llama, Mixtral)", value="groq"),
-        questionary.Choice("OpenRouter (Access 100+ models)", value="openrouter"),
-        questionary.Choice("Mistral (Mistral Large, Codestral)", value="mistral"),
-        questionary.Choice("Together AI (Open source models)", value="together"),
-        questionary.Separator(),
-        questionary.Choice("Ollama - Local (No API key needed)", value="local"),
-        questionary.Choice("LM Studio - Local (No API key needed)", value="lmstudio"),
-    ]
+    # Provider selection — built dynamically from registry
+    cloud_providers = []
+    local_providers = []
+    for name, desc in PROVIDER_INFO.items():
+        short_desc = desc.split(" - ", 1)[1] if " - " in desc else desc
+        # Title-case the provider name for display
+        display_name = {
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "gemini": "Google Gemini",
+            "groq": "Groq",
+            "openrouter": "OpenRouter",
+            "mistral": "Mistral",
+            "together": "Together AI",
+            "github_copilot": "GitHub Copilot",
+            "deepseek": "DeepSeek",
+            "kimi": "Kimi (Moonshot)",
+            "custom": "Custom",
+            "local": "Ollama",
+            "lmstudio": "LM Studio",
+        }.get(name, name.title())
+
+        if name in ("local", "lmstudio"):
+            local_providers.append(
+                questionary.Choice(f"{display_name} — {short_desc} (No API key)", value=name)
+            )
+        else:
+            cloud_providers.append(questionary.Choice(f"{display_name} — {short_desc}", value=name))
+
+    provider_choices = cloud_providers + [questionary.Separator()] + local_providers
 
     try:
         provider = questionary.select(
             "Select your AI provider:",
             choices=provider_choices,
             style=QUESTIONARY_STYLE,
-            instruction="(Use arrow keys to navigate, Enter to select)",
+            instruction="(↑↓ navigate, Enter to select, Ctrl+C to cancel)",
         ).ask()
 
         if not provider:
@@ -754,28 +806,40 @@ def start_repl(
 
     # Get current working directory for display
     cwd = os.getcwd()
-    cwd_short = os.path.basename(cwd) or cwd
+    cwd_display = cwd.replace(str(Path.home()), "~")
 
-    # Show session info
-    console.print(
-        f"  [dim]Provider:[/dim] [cyan]{llm.name}[/cyan]  [dim]Model:[/dim] [cyan]{llm.model}[/cyan]"
-    )
-    console.print(
-        f"  [dim]Session:[/dim] {session_manager.current_session_id}  [dim]cwd:[/dim] {cwd_short}"
-    )
-    # Show memory/skills/MCP status
+    # Show startup info — clean Gemini-like display
     mem_count = len(memory_manager.list_all())
     skill_count = len(skill_manager.list_skills())
     mcp_count = len(mcp_manager.servers)
-    extras = []
+
+    # Build status line items
+    status_parts = [
+        f"[bold white]Provider:[/bold white] [cyan]{llm.name}[/cyan]",
+        f"[bold white]Model:[/bold white] [cyan]{llm.model}[/cyan]",
+    ]
+    extra_parts = []
     if mem_count:
-        extras.append(f"[dim]memories:[/dim] {mem_count}")
-    extras.append(f"[dim]skills:[/dim] {skill_count}")
+        extra_parts.append(f"[dim]{mem_count} memories[/dim]")
+    extra_parts.append(f"[dim]{skill_count} skills[/dim]")
     if mcp_count:
-        extras.append(f"[dim]MCP:[/dim] {mcp_count}")
-    console.print(f"  {' | '.join(extras)}")
+        extra_parts.append(f"[dim]{mcp_count} MCP[/dim]")
+
     console.print(
-        f"  [dim]Mode:[/dim] {mode_manager.get_mode_display()}  [dim]- Type[/dim] / [dim]to see commands[/dim]\n"
+        Panel(
+            " [dim]|[/dim] ".join(status_parts) + "\n" + " [dim]|[/dim] ".join(extra_parts),
+            border_style="bright_black",
+            padding=(0, 2),
+        )
+    )
+
+    # Getting started tips
+    console.print(
+        "  [dim]Getting started:[/dim]\n"
+        "  [dim]1.[/dim] Type [cyan]/[/cyan] to see all commands\n"
+        "  [dim]2.[/dim] [cyan]/help[/cyan] for detailed help\n"
+        "  [dim]3.[/dim] Ask coding questions or run commands\n"
+        "  [dim]4.[/dim] [cyan]Ctrl+C[/cyan] to exit\n"
     )
 
     # Create completer for slash commands
@@ -785,27 +849,27 @@ def start_repl(
     current_llm = llm
     current_settings = settings
 
-    def get_prompt():
-        """Generate prompt with mode indicator."""
-        mode_indicator = {
-            AgentMode.PLAN: "[yellow]P[/yellow]",
-            AgentMode.AUTO: "[green]A[/green]",
-            AgentMode.ASK: "[blue]?[/blue]",
-        }.get(mode_manager.mode, "")
-        return f"[{mode_indicator}] {cwd_short}> "
+    def get_bottom_toolbar():
+        """Clean bottom status bar."""
+        mode_char = {"plan": "Plan", "auto": "Auto", "ask": "Ask"}.get(mode_manager.mode.value, "?")
+        parts = [cwd_display, f"{current_llm.name}/{current_llm.model}", mode_char]
+        mcp_n = len(mcp_manager.servers)
+        if mcp_n:
+            parts.append(f"MCP: {mcp_n}")
+        return "  " + "     ".join(parts)
 
     while True:
         try:
-            # Build prompt with mode indicator
-            mode_char = {"plan": "P", "auto": "A", "ask": "?"}.get(mode_manager.mode.value, "?")
-            prompt_str = f"[{mode_char}] {cwd_short}> "
+            # Print a separator line above the prompt (Gemini-like)
+            console.print("[dim]─[/dim]" * console.width, highlight=False)
 
-            # Use prompt_toolkit with autocomplete
+            # Use prompt_toolkit with autocomplete and bottom toolbar
             user_input = pt_prompt(
-                prompt_str,
+                [("class:prompt-arrow", "> ")],
                 completer=completer,
                 complete_while_typing=True,
                 style=PROMPT_STYLE,
+                bottom_toolbar=get_bottom_toolbar,
             )
 
             if user_input.lower() in ("exit", "quit", "q"):
@@ -862,7 +926,7 @@ def start_repl(
                         "    [blue]ASK[/blue]  - Asks before each tool execution (default)"
                     )
                     console.print(
-                        "\n[dim]  Tip: Type / and Tab for autocomplete | /model supports partial match[/dim]\n"
+                        "\n[dim]  Tip: Type / for autocomplete | /model and /provider support partial match[/dim]\n"
                     )
                     continue
 
@@ -890,7 +954,7 @@ def start_repl(
                                 "Select mode:",
                                 choices=mode_choices,
                                 style=QUESTIONARY_STYLE,
-                                instruction="(Use arrow keys)",
+                                instruction="(↑↓ navigate, Enter to select, Ctrl+C to cancel)",
                             ).ask()
                             if not mode_name:
                                 continue
@@ -992,49 +1056,7 @@ def start_repl(
                     print_success("History compacted. Summary preserved.")
                     continue
 
-                elif cmd == "models":
-                    try:
-                        with console.status("[dim]Fetching models...", spinner="dots"):
-                            models = current_llm.list_models()
-
-                        if not models:
-                            print_warning("No models available.")
-                            continue
-
-                        # Use a rich table for clean display
-                        table = Table(
-                            title=f"Models for {current_llm.name} ({len(models)} available)",
-                            show_lines=False,
-                            padding=(0, 1),
-                        )
-                        table.add_column("", width=2)
-                        table.add_column("Model ID", style="cyan", no_wrap=True)
-                        table.add_column("Context", style="dim", justify="right")
-                        table.add_column("Info", style="dim")
-
-                        for m in models:
-                            marker = "[green]>[/green]" if m.id == current_llm.model else " "
-                            ctx = f"{m.context_length:,}" if m.context_length else ""
-                            desc = m.description or ""
-                            if "no tool" in desc.lower():
-                                desc = f"[yellow]{desc}[/yellow]"
-                            table.add_row(marker, m.id, ctx, desc)
-
-                        console.print()
-                        console.print(table)
-
-                        if current_llm.name == "local":
-                            console.print(
-                                "\n  [dim]For tool/function calling, use 7B+ models[/dim]"
-                            )
-                    except Exception as e:
-                        print_error(f"Failed to fetch models: {e}")
-                    console.print(
-                        "\n[dim]Use /model <name> to switch (supports partial match)[/dim]\n"
-                    )
-                    continue
-
-                elif cmd == "model":
+                elif cmd in ("models", "model"):
                     selected_model = cmd_arg
 
                     try:
@@ -1120,45 +1142,7 @@ def start_repl(
                         print_error(f"Failed to switch model: {e}")
                     continue
 
-                elif cmd == "providers":
-                    table = Table(
-                        title=f"Available Providers ({len(PROVIDER_INFO)})",
-                        show_lines=False,
-                        padding=(0, 1),
-                    )
-                    table.add_column("", width=2)
-                    table.add_column("Provider", style="cyan", no_wrap=True, min_width=12)
-                    table.add_column("Description", style="white")
-                    table.add_column("Status", justify="right")
-                    table.add_column("Model", style="dim")
-
-                    for name, desc in PROVIDER_INFO.items():
-                        marker = "[green]>[/green]" if name == current_llm.name else " "
-                        env_var = PROVIDER_ENV_VARS.get(name)
-
-                        if name == current_llm.name:
-                            status = "[green]active[/green]"
-                            model = current_llm.model
-                        elif name in ("local", "lmstudio"):
-                            status = "[dim]local[/dim]"
-                            model = current_settings.get_default_model(name) or ""
-                        elif env_var and current_settings.get_api_key(name):
-                            status = "[green]ready[/green]"
-                            model = current_settings.get_default_model(name) or ""
-                        else:
-                            status = "[yellow]needs key[/yellow]"
-                            model = ""
-
-                        # Clean description (remove provider name prefix)
-                        short_desc = desc.split(" - ", 1)[1] if " - " in desc else desc
-                        table.add_row(marker, name, short_desc, status, model[:25])
-
-                    console.print()
-                    console.print(table)
-                    console.print("\n[dim]Use /provider <name> to switch[/dim]\n")
-                    continue
-
-                elif cmd == "provider":
+                elif cmd in ("providers", "provider"):
                     if cmd_arg:
                         new_provider = cmd_arg.lower()
                     else:
@@ -1352,7 +1336,7 @@ def start_repl(
                         f"name and description."
                     )
                     result = agent.run(remember_prompt, max_iterations=5)
-                    print_panel(result, title="Memory", border_style="cyan")
+                    print_response(result)
                     continue
 
                 elif cmd == "forget":
@@ -1426,7 +1410,7 @@ def start_repl(
                         f"  [dim]Running skill:[/dim] [cyan]{skill_name}[/cyan] - {skill['description']}"
                     )
                     result = agent.run(skill["prompt"], max_iterations=15)
-                    print_panel(result, title=f"Skill: {skill_name}", border_style="cyan")
+                    print_response(result)
                     continue
 
                 elif cmd == "mcp":
@@ -1460,7 +1444,7 @@ def start_repl(
                             f"  [dim]Running skill:[/dim] [cyan]{cmd}[/cyan] - {skill['description']}"
                         )
                         result = agent.run(skill["prompt"], max_iterations=15)
-                        print_panel(result, title=f"Skill: {cmd}", border_style="cyan")
+                        print_response(result)
                         continue
 
                 else:
@@ -1469,15 +1453,17 @@ def start_repl(
                     continue
 
             result = agent.run(user_input, max_iterations=15)
-            print_panel(result, title="DevOrch", border_style="green")
+            print_response(result)
 
         except (typer.Abort, EOFError):
             mcp_manager.stop_all()
             print_info(f"\nSession saved: {session_manager.current_session_id}")
             break
         except KeyboardInterrupt:
-            console.print()  # New line after ^C
-            continue  # Don't exit on Ctrl+C, just cancel current input
+            mcp_manager.stop_all()
+            console.print()
+            print_info(f"Session saved: {session_manager.current_session_id}")
+            break
         except Exception as e:
             error_str = str(e).lower()
             print_error(str(e))

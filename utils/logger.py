@@ -1,6 +1,7 @@
 import logging
 
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
 
 # Global rich console instance
@@ -21,22 +22,40 @@ def setup_logger(name: str) -> logging.Logger:
 
 def print_error(msg: str):
     """Prints an error message in bold red."""
-    console.print(f"[bold red]Error: {msg}[/bold red]")
+    console.print(f"[bold red]  Error: {msg}[/bold red]")
 
 
 def print_warning(msg: str):
     """Prints a warning message in bold yellow."""
-    console.print(f"[bold yellow]Warning: {msg}[/bold yellow]")
+    console.print(f"[bold yellow]  Warning: {msg}[/bold yellow]")
 
 
 def print_success(msg: str):
     """Prints a success message in bold green."""
-    console.print(f"[bold green]{msg}[/bold green]")
+    console.print(f"[bold green]  {msg}[/bold green]")
 
 
 def print_info(msg: str):
     """Prints an info message in blue."""
-    console.print(f"[blue]{msg}[/blue]")
+    console.print(f"[blue]  {msg}[/blue]")
+
+
+def print_response(content: str):
+    """Print an AI response with markdown rendering and a cyan-tinted border."""
+    console.print()
+    try:
+        md = Markdown(content)
+        console.print(
+            Panel(
+                md,
+                border_style="#3a6a8a",
+                padding=(1, 2),
+                expand=True,
+            )
+        )
+    except Exception:
+        console.print(f"  {content}")
+    console.print()
 
 
 def print_panel(content, title: str = "", border_style: str = "blue", fit: bool = False):

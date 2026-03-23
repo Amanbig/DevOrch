@@ -18,13 +18,14 @@ console = get_console()
 # Custom style for questionary prompts
 PROMPT_STYLE = QStyle(
     [
-        ("qmark", "fg:yellow bold"),
-        ("question", "fg:white bold"),
-        ("answer", "fg:green bold"),
-        ("pointer", "fg:cyan bold"),
-        ("highlighted", "noreverse fg:cyan bold bg:default"),  # cyan text like pointer, no box
-        ("selected", "noreverse fg:cyan bold bg:default"),  # default item — same as highlighted
-        ("text", "fg:white"),  # plain items
+        ("qmark", "fg:#55aaff bold"),
+        ("question", "fg:#ffffff bold"),
+        ("answer", "fg:#44ddaa bold"),
+        ("pointer", "fg:#55ccff bold"),
+        ("highlighted", "noreverse fg:#55ccff bold bg:default"),
+        ("selected", "noreverse fg:#55ccff bold bg:default"),
+        ("text", "fg:#bbbbbb"),
+        ("instruction", "fg:#666666 italic"),
     ]
 )
 
