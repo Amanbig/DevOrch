@@ -1,10 +1,6 @@
 import json
 from collections.abc import Callable
 
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.text import Text
-
 from core.executor import Executor
 from core.modes import AgentMode, ModeManager
 from core.planner import Planner
@@ -78,15 +74,8 @@ class Agent:
         # Build a clean summary based on tool type
         if call.name == "shell":
             cmd = args.get("command", "")
-            syntax = Syntax(cmd, "bash", theme="monokai", line_numbers=False, word_wrap=True)
-            console.print(
-                Panel(
-                    syntax,
-                    title="[bold magenta]Shell[/bold magenta]",
-                    border_style="magenta",
-                    padding=(0, 1),
-                )
-            )
+            # Shell command with subtle background
+            console.print(f"  [dim]>[/dim] [on #1e2030][cyan]shell[/cyan] [bold]{cmd}[/bold][/]")
 
         elif call.name == "filesystem":
             action = args.get("action", "")
@@ -133,6 +122,27 @@ class Agent:
             display_url = url[:60] + "..." if len(url) > 60 else url
             console.print(f"  [dim]>[/dim] [cyan]fetching[/cyan] [bold]{display_url}[/bold]")
 
+        elif call.name == "memory":
+            action = args.get("action", "")
+            name = args.get("name", "")
+            query = args.get("query", "")
+            if action == "save":
+                console.print(f"  [dim]>[/dim] [cyan]saving memory[/cyan] [bold]{name}[/bold]")
+            elif action == "search":
+                console.print(f"  [dim]>[/dim] [cyan]searching memory[/cyan] [bold]{query}[/bold]")
+            elif action == "list":
+                console.print("  [dim]>[/dim] [cyan]listing memories[/cyan]")
+            elif action == "delete":
+                console.print(
+                    f"  [dim]>[/dim] [cyan]deleting memory[/cyan] [bold]{args.get('filename', '')}[/bold]"
+                )
+            else:
+                console.print(f"  [dim]>[/dim] [cyan]memory {action}[/cyan]")
+
+        elif call.name.startswith("mcp_"):
+            # MCP tool call
+            console.print(f"  [dim]>[/dim] [#6a8aaa]MCP[/#6a8aaa] [cyan]{call.name}[/cyan]")
+
         else:
             # Generic fallback - show tool name and brief args
             brief_args = {
@@ -142,90 +152,82 @@ class Agent:
             console.print(f"  [dim]>[/dim] [cyan]{call.name}[/cyan] {brief_args}")
 
     def _display_tool_result(self, tool_name: str, result: str):
-        """Display tool result in a compact, user-friendly format."""
+        """Display tool result in a compact, user-friendly format.
+
+        The full result always goes to the LLM — this only controls
+        what the USER sees in the terminal.
+        """
         result_str = str(result)
 
-        # Skip display for task tool (it shows its own panel)
+        # Skip display entirely for these tools
         if tool_name == "task":
             return
 
-        # For filesystem writes, just show success
-        if "Successfully wrote" in result_str or "Successfully created" in result_str:
-            console.print(f"    [green]✓[/green] [dim]{result_str}[/dim]")
+        # ── Errors — always show ─────────────────────────────────────────
+        if "Error:" in result_str or result_str.startswith("Error"):
+            console.print(f"    [red]✗ {result_str[:300]}[/red]")
             return
 
-        # For successful file reads with long content, truncate
-        if tool_name == "filesystem" and len(result_str) > 200 and "Error" not in result_str:
-            lines = result_str.count("\n")
-            console.print(f"    [green]✓[/green] [dim]Read {lines} lines[/dim]")
+        # ── File reads — never dump content, just show summary ───────────
+        if tool_name == "filesystem":
+            if "Successfully wrote" in result_str or "Successfully created" in result_str:
+                console.print(f"    [green]✓[/green] [dim]{result_str[:100]}[/dim]")
+            elif "] Lines " in result_str[:120]:
+                # Extract header like "[README.md] Lines 1-200 of 488"
+                header = result_str.split("\n", 1)[0]
+                console.print(f"    [green]✓[/green] [dim]{header}[/dim]")
+            else:
+                lines = result_str.count("\n")
+                console.print(f"    [green]✓[/green] [dim]Done ({lines} lines)[/dim]")
             return
 
-        # For search/grep results (file search, not web search)
-        if tool_name in ("search", "grep") and "Error" not in result_str:
-            matches = result_str.strip().split("\n")
-            count = len([m for m in matches if m.strip()])
-            if count > 5:
-                console.print(f"    [green]✓[/green] [dim]Found {count} matches[/dim]")
-                return
+        # ── Search/grep — just show match count ──────────────────────────
+        if tool_name in ("search", "grep"):
+            matches = [m for m in result_str.strip().split("\n") if m.strip()]
+            console.print(f"    [green]✓[/green] [dim]Found {len(matches)} matches[/dim]")
+            return
 
-        # For websearch results, show them nicely
-        if tool_name == "websearch" and "Search results for:" in result_str:
-            # Show a brief summary, full results go to the AI
-            lines = result_str.strip().split("\n")
+        # ── Web tools — show summary ─────────────────────────────────────
+        if tool_name == "websearch":
             result_count = sum(
-                1 for line in lines if line.strip().startswith(("1.", "2.", "3.", "4.", "5."))
+                1
+                for line in result_str.strip().split("\n")
+                if line.strip().startswith(("1.", "2.", "3.", "4.", "5."))
             )
             console.print(f"    [green]✓[/green] [dim]Found {result_count} web results[/dim]")
             return
 
-        # For webfetch results
-        if tool_name == "webfetch" and "Content from" in result_str:
+        if tool_name == "webfetch":
             lines = result_str.count("\n")
             console.print(f"    [green]✓[/green] [dim]Fetched page ({lines} lines)[/dim]")
             return
 
-        # Check for errors
-        if "Error:" in result_str or result_str.startswith("Error"):
-            console.print(
-                Panel(
-                    Text(result_str[:300], style="red"),
-                    title="[bold red]Error[/bold red]",
-                    border_style="red",
-                    padding=(0, 1),
-                )
-            )
+        # ── Memory — show brief ──────────────────────────────────────────
+        if tool_name == "memory":
+            first_line = result_str.split("\n", 1)[0]
+            console.print(f"    [green]✓[/green] [dim]{first_line[:80]}[/dim]")
             return
 
-        # Shell output - show in panel
+        # ── Shell output — truncate heavily ──────────────────────────────
         if result_str.startswith("STDOUT:") or result_str.startswith("STDERR:"):
-            # Truncate long output
-            max_display = 400
+            max_display = 200
             if len(result_str) > max_display:
                 display_result = (
-                    result_str[:max_display]
-                    + f"\n[dim]... ({len(result_str) - max_display} more chars)[/dim]"
+                    result_str[:max_display] + f"\n... ({result_str.count(chr(10))} total lines)"
                 )
             else:
                 display_result = result_str
 
-            console.print(
-                Panel(
-                    Syntax(
-                        display_result, "text", theme="monokai", line_numbers=False, word_wrap=True
-                    ),
-                    title="[bold green]Output[/bold green]",
-                    border_style="green",
-                    padding=(0, 1),
-                )
-            )
+            # Show output with subtle background
+            for line in display_result.split("\n"):
+                console.print(f"    [dim on #1a1a28]{line}[/]")
             return
 
-        # Brief result for simple operations
-        if len(result_str) < 100:
-            console.print(f"    [green]✓[/green] [dim]{result_str}[/dim]")
-        else:
-            # Truncate longer results
-            console.print(f"    [green]✓[/green] [dim]{result_str[:100]}...[/dim]")
+        # ── Everything else — brief one-liner ────────────────────────────
+        first_line = result_str.split("\n", 1)[0]
+        if len(first_line) > 80:
+            first_line = first_line[:80] + "..."
+        console.print(f"    [green]✓[/green] [dim]{first_line}[/dim]")
 
     def _save_message(self, message: Message):
         """Save a message to history and session storage."""
