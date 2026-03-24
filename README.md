@@ -6,19 +6,34 @@ A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
 ![Python](https://img.shields.io/badge/Python-3.10+-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
+## Screenshots
+
+| Startup | Chat |
+|---------|------|
+| ![Startup](assets/startup.png) | ![Chat](assets/chat.png) |
+
+| Provider Selection | Model Selection |
+|--------------------|-----------------|
+| ![Providers](assets/providers.png) | ![Models](assets/models.png) |
+
+| Tool Execution | Terminal Session |
+|----------------|-----------------|
+| ![Tools](assets/tools.png) | ![Terminal](assets/terminal.png) |
+
 ## Features
 
 - **13 AI Providers** - OpenAI, Anthropic, Gemini, Groq, Mistral, Together AI, OpenRouter, GitHub Copilot, DeepSeek, Kimi, Ollama, LM Studio, and Custom
 - **Memory System** - Persistent memory across conversations (user preferences, feedback, project context)
 - **MCP Support** - Connect Model Context Protocol servers for extensible tools
 - **Skills System** - Built-in and custom skills (`/commit`, `/review`, `/test`, `/fix`, `/explain`, `/simplify`)
-- **Persistent Terminal Sessions** - Background processes survive across DevOrch restarts with unique names
+- **Terminal Sessions** - Background processes with GUI option, persist across restarts
 - **Dynamic Model Listing** - Fetches latest available models from provider APIs
 - **Secure API Key Storage** - Uses system keychain (Windows, macOS, Linux)
 - **Session Persistence** - SQLite-based chat history with resume capability
 - **Powerful Tools** - Shell, terminal sessions, file operations, search, grep, code editing, web access, memory
-- **Interactive UI** - Arrow-key navigation, completion menu, bottom status bar, markdown-rendered responses
+- **Interactive UI** - Arrow-key navigation, numbered selections, bottom status bar, markdown responses
 - **Permission System** - Configurable allow/deny rules with interactive prompts
+- **In-Chat Auth** - Set or update API keys with `/auth` without restarting
 - **Multiple Modes** - Plan mode, Auto mode, and Ask mode
 
 ## Installation
@@ -63,12 +78,13 @@ devorch -p local  # Ollama
 | Command | Description |
 |---------|-------------|
 | `/help` | Show all commands grouped by category |
-| `/models` | Browse and switch models (interactive) |
+| `/models` | Browse and switch models (interactive, numbered list) |
 | `/model <name>` | Switch model (supports partial match, e.g. `/model opus`) |
-| `/providers` | Browse and switch providers (interactive) |
+| `/providers` | Browse and switch providers (interactive, numbered list) |
 | `/provider <name>` | Switch provider directly |
 | `/mode` | Switch between Plan/Auto/Ask modes |
 | `/status` | Show provider, model, mode, memories, skills, MCP |
+| `/auth [provider]` | Set or update API key for current or specified provider |
 
 ### Memory
 
@@ -154,20 +170,24 @@ MCP tools automatically appear alongside built-in tools and can be used by the A
 
 ## Terminal Sessions
 
-Background processes with unique auto-generated names that persist across restarts:
+Unified terminal tool with optional GUI window. The AI can monitor output and send input.
 
 ```
-> Start a dev server
+> Start a dev server (headless, AI monitors)
   > terminal_session start command="npm run dev"
     ✓ Session 'swift-fox-a3f2' started (PID 12345)
 
-> Check the server
+> Open a visible terminal (user can type, AI reads output)
+  > terminal_session start command="bash" gui=true
+    ✓ Session 'calm-owl-b7e1' started in visible terminal
+
+> Check output
   > terminal_session read session_id="swift-fox-a3f2"
     ✓ [Session 'swift-fox-a3f2' — running]
 
 > Stop it
   > terminal_session stop session_id="swift-fox-a3f2"
-    ✓ Session 'swift-fox-a3f2' stopped.
+    ✓ Session stopped.
 ```
 
 Sessions are tracked in `~/.devorch/sessions/` and can be reconnected after restarting DevOrch.
@@ -177,11 +197,6 @@ Sessions are tracked in `~/.devorch/sessions/` and can be reconnected after rest
 Interactive permission system with arrow-key navigation:
 
 ```
-╭─────────── Permission Required ───────────╮
-│ Tool: shell                               │
-│ Command: npm install                      │
-╰───────────────────────────────────────────╯
-
 ? Choose an action:
   » Allow once
     Allow for this session
@@ -226,8 +241,7 @@ devorch permissions deny shell "rm -rf *"   # Block dangerous commands
 | Tool | Description |
 |------|-------------|
 | **shell** | Execute shell commands |
-| **open_terminal** | Open new terminal window for servers/scaffolds |
-| **terminal_session** | Persistent background sessions (start, read, send, stop) |
+| **terminal_session** | Managed sessions with optional GUI (start, read, send, stop) |
 | **filesystem** | Read, write, and list files |
 | **search** | Find files by name patterns (glob) |
 | **grep** | Search for text patterns in files |
@@ -242,9 +256,13 @@ devorch permissions deny shell "rm -rf *"   # Block dangerous commands
 ### API Keys
 
 ```bash
-# Store securely in system keyring
+# From CLI
 devorch set-key openai
 devorch set-key anthropic
+
+# From within chat
+/auth openai
+/auth anthropic
 
 # Or use environment variables
 export OPENAI_API_KEY=sk-...
