@@ -79,7 +79,7 @@ BANNER = """
 
 BANNER_SMALL = "[bold cyan]DevOrch[/bold cyan]"
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 # Slash commands with descriptions
 SLASH_COMMANDS = {
