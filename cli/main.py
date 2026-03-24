@@ -109,6 +109,7 @@ SLASH_COMMANDS = {
     "/skills": "List available skills",
     "/skill": "Run a skill (e.g. /skill commit)",
     "/mcp": "Show MCP server status",
+    "/auth": "Set or update API key for current/specified provider",
 }
 
 # Style for prompt_toolkit (including completion menu)
@@ -276,16 +277,19 @@ RULES:
 When executing shell commands, use the shell tool with the command to run."""
 
 
-def _format_model_choice(model: ModelInfo, current_model: str = "") -> questionary.Choice:
+def _format_model_choice(
+    model: ModelInfo, current_model: str = "", index: int = 0
+) -> questionary.Choice:
     """Build a rich questionary choice for a model."""
     is_current = model.id == current_model
-    prefix = "[current] " if is_current else ""
+    current_tag = " [current]" if is_current else ""
 
-    parts = [prefix, model.id]
+    parts = [f"{index:>3}.  {model.id}"]
     if model.context_length:
         parts.append(f" ({model.context_length:,} ctx)")
     if model.description:
         parts.append(f" - {model.description[:50]}")
+    parts.append(current_tag)
 
     display = "".join(parts)
     return questionary.Choice(display, value=model.id)
@@ -308,7 +312,7 @@ def _interactive_model_select(
 
     prompt_text = prompt_text or f"Select model for {provider_name}:"
 
-    choices = [_format_model_choice(m, current_model) for m in models]
+    choices = [_format_model_choice(m, current_model, i + 1) for i, m in enumerate(models)]
 
     try:
         selected = questionary.select(
@@ -347,6 +351,7 @@ def _interactive_provider_select(
 
     cloud_choices = []
     local_choices = []
+    num = 1
 
     for name, desc in PROVIDER_INFO.items():
         has_key = bool(current_settings.get_api_key(name))
@@ -369,8 +374,9 @@ def _interactive_provider_select(
         if is_current:
             model_info = f"  [{current_settings.get_default_model(name)}]"
 
-        display = f"{nice_name:<16} {short_desc:<40} ({status}){model_info}"
+        display = f"{num:>2}.  {nice_name:<16} {short_desc:<40} ({status}){model_info}"
         choice = questionary.Choice(display, value=name)
+        num += 1
 
         if name in ("local", "lmstudio"):
             local_choices.append(choice)
@@ -896,7 +902,14 @@ def start_repl(
                         "Session": ["/session", "/history", "/undo", "/clear", "/compact", "/save"],
                         "Memory": ["/memory", "/remember", "/forget"],
                         "Skills": ["/skills", "/skill"],
-                        "Tools & Config": ["/tasks", "/config", "/permissions", "/mcp", "/status"],
+                        "Tools & Config": [
+                            "/tasks",
+                            "/config",
+                            "/permissions",
+                            "/mcp",
+                            "/status",
+                            "/auth",
+                        ],
                     }
 
                     for category, cmds in categories.items():
@@ -937,15 +950,15 @@ def start_repl(
                         # Interactive mode selection
                         mode_choices = [
                             questionary.Choice(
-                                f"{'> ' if mode_manager.mode == AgentMode.PLAN else '  '}PLAN - Shows plan before executing, asks for approval",
+                                f" 1.  {'[current] ' if mode_manager.mode == AgentMode.PLAN else ''}PLAN - Shows plan before executing, asks for approval",
                                 value="plan",
                             ),
                             questionary.Choice(
-                                f"{'> ' if mode_manager.mode == AgentMode.AUTO else '  '}AUTO - Executes tools automatically (trusted mode)",
+                                f" 2.  {'[current] ' if mode_manager.mode == AgentMode.AUTO else ''}AUTO - Executes tools automatically (trusted mode)",
                                 value="auto",
                             ),
                             questionary.Choice(
-                                f"{'> ' if mode_manager.mode == AgentMode.ASK else '  '}ASK - Asks before each tool execution (default)",
+                                f" 3.  {'[current] ' if mode_manager.mode == AgentMode.ASK else ''}ASK - Asks before each tool execution (default)",
                                 value="ask",
                             ),
                         ]
@@ -1029,6 +1042,65 @@ def start_repl(
                         f"Keyring: {'available' if keyring_available() else 'not available'}"
                     )
                     console.print()
+                    continue
+
+                elif cmd == "auth":
+                    # /auth [provider] — set or update API key
+                    target_provider = cmd_arg.lower() if cmd_arg else current_llm.name
+                    if target_provider in ("local", "ollama", "lmstudio"):
+                        print_info(f"{target_provider} doesn't need an API key.")
+                        continue
+
+                    env_var = PROVIDER_ENV_VARS.get(
+                        target_provider, f"{target_provider.upper()}_API_KEY"
+                    )
+                    console.print(
+                        Panel(
+                            f"[bold]Set API key for {target_provider}[/bold]\n"
+                            f"[dim]Or set {env_var} environment variable[/dim]",
+                            border_style="cyan",
+                        )
+                    )
+
+                    try:
+                        api_key = questionary.password(
+                            f"Enter API key for {target_provider}:",
+                            style=QUESTIONARY_STYLE,
+                        ).ask()
+
+                        if not api_key or not api_key.strip():
+                            print_error("API key cannot be empty.")
+                            continue
+
+                        entered_key = api_key.strip()
+
+                        # Store in keyring
+                        if keyring_available():
+                            set_api_key(target_provider, entered_key)
+                            print_success("API key stored in keychain!")
+                        else:
+                            print_warning("Keyring not available — key stored in memory only.")
+
+                        # Update settings
+                        if target_provider not in current_settings.providers:
+                            current_settings.providers[target_provider] = ProviderConfig()
+                        current_settings.providers[target_provider].api_key = entered_key
+
+                        # If updating the current provider, reload it
+                        if target_provider == current_llm.name:
+                            try:
+                                new_llm = get_provider(
+                                    target_provider, model=current_llm.model, api_key=entered_key
+                                )
+                                current_llm = new_llm
+                                agent.provider = new_llm
+                                print_success(f"Reloaded {target_provider} with new key.")
+                            except Exception as e:
+                                print_error(f"Key saved but failed to reload: {e}")
+                        else:
+                            print_success(f"API key saved for {target_provider}.")
+                    except (KeyboardInterrupt, EOFError):
+                        console.print("\nCancelled.")
                     continue
 
                 elif cmd == "permissions":
