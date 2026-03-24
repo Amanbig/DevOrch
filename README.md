@@ -18,18 +18,17 @@ DevOrch gives you a coding assistant in your terminal that can execute shell com
 
 ## Screenshots
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/startup.png" width="48%" alt="Startup">
-  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/chat.png" width="48%" alt="Chat">
-</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/providers.png" width="48%" alt="Provider Selection">
-  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/models.png" width="48%" alt="Model Selection">
-</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/tools.png" width="48%" alt="Tool Execution">
-  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/terminal.png" width="48%" alt="Terminal Session">
-</p>
+| Startup | Chat |
+|---------|------|
+| ![Startup](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/startup.png) | ![Chat](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/chat.png) |
+
+| Provider Selection | Model Selection |
+|--------------------|-----------------|
+| ![Providers](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/providers.png) | ![Models](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/models.png) |
+
+| Tool Execution | Terminal Session |
+|----------------|-----------------|
+| ![Tools](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/tools.png) | ![Terminal](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/terminal.png) |
 
 ## Why DevOrch?
 
