@@ -43,7 +43,6 @@ from tools.grep import GrepTool
 from tools.search import SearchTool
 from tools.shell import ShellTool
 from tools.task import TaskTool
-from tools.terminal import OpenTerminalTool
 from tools.terminal_session import TerminalSessionTool
 from tools.websearch import WebFetchTool, WebSearchTool
 from utils.logger import (
@@ -208,20 +207,16 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
    - Navigate directories, create files, run scripts
    - Any short-lived terminal command that returns output
 
-2. **open_terminal** - Open a NEW terminal window and run a command inside it. Use this for:
-   - Starting dev servers or daemons: `npm run dev`, `vite`, `uvicorn`, `flask run`, `next dev`, `ng serve`
-   - Interactive scaffold tools that prompt the user: `npm create vite@latest`, `npx create-next-app`, `ng new`, `django-admin startproject`
-   - Any long-running process that should NOT block the current session
-   - ALWAYS prefer this over `shell` for servers and scaffolds
-
-3. **terminal_session** — Manage a long-running background process across turns:
-   - `start` — launch command in a named background session (unique name auto-generated)
+2. **terminal_session** — The PRIMARY tool for all terminal/process needs:
+   - `start` — launch a command in a managed session. Defaults to 'bash' if no command.
+     Set gui=true to also open a visible terminal window for the user.
    - `read`  — read recent stdout/stderr output
    - `send`  — send input to the process stdin
    - `stop`  — terminate the session
-   - `list`  — show all active sessions (includes orphaned sessions from previous runs)
+   - `list`  — show all active sessions
    - `reconnect` — reconnect to sessions from previous DevOrch runs
    Sessions persist across DevOrch restarts with unique names (e.g. 'swift-fox-a3f2').
+   Use gui=true when the user wants to SEE a terminal. Use without gui for headless monitoring.
 
 4. **filesystem** - Read/write/list files. Use this to:
    - Read file contents to understand code
@@ -268,9 +263,12 @@ RULES:
 - When the user asks you to CREATE something (app, file, project), USE THE TOOLS to actually do it
 - Do NOT just give instructions - execute the commands yourself using the shell tool
 - Do NOT ask the user to run commands manually - run them for the user
-- Always prefer action over explanation
+- Always prefer action over explanation — do things, don't explain how to do them
 - For multi-step tasks, use the task tool to track and show progress
-- IMPORTANT: Use `open_terminal` (not `shell`) for dev servers and interactive scaffold commands
+- Use `terminal_session` for ALL terminal needs — dev servers, scaffolds, processes, interactive shells
+- If the user says "open terminal", use `terminal_session start` with gui=true so they get a visible window AND you can read/send
+- If the user wants you to monitor a process, use `terminal_session start` (no gui needed)
+- The user types commands in the DevOrch chat, and you send them via `send` action. Read output with `read` action.
 - When the user corrects you or gives feedback, save it to memory for future conversations
 - When you learn about the user's role, preferences, or project context, save it to memory
 
@@ -767,7 +765,6 @@ def start_repl(
 
     tools = [
         ShellTool(),
-        OpenTerminalTool(),
         TerminalSessionTool(),
         FilesystemTool(),
         SearchTool(),
@@ -1649,7 +1646,6 @@ def ask(
 
     tools = [
         ShellTool(),
-        OpenTerminalTool(),
         TerminalSessionTool(),
         FilesystemTool(),
         SearchTool(),

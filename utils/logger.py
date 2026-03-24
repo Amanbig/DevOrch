@@ -48,8 +48,8 @@ def print_response(content: str):
         console.print(
             Panel(
                 md,
-                style="on #1a1a2e",
-                border_style="#1a1a2e",  # invisible border, blends with background
+                style="on #252540",
+                border_style="#252540",  # invisible border, blends with background
                 padding=(1, 2),
                 expand=True,
             )

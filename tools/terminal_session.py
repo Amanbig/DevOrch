@@ -216,6 +216,13 @@ class TerminalSessionSchema(BaseModel):
         50,
         description="Number of recent output lines to return for 'read'. Default 50.",
     )
+    gui: bool = Field(
+        False,
+        description=(
+            "If true, also opens a visible GUI terminal window alongside the background session. "
+            "Use when the user wants to SEE the terminal. The AI can still read/send via session_id."
+        ),
+    )
 
 
 # ── Tool ──────────────────────────────────────────────────────────────────────
@@ -224,30 +231,29 @@ class TerminalSessionSchema(BaseModel):
 class TerminalSessionTool(Tool):
     name = "terminal_session"
     description = """\
-Manages long-running background terminal sessions so you can interact with them
-across multiple conversation turns. Sessions persist across DevOrch restarts.
+Manages long-running terminal sessions that YOU (the AI) can see and interact with.
+This is the PRIMARY tool for all terminal/process needs. Sessions persist across DevOrch restarts.
 
 Actions:
-- **start**  — Start a command in a named background session (e.g. `npm run dev`).
+- **start**  — Start a command in a managed session. Defaults to 'bash' if no command given.
+               Set gui=true to also open a visible terminal window for the user.
                A unique name is auto-generated if you don't provide session_id.
-               The process runs in the background; use `read` to see its output.
 - **read**   — Read recent stdout/stderr output from a running session.
-- **send**   — Send a line of input to the process stdin (e.g. to restart nodemon with `rs\\n`).
-- **stop**   — Kill a running session.
-- **list**   — Show all currently active sessions and their status.
-- **reconnect** — Check for orphaned sessions from previous DevOrch runs.
+- **send**   — Send a line of input to the process stdin (e.g. `rs\\n` to restart nodemon).
+- **stop**   — Terminate a session.
+- **list**   — List all active sessions and their status.
+- **reconnect** — Reconnect to orphaned sessions from previous DevOrch runs.
 
-Sessions are uniquely named (e.g. 'swift-fox-a3f2') and their logs persist
-in ~/.devorch/sessions/ so you can reconnect even after restarting DevOrch.
+Key features:
+- gui=true on start opens a visible terminal window AND captures output for you to read.
+- Sessions get unique names (e.g. 'swift-fox-a3f2') and logs persist in ~/.devorch/sessions/.
+- Use for dev servers, scaffolds, or any process you need to monitor or interact with.
 
 Example workflow:
-1. `start` command="npm run dev"              # auto-generates unique name
+1. `start` command="npm run dev" gui=true     # visible window + AI can read
 2. `read`  session_id="swift-fox-a3f2"        # check startup logs
-3. `send`  session_id="swift-fox-a3f2" input="rs\\n"  # restart nodemon
-4. `stop`  session_id="swift-fox-a3f2"
-
-Use `open_terminal` instead if you want an interactive visible terminal window.
-Use this tool when you need programmatic access to a process (check output, send input)."""
+3. `send`  session_id="swift-fox-a3f2" input="rs\\n"  # send input
+4. `stop`  session_id="swift-fox-a3f2"        # terminate"""
     args_schema = TerminalSessionSchema
 
     # ── helpers ──────────────────────────────────────────────────────────────
@@ -272,7 +278,9 @@ Use this tool when you need programmatic access to a process (check output, send
 
     # ── actions ──────────────────────────────────────────────────────────────
 
-    def _start(self, session_id: str | None, command: str) -> str:
+    def _start(self, session_id: str | None, command: str, gui: bool = False) -> str:
+        import sys as _sys
+
         # Auto-generate unique name if not provided
         if not session_id:
             session_id = _generate_unique_name()
@@ -296,9 +304,95 @@ Use this tool when you need programmatic access to a process (check output, send
 
         # Create a persistent log file (not temp — survives restarts)
         log_path = str(SESSIONS_DIR / f"{session_id}.log")
-
         cwd = os.getcwd()
 
+        if gui:
+            # GUI mode: run the command inside a real visible terminal
+            # using `script` to capture output to the log file
+            # The user gets a fully interactive terminal AND we capture output
+            script_cmd = f"script -q -f {log_path} -c '{command}'"
+
+            gui_pid = None
+            try:
+                if _sys.platform == "win32":
+                    proc = subprocess.Popen(
+                        ["cmd", "/c", "start", "cmd", "/k", command],
+                        cwd=cwd,
+                    )
+                    gui_pid = proc.pid
+                elif _sys.platform == "darwin":
+                    escaped_cmd = script_cmd.replace('"', '\\"')
+                    escaped_dir = cwd.replace('"', '\\"')
+                    subprocess.Popen(
+                        [
+                            "osascript",
+                            "-e",
+                            f'tell app "Terminal" to do script "cd \\"{escaped_dir}\\" && {escaped_cmd}"',
+                        ]
+                    )
+                else:
+                    # Linux — try common terminals
+                    for term_cmd in [
+                        [
+                            "gnome-terminal",
+                            "--working-directory",
+                            cwd,
+                            "--",
+                            "bash",
+                            "-c",
+                            f"{script_cmd}; exec bash",
+                        ],
+                        ["konsole", "--workdir", cwd, "-e", f"bash -c '{script_cmd}; exec bash'"],
+                        ["xterm", "-e", f"bash -c 'cd \"{cwd}\" && {script_cmd}; exec bash'"],
+                    ]:
+                        try:
+                            proc = subprocess.Popen(term_cmd, cwd=cwd)
+                            gui_pid = proc.pid
+                            break
+                        except FileNotFoundError:
+                            continue
+            except Exception as e:
+                return f"Error opening GUI terminal: {e}"
+
+            if gui_pid is None:
+                # Couldn't find a terminal emulator, try to get PID from script
+                gui_pid = 0
+
+            started_at = time.strftime("%Y-%m-%d %H:%M:%S")
+
+            with _LOCK:
+                _SESSIONS[session_id] = {
+                    "process": None,  # GUI process — we don't own the subprocess
+                    "pid": gui_pid,
+                    "log_path": log_path,
+                    "command": command,
+                    "cwd": cwd,
+                    "started_at": started_at,
+                    "gui": True,
+                }
+
+            # Persist to registry
+            registry = _load_registry()
+            registry[session_id] = {
+                "pid": gui_pid,
+                "log_path": log_path,
+                "command": command,
+                "cwd": cwd,
+                "started_at": started_at,
+                "gui": True,
+            }
+            _save_registry(registry)
+
+            return (
+                f"Session '{session_id}' started in visible terminal\n\n"
+                f"Command: {command}\n"
+                f"Working dir: {cwd}\n"
+                f"The user has a fully interactive terminal window.\n"
+                f"Output is captured — use read with session_id='{session_id}' to see it.\n"
+                f"NOTE: You cannot send input to GUI sessions. The user types directly in the window."
+            )
+
+        # Headless mode: run in background, capture output
         try:
             process = subprocess.Popen(
                 command,
@@ -518,8 +612,9 @@ Use this tool when you need programmatic access to a process (check output, send
 
         if action == "start":
             if not command:
-                return "Error: command is required for 'start'."
-            return self._start(session_id, command)
+                command = "bash"
+            gui = bool(arguments.get("gui", False))
+            return self._start(session_id, command, gui=gui)
 
         if not session_id:
             return "Error: session_id is required for this action."
