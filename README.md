@@ -1,119 +1,127 @@
-# DevOrch
+<p align="center">
+  <h1 align="center">DevOrch</h1>
+  <p align="center">
+    A multi-provider AI coding assistant CLI — like Claude Code and Gemini CLI, but open source.
+  </p>
+</p>
 
-A multi-provider AI coding assistant CLI, similar to Claude Code and Gemini CLI.
+<p align="center">
+  <a href="https://pypi.org/project/devorch/"><img src="https://img.shields.io/pypi/v/devorch?color=blue&label=PyPI" alt="PyPI"></a>
+  <a href="https://pypi.org/project/devorch/"><img src="https://img.shields.io/pypi/pyversions/devorch" alt="Python"></a>
+  <a href="https://github.com/Amanbig/DevOrch/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Amanbig/DevOrch" alt="License"></a>
+  <a href="https://github.com/Amanbig/DevOrch/stargazers"><img src="https://img.shields.io/github/stars/Amanbig/DevOrch?style=social" alt="Stars"></a>
+</p>
 
-![DevOrch Banner](https://img.shields.io/badge/DevOrch-AI%20Coding%20Assistant-blue)
-![Python](https://img.shields.io/badge/Python-3.10+-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+---
+
+DevOrch gives you a coding assistant in your terminal that can execute shell commands, edit files, search your codebase, manage terminal sessions, and remember context across conversations — powered by any of 13+ AI providers or your own local models.
 
 ## Screenshots
 
-| Startup | Chat |
-|---------|------|
-| ![Startup](assets/startup.png) | ![Chat](assets/chat.png) |
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/startup.png" width="48%" alt="Startup">
+  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/chat.png" width="48%" alt="Chat">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/providers.png" width="48%" alt="Provider Selection">
+  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/models.png" width="48%" alt="Model Selection">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/tools.png" width="48%" alt="Tool Execution">
+  <img src="https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/terminal.png" width="48%" alt="Terminal Session">
+</p>
 
-| Provider Selection | Model Selection |
-|--------------------|-----------------|
-| ![Providers](assets/providers.png) | ![Models](assets/models.png) |
+## Why DevOrch?
 
-| Tool Execution | Terminal Session |
-|----------------|-----------------|
-| ![Tools](assets/tools.png) | ![Terminal](assets/terminal.png) |
-
-## Features
-
-- **13 AI Providers** - OpenAI, Anthropic, Gemini, Groq, Mistral, Together AI, OpenRouter, GitHub Copilot, DeepSeek, Kimi, Ollama, LM Studio, and Custom
-- **Memory System** - Persistent memory across conversations (user preferences, feedback, project context)
-- **MCP Support** - Connect Model Context Protocol servers for extensible tools
-- **Skills System** - Built-in and custom skills (`/commit`, `/review`, `/test`, `/fix`, `/explain`, `/simplify`)
-- **Terminal Sessions** - Background processes with GUI option, persist across restarts
-- **Dynamic Model Listing** - Fetches latest available models from provider APIs
-- **Secure API Key Storage** - Uses system keychain (Windows, macOS, Linux)
-- **Session Persistence** - SQLite-based chat history with resume capability
-- **Powerful Tools** - Shell, terminal sessions, file operations, search, grep, code editing, web access, memory
-- **Interactive UI** - Arrow-key navigation, numbered selections, bottom status bar, markdown responses
-- **Permission System** - Configurable allow/deny rules with interactive prompts
-- **In-Chat Auth** - Set or update API keys with `/auth` without restarting
-- **Multiple Modes** - Plan mode, Auto mode, and Ask mode
-
-## Installation
-
-### Option 1: Install with pipx (Recommended)
-
-```bash
-pip install pipx
-pipx install devorch
-```
-
-### Option 2: Install with pip
-
-```bash
-pip install devorch
-```
-
-### Option 3: Install from source
-
-```bash
-git clone https://github.com/Amanbig/DevOrch.git
-cd DevOrch
-pip install -e .
-```
+- **Provider freedom** — Switch between OpenAI, Anthropic, Gemini, Mistral, Groq, and 8 more providers (including local models) with a single command. No vendor lock-in.
+- **Actually does things** — Runs shell commands, edits files, manages background processes, searches the web. Not just a chatbot.
+- **Remembers you** — Persistent memory system stores your preferences, project context, and feedback across conversations.
+- **Extensible** — Add custom skills as YAML files, connect MCP servers for additional tools, configure permissions per-tool.
 
 ## Quick Start
 
-```bash
-# Start DevOrch (first run shows interactive setup)
-devorch
+### Install
 
-# Specify a provider
-devorch -p openai
-devorch -p anthropic
-devorch -p local  # Ollama
+```bash
+# Recommended
+pipx install devorch
+
+# Or with pip
+pip install devorch
+
+# Or from source
+git clone https://github.com/Amanbig/DevOrch.git
+cd DevOrch && pip install -e .
 ```
 
-## Slash Commands
+### Run
 
-### Navigation & Switching
+```bash
+devorch                    # Interactive setup on first run
+devorch -p openai          # Use a specific provider
+devorch -p local           # Use Ollama (local models)
+devorch --resume abc123    # Resume a previous session
+```
 
-| Command | Description |
-|---------|-------------|
-| `/help` | Show all commands grouped by category |
-| `/models` | Browse and switch models (interactive, numbered list) |
-| `/model <name>` | Switch model (supports partial match, e.g. `/model opus`) |
-| `/providers` | Browse and switch providers (interactive, numbered list) |
-| `/provider <name>` | Switch provider directly |
-| `/mode` | Switch between Plan/Auto/Ask modes |
-| `/status` | Show provider, model, mode, memories, skills, MCP |
-| `/auth [provider]` | Set or update API key for current or specified provider |
+On first run, DevOrch walks you through provider selection and API key setup.
 
-### Memory
+## Features
 
-| Command | Description |
-|---------|-------------|
-| `/memory` | Show all saved memories |
-| `/remember <text>` | Save something to memory |
-| `/forget` | Delete a memory (interactive) |
+### 13+ AI Providers
 
-Memories persist across conversations in `~/.devorch/memory/`. Types:
-- **user** - Your role, preferences, expertise
-- **feedback** - Corrections and guidance for the AI
-- **project** - Project decisions, context, ongoing work
-- **reference** - Links to external resources
+| Cloud | Local / Self-Hosted |
+|-------|---------------------|
+| OpenAI (GPT-4o, o1) | Ollama (Llama, Mistral, CodeLlama) |
+| Anthropic (Claude 4, 3.5) | LM Studio (any GGUF model) |
+| Google Gemini (2.0, 1.5 Pro) | Custom (vLLM, TGI, llama.cpp) |
+| Groq (ultra-fast Llama, Mixtral) | |
+| Mistral (Large, Codestral) | |
+| Together AI, OpenRouter, GitHub Copilot, DeepSeek, Kimi | |
+
+Switch anytime with `/providers` (interactive) or `/provider <name>` (direct).
+
+### Built-in Tools
+
+DevOrch can act on your system, not just talk about it:
+
+| Tool | What it does |
+|------|-------------|
+| `shell` | Execute commands (`git status`, `npm install`, etc.) |
+| `terminal_session` | Managed background processes with optional GUI window |
+| `filesystem` | Read, write, list files |
+| `search` / `grep` | Find files and search contents |
+| `edit` | Targeted find-and-replace edits |
+| `task` | Track progress on multi-step work |
+| `memory` | Persistent memory across conversations |
+| `websearch` / `webfetch` | Search the web, fetch URLs |
+
+### Memory System
+
+DevOrch remembers context across conversations:
+
+```
+/remember I prefer TypeScript over JavaScript
+/remember This project uses PostgreSQL, not MySQL
+/memory                    # View all saved memories
+/forget                    # Delete a memory interactively
+```
+
+Memory types: **user** (preferences), **feedback** (corrections), **project** (context), **reference** (external links).
 
 ### Skills
 
-| Command | Description |
-|---------|-------------|
-| `/skills` | List all available skills |
-| `/skill <name>` | Run a skill |
-| `/commit` | Create a git commit with a descriptive message |
-| `/review` | Review code changes for bugs and issues |
-| `/test` | Run project tests and analyze results |
-| `/fix` | Fix the last error or failing test |
-| `/explain` | Explain the current project structure |
-| `/simplify` | Simplify recent code changes |
+Reusable prompt templates for common workflows:
 
-Custom skills can be added as YAML files in `~/.devorch/skills/`:
+```
+/commit       # Generate a descriptive git commit
+/review       # Review code changes for bugs
+/test         # Run tests and analyze results
+/fix          # Fix the last error
+/explain      # Explain project structure
+/simplify     # Simplify recent code changes
+```
+
+Add your own in `~/.devorch/skills/`:
 
 ```yaml
 # ~/.devorch/skills/deploy.yaml
@@ -124,158 +132,123 @@ prompt: |
   Check the deploy logs for any errors.
 ```
 
-### Session
+### Terminal Sessions
 
-| Command | Description |
-|---------|-------------|
-| `/session` | Show current session info |
-| `/history` | Show conversation history |
-| `/clear` | Clear conversation history |
-| `/compact` | Summarize and compact history |
-| `/save` | Save conversation to file |
-| `/undo` | Undo last message |
+Background processes that persist across DevOrch restarts:
 
-### MCP
+```bash
+# Headless — AI monitors output
+> terminal_session start command="npm run dev"
+  Session 'swift-fox-a3f2' started (PID 12345)
 
-| Command | Description |
-|---------|-------------|
-| `/mcp` | Show connected MCP servers and their tools |
+# With GUI — user gets a visible terminal, AI can still read output
+> terminal_session start command="bash" gui=true
+  Session 'calm-owl-b7e1' started in visible terminal
 
-## MCP (Model Context Protocol)
+# Check output / send input / stop
+> terminal_session read session_id="swift-fox-a3f2"
+> terminal_session send session_id="swift-fox-a3f2" input="rs\n"
+> terminal_session stop session_id="swift-fox-a3f2"
+```
 
-Connect external tool servers via MCP. Configure in `~/.devorch/config.yaml`:
+### MCP (Model Context Protocol)
+
+Extend DevOrch with external tool servers:
 
 ```yaml
+# ~/.devorch/config.yaml
 mcp_servers:
-  filesystem:
-    command: npx
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"]
   github:
     command: npx
     args: ["-y", "@modelcontextprotocol/server-github"]
     env:
       GITHUB_TOKEN: "ghp_xxx"
-  sqlite:
-    command: uvx
-    args: ["mcp-server-sqlite", "--db-path", "mydb.sqlite"]
+  filesystem:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"]
 ```
 
-MCP tools automatically appear alongside built-in tools and can be used by the AI.
+MCP tools appear alongside built-in tools automatically.
 
-## Modes
+### Modes
 
-- **ASK** (default) - Asks before each tool execution
-- **AUTO** - Executes tools automatically (dangerous commands still blocked)
-- **PLAN** - Shows plan before executing, asks for approval
+| Mode | Behavior |
+|------|----------|
+| **ASK** (default) | Asks permission before each tool execution |
+| **AUTO** | Executes tools automatically (dangerous commands still blocked) |
+| **PLAN** | Shows a plan before executing, asks for approval |
 
-## Terminal Sessions
+### Permission System
 
-Unified terminal tool with optional GUI window. The AI can monitor output and send input.
-
-```
-> Start a dev server (headless, AI monitors)
-  > terminal_session start command="npm run dev"
-    ✓ Session 'swift-fox-a3f2' started (PID 12345)
-
-> Open a visible terminal (user can type, AI reads output)
-  > terminal_session start command="bash" gui=true
-    ✓ Session 'calm-owl-b7e1' started in visible terminal
-
-> Check output
-  > terminal_session read session_id="swift-fox-a3f2"
-    ✓ [Session 'swift-fox-a3f2' — running]
-
-> Stop it
-  > terminal_session stop session_id="swift-fox-a3f2"
-    ✓ Session stopped.
-```
-
-Sessions are tracked in `~/.devorch/sessions/` and can be reconnected after restarting DevOrch.
-
-## Tool Permissions
-
-Interactive permission system with arrow-key navigation:
-
-```
-? Choose an action:
-  » Allow once
-    Allow for this session
-    Always allow (save to config)
-    Deny
-```
+Fine-grained control over what DevOrch can do:
 
 ```bash
-devorch permissions list                    # Show permissions
+devorch permissions list                    # View current rules
 devorch permissions set shell allow         # Always allow shell
-devorch permissions allow shell "git *"     # Allow git commands
+devorch permissions allow shell "git *"     # Allow specific patterns
 devorch permissions deny shell "rm -rf *"   # Block dangerous commands
 ```
 
-## Supported Providers
+Or use `/auth` in-chat to set API keys without restarting.
 
-### Cloud Providers
+## All Slash Commands
 
-| Provider | Models | API Key |
-|----------|--------|---------|
-| **OpenAI** | GPT-4o, GPT-4, o1 | `OPENAI_API_KEY` |
-| **Anthropic** | Claude 4, Claude 3.5 | `ANTHROPIC_API_KEY` |
-| **Google Gemini** | Gemini 2.0, 1.5 Pro/Flash | `GOOGLE_API_KEY` |
-| **Groq** | Llama 3.3, Mixtral | `GROQ_API_KEY` |
-| **Mistral** | Large, Codestral | `MISTRAL_API_KEY` |
-| **Together AI** | Llama 3, Mixtral, Qwen | `TOGETHER_API_KEY` |
-| **OpenRouter** | 100+ models | `OPENROUTER_API_KEY` |
-| **GitHub Copilot** | GPT-4o, Claude 3.5 | `GITHUB_TOKEN` |
-| **DeepSeek** | Chat, Coder, Reasoner | `DEEPSEEK_API_KEY` |
-| **Kimi (Moonshot)** | 8K, 32K, 128K context | `MOONSHOT_API_KEY` |
-
-### Local & Self-Hosted
-
-| Provider | Setup |
-|----------|-------|
-| **Ollama** | Install Ollama, run models locally |
-| **LM Studio** | Install LM Studio, GUI for local models |
-| **Custom** | Any OpenAI-compatible API (vLLM, TGI, llama.cpp) |
-
-## Tools
-
-| Tool | Description |
-|------|-------------|
-| **shell** | Execute shell commands |
-| **terminal_session** | Managed sessions with optional GUI (start, read, send, stop) |
-| **filesystem** | Read, write, and list files |
-| **search** | Find files by name patterns (glob) |
-| **grep** | Search for text patterns in files |
-| **edit** | Make targeted edits to existing files |
-| **task** | Track progress on multi-step work |
-| **memory** | Save/search persistent memories across conversations |
-| **websearch** | Search the web (DuckDuckGo) |
-| **webfetch** | Fetch content from a URL |
+| Command | Description |
+|---------|-------------|
+| `/help` | Show all commands |
+| `/models` | Browse and switch models (interactive) |
+| `/model <name>` | Switch model (partial match supported) |
+| `/providers` | Browse and switch providers (interactive) |
+| `/provider <name>` | Switch provider directly |
+| `/mode` | Switch mode (Plan/Auto/Ask) |
+| `/status` | Show current config |
+| `/auth [provider]` | Set/update API key |
+| `/memory` | Show saved memories |
+| `/remember <text>` | Save to memory |
+| `/forget` | Delete a memory |
+| `/skills` | List available skills |
+| `/skill <name>` | Run a skill |
+| `/commit` `/review` `/test` `/fix` `/explain` `/simplify` | Skill shortcuts |
+| `/session` | Session info |
+| `/history` | Conversation history |
+| `/clear` | Clear history |
+| `/compact` | Summarize history |
+| `/save` | Save to file |
+| `/undo` | Undo last message |
+| `/mcp` | MCP server status |
+| `/config` | Show configuration |
+| `/permissions` | Show permissions |
+| `/tasks` | Show task list |
 
 ## Configuration
 
 ### API Keys
 
 ```bash
-# From CLI
+# Secure keychain storage
 devorch set-key openai
 devorch set-key anthropic
 
-# From within chat
+# Or in-chat
 /auth openai
-/auth anthropic
 
-# Or use environment variables
+# Or environment variables
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 export GOOGLE_API_KEY=...
 export GROQ_API_KEY=gsk_...
+export MISTRAL_API_KEY=...
+export OPENROUTER_API_KEY=sk-or-...
+export TOGETHER_API_KEY=...
+export GITHUB_TOKEN=ghp_...
+export DEEPSEEK_API_KEY=sk-...
+export MOONSHOT_API_KEY=sk-...
 ```
 
 ### Config File
 
-`~/.devorch/config.yaml`:
-
 ```yaml
+# ~/.devorch/config.yaml
 default_provider: openai
 
 providers:
@@ -283,8 +256,10 @@ providers:
     default_model: gpt-4o
   anthropic:
     default_model: claude-sonnet-4-20250514
+  custom_vllm:
+    default_model: meta-llama/Meta-Llama-3-70B-Instruct
+    base_url: http://localhost:8000/v1
 
-# MCP servers
 mcp_servers:
   github:
     command: npx
@@ -293,7 +268,7 @@ mcp_servers:
       GITHUB_TOKEN: "ghp_xxx"
 ```
 
-### Directory Structure
+### Directory Layout
 
 ```
 ~/.devorch/
@@ -301,22 +276,73 @@ mcp_servers:
 ├── permissions.yaml     # Tool permission rules
 ├── sessions.db          # Chat history (SQLite)
 ├── memory/              # Persistent memories
-│   ├── MEMORY.md        # Memory index
-│   ├── user_*.md        # User profile memories
-│   ├── feedback_*.md    # Feedback memories
-│   └── project_*.md     # Project context memories
+│   ├── MEMORY.md
+│   └── *.md
 ├── skills/              # Custom skill definitions
-│   └── *.yaml           # User-defined skills
+│   └── *.yaml
 └── sessions/            # Terminal session logs
-    ├── registry.json    # Session registry
-    └── *.log            # Session output logs
+    ├── registry.json
+    └── *.log
 ```
+
+## Contributing
+
+Contributions are welcome! Here's how to get started:
+
+```bash
+# Clone and install in development mode
+git clone https://github.com/Amanbig/DevOrch.git
+cd DevOrch
+pip install -e ".[dev]"
+
+# Run linting
+ruff check .
+ruff format .
+
+# Run tests
+pytest
+```
+
+### Guidelines
+
+- Run `ruff check .` and `ruff format .` before submitting
+- Add tests for new features
+- Keep PRs focused — one feature or fix per PR
+- Update the README if adding user-facing features
+
+### Project Structure
+
+```
+DevOrch/
+├── cli/              # CLI entry point and REPL
+├── core/             # Agent, executor, memory, MCP, skills
+├── config/           # Settings, permissions
+├── providers/        # AI provider implementations
+├── tools/            # Built-in tools (shell, edit, search, etc.)
+├── schemas/          # Pydantic models
+├── utils/            # Logging, display helpers
+└── tests/            # Test suite
+```
+
+## Roadmap
+
+- [ ] Streaming responses
+- [ ] Multi-file context awareness
+- [ ] Plugin marketplace
+- [ ] VS Code extension
+- [ ] Agent-to-agent delegation
 
 ## Requirements
 
 - Python 3.10+
-- Dependencies: typer, rich, pydantic, openai, anthropic, google-genai, httpx, keyring, prompt_toolkit, questionary, pyyaml, duckduckgo-search
+- Works on Linux, macOS, and Windows
 
 ## License
 
-MIT
+[MIT](LICENSE)
+
+---
+
+<p align="center">
+  Built by <a href="https://github.com/Amanbig">Aman</a> — star the repo if you find it useful!
+</p>
