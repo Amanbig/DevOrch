@@ -117,7 +117,7 @@ PROMPT_STYLE = Style.from_dict(
     {
         "prompt": "#55cc55 bold",
         "prompt-arrow": "#55cc55 bold",
-        "": "#eeeeee",  # input text color
+        "": "#ffffff bold",  # input text — bright white, bold to stand out
         "command": "#66ccff bold",
         "description": "#888888",
         # Completion menu styling
@@ -278,18 +278,26 @@ When executing shell commands, use the shell tool with the command to run."""
 
 
 def _format_model_choice(
-    model: ModelInfo, current_model: str = "", index: int = 0
+    model: ModelInfo, current_model: str = "", index: int = 0, max_name_len: int = 35
 ) -> questionary.Choice:
     """Build a rich questionary choice for a model."""
     is_current = model.id == current_model
-    current_tag = " [current]" if is_current else ""
 
-    parts = [f"{index:>3}.  {model.id}"]
+    # Number + padded model name for alignment
+    name_part = model.id.ljust(max_name_len)
+    parts = [f" {index:>3}.  {name_part}"]
+
+    # Metadata column
+    meta = []
     if model.context_length:
-        parts.append(f" ({model.context_length:,} ctx)")
+        meta.append(f"{model.context_length:,} ctx")
     if model.description:
-        parts.append(f" - {model.description[:50]}")
-    parts.append(current_tag)
+        meta.append(model.description[:40])
+    if is_current:
+        meta.append("● current")
+
+    if meta:
+        parts.append("  " + "  |  ".join(meta))
 
     display = "".join(parts)
     return questionary.Choice(display, value=model.id)
@@ -312,7 +320,13 @@ def _interactive_model_select(
 
     prompt_text = prompt_text or f"Select model for {provider_name}:"
 
-    choices = [_format_model_choice(m, current_model, i + 1) for i, m in enumerate(models)]
+    # Compute max name length for aligned columns
+    max_name = max(len(m.id) for m in models) if models else 30
+    max_name = min(max_name + 2, 45)  # cap it so it doesn't get too wide
+
+    choices = [
+        _format_model_choice(m, current_model, i + 1, max_name) for i, m in enumerate(models)
+    ]
 
     try:
         selected = questionary.select(
@@ -1658,7 +1672,7 @@ def ask(
     console.print(f"[dim]Using {llm.name}/{llm.model}[/dim]")
     try:
         result = agent.run(prompt, max_iterations=15)
-        print_panel(result, title="DevOrch", border_style="green")
+        print_panel(result, title="DevOrch", border_style="cyan")
     except Exception as e:
         print_error(str(e))
 

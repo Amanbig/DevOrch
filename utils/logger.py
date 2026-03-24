@@ -41,14 +41,15 @@ def print_info(msg: str):
 
 
 def print_response(content: str):
-    """Print an AI response with markdown rendering and a cyan-tinted border."""
+    """Print an AI response with a subtle grey background, no border."""
     console.print()
     try:
         md = Markdown(content)
         console.print(
             Panel(
                 md,
-                border_style="#3a6a8a",
+                style="on #1a1a2e",
+                border_style="#1a1a2e",  # invisible border, blends with background
                 padding=(1, 2),
                 expand=True,
             )
