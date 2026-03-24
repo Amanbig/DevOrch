@@ -79,7 +79,7 @@ class ToolExecutor(Executor):
         # Create a nice panel for the command
         command_display = Text()
         command_display.append("Tool: ", style="dim")
-        command_display.append(f"{tool_name}\n", style="bold yellow")
+        command_display.append(f"{tool_name}\n", style="bold white")
         command_display.append("Command: ", style="dim")
         command_display.append(command, style="bold cyan")
 
@@ -88,8 +88,8 @@ class ToolExecutor(Executor):
 
         panel = Panel(
             command_display,
-            title="[bold yellow]Permission Required[/bold yellow]",
-            border_style="yellow",
+            title="[bold #e0a050]Permission Required[/bold #e0a050]",
+            border_style="#8a6a3a",
             padding=(0, 1),
         )
         console.print(panel)

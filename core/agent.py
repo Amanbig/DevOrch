@@ -1,10 +1,6 @@
 import json
 from collections.abc import Callable
 
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.text import Text
-
 from core.executor import Executor
 from core.modes import AgentMode, ModeManager
 from core.planner import Planner
@@ -78,15 +74,8 @@ class Agent:
         # Build a clean summary based on tool type
         if call.name == "shell":
             cmd = args.get("command", "")
-            syntax = Syntax(cmd, "bash", theme="monokai", line_numbers=False, word_wrap=True)
-            console.print(
-                Panel(
-                    syntax,
-                    title="[bold magenta]Shell[/bold magenta]",
-                    border_style="magenta",
-                    padding=(0, 1),
-                )
-            )
+            # Shell command with subtle background
+            console.print(f"  [dim]>[/dim] [on #1e2030][cyan]shell[/cyan] [bold]{cmd}[/bold][/]")
 
         elif call.name == "filesystem":
             action = args.get("action", "")
@@ -152,7 +141,7 @@ class Agent:
 
         elif call.name.startswith("mcp_"):
             # MCP tool call
-            console.print(f"  [dim]>[/dim] [magenta]MCP[/magenta] [cyan]{call.name}[/cyan]")
+            console.print(f"  [dim]>[/dim] [#6a8aaa]MCP[/#6a8aaa] [cyan]{call.name}[/cyan]")
 
         else:
             # Generic fallback - show tool name and brief args
@@ -176,14 +165,7 @@ class Agent:
 
         # ── Errors — always show ─────────────────────────────────────────
         if "Error:" in result_str or result_str.startswith("Error"):
-            console.print(
-                Panel(
-                    Text(result_str[:300], style="red"),
-                    title="[bold red]Error[/bold red]",
-                    border_style="red",
-                    padding=(0, 1),
-                )
-            )
+            console.print(f"    [red]✗ {result_str[:300]}[/red]")
             return
 
         # ── File reads — never dump content, just show summary ───────────
@@ -236,15 +218,9 @@ class Agent:
             else:
                 display_result = result_str
 
-            console.print(
-                Panel(
-                    Syntax(
-                        display_result, "text", theme="monokai", line_numbers=False, word_wrap=True
-                    ),
-                    border_style="dim",
-                    padding=(0, 1),
-                )
-            )
+            # Show output with subtle background
+            for line in display_result.split("\n"):
+                console.print(f"    [dim on #1a1a28]{line}[/]")
             return
 
         # ── Everything else — brief one-liner ────────────────────────────
