@@ -31,7 +31,8 @@ Use this tool whenever you need to:
 - Run any long-running process that should NOT block the current session
 
 The main DevOrch session remains fully interactive while the command runs in its own window.
-After calling this tool, continue the conversation normally — do NOT wait for the command to finish."""
+After calling this tool, continue the conversation normally — do NOT wait for the command to finish.
+NOTE: This is separate from terminal_session. Do NOT use terminal_session to read/list/stop terminals opened with this tool."""
     args_schema = OpenTerminalSchema
 
     def run(self, arguments: dict[str, Any]) -> Any:
