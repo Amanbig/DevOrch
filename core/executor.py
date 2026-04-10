@@ -67,6 +67,13 @@ class ToolExecutor(Executor):
             elif action == "list":
                 return f"list {path}"
             return f"{action} {path}"
+        elif tool_name == "agent":
+            task = arguments.get("task", "")
+            tools = arguments.get("tools")
+            # Truncate long tasks for display
+            task_preview = task[:120] + "..." if len(task) > 120 else task
+            tools_str = f"  tools: {tools}" if tools else "  tools: all"
+            return f"{task_preview}\n{tools_str}"
         else:
             return str(arguments)
 

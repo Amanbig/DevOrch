@@ -4,13 +4,27 @@ from pathlib import Path
 import questionary
 import typer
 from prompt_toolkit import prompt as pt_prompt
-from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.styles import Style
-from questionary import Style as QStyle
 from rich.panel import Panel
 from rich.table import Table
 
+from cli.commands._shared import (  # noqa: E402
+    SYSTEM_PROMPT,  # noqa: E402, F401 (used by start_repl via SimplePlanner)
+    SimplePlanner,
+    console,
+    create_provider,
+)
+from cli.commands.ask import ask  # noqa: E402
+from cli.commands.edit import edit  # noqa: E402
+from cli.commands.run import run  # noqa: E402
+
+# Custom style for questionary prompts
+from cli.constants import (  # noqa: E402
+    PROMPT_STYLE,
+    QUESTIONARY_STYLE,
+    SLASH_COMMANDS,
+    SlashCommandCompleter,
+    print_banner,
+)
 from config.permissions import (
     PERMISSIONS_FILE,
     PermissionLevel,
@@ -30,13 +44,12 @@ from core.executor import ToolExecutor
 from core.mcp import MCPManager
 from core.memory import MemoryManager, MemoryTool
 from core.modes import AgentMode, ModeManager
-from core.planner import Planner
 from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
 from core.skills import SkillManager
 from core.tasks import get_task_manager, reset_task_manager
 from providers import PROVIDER_ENV_VARS, PROVIDER_INFO, PROVIDERS, get_provider
 from providers.base import ModelInfo
-from schemas.message import Message
+from tools.agent import AgentTool  # noqa: E402
 from tools.edit import EditTool
 from tools.filesystem import FilesystemTool
 from tools.grep import GrepTool
@@ -46,7 +59,6 @@ from tools.task import TaskTool
 from tools.terminal_session import TerminalSessionTool
 from tools.websearch import WebFetchTool, WebSearchTool
 from utils.logger import (
-    get_console,
     print_error,
     print_info,
     print_panel,
@@ -54,227 +66,6 @@ from utils.logger import (
     print_success,
     print_warning,
 )
-
-# Custom style for questionary prompts
-QUESTIONARY_STYLE = QStyle(
-    [
-        ("qmark", "fg:#55aaff bold"),  # question mark
-        ("question", "fg:#ffffff bold"),  # question text
-        ("answer", "fg:#44ddaa bold"),  # confirmed answer
-        ("pointer", "fg:#55ccff bold"),  # » arrow
-        ("highlighted", "fg:#55ccff bold"),  # selected item text — matches pointer
-        ("selected", "fg:#55ccff"),  # multi-select selected
-        ("text", "fg:#bbbbbb"),  # unselected items
-        ("disabled", "fg:#555555"),  # disabled items
-        ("instruction", "fg:#666666 italic"),  # instruction hint
-        ("separator", "fg:#444444"),  # separator lines
-    ]
-)
-
-# ASCII Art Banner — clean, compact
-BANNER = """
-[bold cyan]  ╔╦╗┌─┐┬  ┬╔═╗┬─┐┌─┐┬ ┬
-   ║║├┤ └┐┌┘║ ║├┬┘│  ├─┤
-  ═╩╝└─┘ └┘ ╚═╝┴└─└─┘┴ ┴[/bold cyan]"""
-
-BANNER_SMALL = "[bold cyan]DevOrch[/bold cyan]"
-
-VERSION = "0.2.1"
-
-# Slash commands with descriptions
-SLASH_COMMANDS = {
-    "/help": "Show available commands",
-    "/mode": "Show or change mode (plan/auto/ask)",
-    "/plan": "Switch to plan mode",
-    "/auto": "Switch to auto mode",
-    "/ask": "Switch to ask mode (default)",
-    "/clear": "Clear conversation history",
-    "/session": "Show current session info",
-    "/config": "Show configuration settings",
-    "/permissions": "Show permission settings",
-    "/compact": "Summarize and compact history",
-    "/models": "Browse and switch models (interactive)",
-    "/model": "Switch model (/model <name> or interactive)",
-    "/providers": "Browse and switch providers (interactive)",
-    "/provider": "Switch provider (/provider <name> or interactive)",
-    "/history": "Show conversation history",
-    "/undo": "Undo last message",
-    "/save": "Save conversation to file",
-    "/status": "Show current provider, model, and mode",
-    "/tasks": "Show current task list",
-    "/memory": "Show saved memories",
-    "/remember": "Save something to memory",
-    "/forget": "Delete a memory",
-    "/skills": "List available skills",
-    "/skill": "Run a skill (e.g. /skill commit)",
-    "/mcp": "Show MCP server status",
-    "/auth": "Set or update API key for current/specified provider",
-}
-
-# Style for prompt_toolkit (including completion menu)
-PROMPT_STYLE = Style.from_dict(
-    {
-        "prompt": "#55cc55 bold",
-        "prompt-arrow": "#55cc55 bold",
-        "": "#ffffff bold",  # input text — bright white, bold to stand out
-        "command": "#66ccff bold",
-        "description": "#888888",
-        # Completion menu styling
-        "completion-menu": "bg:#252530",
-        "completion-menu.completion": "bg:#252530 #cccccc",
-        "completion-menu.completion.current": "bg:#334466 #ffffff bold",
-        "completion-menu.meta": "bg:#252530 #555555",
-        "completion-menu.meta.current": "bg:#334466 #99bbdd",
-        # Scrollbar
-        "scrollbar.background": "bg:#2a2a3a",
-        "scrollbar.button": "bg:#5588bb",
-        # Bottom toolbar — near-invisible bg, just text
-        "bottom-toolbar": "bg:#0e0e18 #556677",
-        "bottom-toolbar.text": "bg:#0e0e18 #556677",
-    }
-)
-
-
-def _xml_escape(text: str) -> str:
-    """Escape text for use in prompt_toolkit HTML."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
-class SlashCommandCompleter(Completer):
-    """Autocomplete for slash commands and skill shortcuts."""
-
-    def __init__(self, skill_manager=None):
-        self._skill_manager = skill_manager
-
-    def get_completions(self, document, complete_event):
-        text = document.text_before_cursor
-
-        # Only complete if starts with /
-        if not text.startswith("/"):
-            return
-
-        # Get the partial command
-        partial = text.lower()
-
-        # Built-in slash commands
-        for cmd, desc in SLASH_COMMANDS.items():
-            if cmd.startswith(partial):
-                # Pad command name for alignment (Gemini-like layout)
-                padded_cmd = cmd[1:].ljust(16)  # strip / for display, pad
-                safe_desc = _xml_escape(desc)
-                yield Completion(
-                    cmd,
-                    start_position=-len(text),
-                    display=HTML(
-                        f"<command>{padded_cmd}</command><description>{safe_desc}</description>"
-                    ),
-                    display_meta=desc,
-                )
-
-        # Skill shortcuts (e.g. /commit, /review)
-        if self._skill_manager:
-            for skill in self._skill_manager.list_skills():
-                skill_cmd = f"/{skill['name']}"
-                if skill_cmd.startswith(partial) and skill_cmd not in SLASH_COMMANDS:
-                    padded_cmd = skill["name"].ljust(16)
-                    safe_desc = _xml_escape(skill["description"])
-                    yield Completion(
-                        skill_cmd,
-                        start_position=-len(text),
-                        display=HTML(
-                            f"<command>{padded_cmd}</command><description>{safe_desc}</description>"
-                        ),
-                        display_meta=f"skill: {skill['description']}",
-                    )
-
-
-def print_banner(small: bool = False):
-    """Print the DevOrch banner."""
-    if small:
-        console.print(f"\n  {BANNER_SMALL} [dim]v{VERSION}[/dim]\n")
-    else:
-        console.print(BANNER)
-        console.print(f"  [dim]v{VERSION}[/dim]")
-        console.print()
-
-
-SYSTEM_PROMPT = """You are DevOrch, an AI coding assistant with access to tools for interacting with the user's computer.
-
-IMPORTANT: You have the following tools available and MUST use them to help the user:
-
-1. **shell** - Execute shell commands (bash/powershell). Use this to:
-   - Run commands like `npm install`, `git clone`, `git status`, etc.
-   - Navigate directories, create files, run scripts
-   - Any short-lived terminal command that returns output
-
-2. **terminal_session** — The PRIMARY tool for all terminal/process needs:
-   - `start` — launch a command in a managed session. Defaults to 'bash' if no command.
-     Set gui=true to also open a visible terminal window for the user.
-   - `read`  — read recent stdout/stderr output
-   - `send`  — send input to the process stdin
-   - `stop`  — terminate the session
-   - `list`  — show all active sessions
-   - `reconnect` — reconnect to sessions from previous DevOrch runs
-   Sessions persist across DevOrch restarts with unique names (e.g. 'swift-fox-a3f2').
-   Use gui=true when the user wants to SEE a terminal. Use without gui for headless monitoring.
-
-4. **filesystem** - Read/write/list files. Use this to:
-   - Read file contents to understand code
-   - Write or create new files
-   - List directory contents
-
-5. **search** - Find files by name patterns (like glob)
-
-6. **grep** - Search for text patterns within files
-
-7. **edit** - Make targeted edits to existing files
-
-8. **task** - Track progress on multi-step work. Use this to:
-   - Create a task list when working on complex requests (3+ steps)
-   - Show the user what you're currently working on
-   - Mark tasks complete as you finish them
-
-   Task guidelines:
-   - Use when working on multiple steps or user gives multiple items
-   - Only ONE task should be 'in_progress' at a time
-   - Mark tasks 'completed' immediately after finishing each one
-   - content: imperative form (e.g., "Fix bug", "Run tests")
-   - activeForm: present continuous (e.g., "Fixing bug", "Running tests")
-
-9. **websearch** - Search the web for current information. Use when:
-   - You need up-to-date information (news, docs, releases)
-   - Looking up programming solutions or best practices
-   - Finding package/library documentation
-   - User asks about something you're unsure about
-
-10. **webfetch** - Fetch content from a specific URL. Use when:
-    - You need to read a documentation page
-    - User provides a URL to check
-    - You found a relevant URL from search results
-
-11. **memory** - Persistent memory across conversations. Use to:
-    - Save important context: user preferences, project decisions, feedback
-    - Search/load memories from previous conversations
-    - Memory types: user (profile), feedback (corrections), project (context), reference (links)
-    - Proactively save memories when you learn something important about the user or project
-    - Check memories at the start of conversations for relevant context
-
-RULES:
-- When the user asks you to CREATE something (app, file, project), USE THE TOOLS to actually do it
-- Do NOT just give instructions - execute the commands yourself using the shell tool
-- Do NOT ask the user to run commands manually - run them for the user
-- Always prefer action over explanation — do things, don't explain how to do them
-- For multi-step tasks, use the task tool to track and show progress
-- Use `terminal_session` for ALL terminal needs — dev servers, scaffolds, processes, interactive shells
-- If the user says "open terminal", use `terminal_session start` with gui=true so they get a visible window AND you can read output
-- If the user wants you to monitor a process, use `terminal_session start` (no gui needed)
-- When a GUI terminal session is active and the user asks "what did I type", "see it", "check output", or anything about the terminal, IMMEDIATELY use `terminal_session read` to read the session output — do NOT say you can't see it
-- For GUI sessions: the user types in the visible window, you read output with `terminal_session read`
-- For headless sessions: send commands via `send` action, read output with `read` action
-- When the user corrects you or gives feedback, save it to memory for future conversations
-- When you learn about the user's role, preferences, or project context, save it to memory
-
-When executing shell commands, use the shell tool with the command to run."""
 
 
 def _format_model_choice(
@@ -433,18 +224,6 @@ def _fuzzy_match_model(query: str, models: list[ModelInfo]) -> ModelInfo | None:
     return None
 
 
-class SimplePlanner(Planner):
-    def __init__(self, memory_context: str = ""):
-        self.memory_context = memory_context
-
-    def plan(self, history: list[Message]) -> list[Message]:
-        prompt = SYSTEM_PROMPT
-        if self.memory_context:
-            prompt += "\n" + self.memory_context
-        system_prompt = Message(role="system", content=prompt)
-        return [system_prompt] + history
-
-
 # Main app with invoke_without_command=True so we can handle bare `devorch`
 app = typer.Typer(
     help="DevOrch - Your AI Coding Assistant", invoke_without_command=True, no_args_is_help=False
@@ -455,7 +234,10 @@ app.add_typer(sessions_app, name="sessions")
 permissions_app = typer.Typer(help="Manage tool permissions")
 app.add_typer(permissions_app, name="permissions")
 
-console = get_console()
+# Register commands defined in cli/commands/
+app.command()(ask)
+app.command()(run)
+app.command()(edit)
 
 
 def has_any_provider_configured(settings: Settings) -> bool:
@@ -682,41 +464,6 @@ def create_provider_safe(provider_name: str, model: str, settings: Settings):
     return get_provider(provider_name, model=model, api_key=api_key, **kwargs)
 
 
-def create_provider(provider_name: str, model: str, settings: Settings):
-    """Create and validate a provider instance."""
-    provider_name = provider_name.lower()
-
-    if provider_name not in PROVIDERS:
-        print_error(f"Unknown provider '{provider_name}'. Available: {', '.join(PROVIDERS.keys())}")
-        raise typer.Exit(1)
-
-    api_key = settings.get_api_key(provider_name)
-
-    if provider_name != "local" and not api_key:
-        env_var_name = {
-            "openai": "OPENAI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "gemini": "GOOGLE_API_KEY",
-        }.get(provider_name, f"{provider_name.upper()}_API_KEY")
-
-        print_error(f"No API key found for {provider_name}.")
-        print_error(
-            f"Use 'devorch set-key {provider_name}' or set {env_var_name} environment variable"
-        )
-        raise typer.Exit(1)
-
-    if not model:
-        model = settings.get_default_model(provider_name)
-
-    kwargs = {}
-    if provider_name == "local":
-        base_url = settings.get_base_url(provider_name)
-        if base_url:
-            kwargs["base_url"] = base_url
-
-    return get_provider(provider_name, model=model, api_key=api_key, **kwargs)
-
-
 def start_repl(
     provider: str | None = None,
     model: str | None = None,
@@ -802,7 +549,7 @@ def start_repl(
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
 
     executor = ToolExecutor(tools=tools, require_confirmation=True, mode_manager=mode_manager)
-    planner = SimplePlanner(memory_context=memory_context)
+    planner = SimplePlanner(memory_context=memory_context, tools=tools)
 
     def on_session_continue(new_session_id: str):
         print_info(f"Session continued: {new_session_id}")
@@ -816,6 +563,12 @@ def start_repl(
         on_session_continue=on_session_continue,
         mode_manager=mode_manager,
     )
+
+    # Inject AgentTool (needs provider + full tool list, so injected after construction)
+    agent_tool = AgentTool(provider=llm, tools=tools)
+    executor.tools[agent_tool.name] = agent_tool
+    agent.tools.append(agent_tool)
+    planner.update_tools(agent.tools)
 
     if messages:
         agent.set_history(messages)
@@ -1499,25 +1252,126 @@ def start_repl(
                     continue
 
                 elif cmd == "mcp":
-                    servers = mcp_manager.list_servers()
-                    if not servers:
-                        console.print("\n[bold]MCP Servers:[/bold] None connected")
-                        console.print("[dim]Configure MCP servers in ~/.devorch/config.yaml:[/dim]")
-                        console.print(
-                            "[dim]  mcp_servers:\n"
-                            "    my-server:\n"
-                            "      command: npx\n"
-                            '      args: ["-y", "@modelcontextprotocol/server-xxx"][/dim]\n'
-                        )
-                    else:
-                        console.print(f"\n[bold]MCP Servers ({len(servers)}):[/bold]")
-                        for srv in servers:
-                            status = (
-                                "[green]running[/green]" if srv["running"] else "[red]stopped[/red]"
+                    # Sub-command dispatch: /mcp [add|stop|start] [args...]
+                    mcp_parts = cmd_arg.split() if cmd_arg else []
+                    mcp_sub = mcp_parts[0] if mcp_parts else None
+
+                    if mcp_sub == "add":
+                        # /mcp add <name> <command> [arg1 arg2 ...]
+                        if len(mcp_parts) < 3:
+                            print_warning("Usage: /mcp add <name> <command> [args...]")
+                            print_info(
+                                "Example: /mcp add github npx -y @modelcontextprotocol/server-github"
                             )
-                            console.print(f"  [cyan]{srv['name']}[/cyan] - {status}")
-                            if srv["tools"]:
-                                console.print(f"    Tools: {', '.join(srv['tools'])}")
+                        else:
+                            mcp_name = mcp_parts[1]
+                            mcp_cmd = mcp_parts[2]
+                            mcp_cmd_args = mcp_parts[3:]
+                            with console.status(
+                                f"[bold cyan]Starting '{mcp_name}'...", spinner="dots"
+                            ):
+                                ok, new_tools = mcp_manager.add_server(
+                                    mcp_name, mcp_cmd, mcp_cmd_args
+                                )
+                            if ok:
+                                for t in new_tools:
+                                    executor.tools[t.name] = t
+                                    agent.tools.append(t)
+                                planner.update_tools(agent.tools)
+                                print_success(
+                                    f"'{mcp_name}' connected — {len(new_tools)} tool(s) added"
+                                )
+                                if new_tools:
+                                    console.print(
+                                        f"  [dim]Tools: {', '.join(t.name for t in new_tools)}[/dim]"
+                                    )
+                            else:
+                                print_error(f"Failed to start MCP server '{mcp_name}'")
+
+                    elif mcp_sub == "stop":
+                        # /mcp stop <name>
+                        if len(mcp_parts) < 2:
+                            print_warning("Usage: /mcp stop <name>")
+                        else:
+                            mcp_name = mcp_parts[1]
+                            if mcp_manager.stop_server(mcp_name):
+                                prefix = f"mcp_{mcp_name}_"
+                                removed = [k for k in list(executor.tools) if k.startswith(prefix)]
+                                for k in removed:
+                                    del executor.tools[k]
+                                agent.tools = [
+                                    t for t in agent.tools if not t.name.startswith(prefix)
+                                ]
+                                planner.update_tools(agent.tools)
+                                print_success(
+                                    f"'{mcp_name}' stopped — {len(removed)} tool(s) removed"
+                                )
+                            else:
+                                print_error(f"No server named '{mcp_name}' is connected")
+
+                    elif mcp_sub == "start":
+                        # /mcp start <name> — reconnect from config
+                        if len(mcp_parts) < 2:
+                            print_warning("Usage: /mcp start <name>")
+                        else:
+                            mcp_name = mcp_parts[1]
+                            mcp_cfg = (settings.mcp_servers or {}).get(mcp_name)
+                            if not mcp_cfg:
+                                print_error(
+                                    f"'{mcp_name}' not found in config. "
+                                    "Use /mcp add <name> <command> [args...] to connect a new server."
+                                )
+                            else:
+                                with console.status(
+                                    f"[bold cyan]Starting '{mcp_name}'...", spinner="dots"
+                                ):
+                                    ok, new_tools = mcp_manager.add_server(
+                                        mcp_name,
+                                        mcp_cfg.get("command", ""),
+                                        mcp_cfg.get("args", []),
+                                        mcp_cfg.get("env", {}),
+                                        mcp_cfg.get("cwd"),
+                                    )
+                                if ok:
+                                    for t in new_tools:
+                                        executor.tools[t.name] = t
+                                        agent.tools.append(t)
+                                    planner.update_tools(agent.tools)
+                                    print_success(
+                                        f"'{mcp_name}' started — {len(new_tools)} tool(s) added"
+                                    )
+                                else:
+                                    print_error(f"Failed to start MCP server '{mcp_name}'")
+
+                    else:
+                        # /mcp — show status
+                        servers = mcp_manager.list_servers()
+                        if not servers:
+                            console.print("\n[bold]MCP Servers:[/bold] None connected")
+                            console.print(
+                                "[dim]Configure in ~/.devorch/config.yaml, or connect inline:[/dim]"
+                            )
+                            console.print(
+                                "[dim]  /mcp add <name> <command> [args...]  — connect a new server[/dim]\n"
+                                "[dim]  /mcp start <name>                    — reconnect from config[/dim]\n"
+                                "[dim]  /mcp stop <name>                     — disconnect a server[/dim]\n"
+                            )
+                        else:
+                            console.print(f"\n[bold]MCP Servers ({len(servers)}):[/bold]")
+                            for srv in servers:
+                                status = (
+                                    "[green]running[/green]"
+                                    if srv["running"]
+                                    else "[red]stopped[/red]"
+                                )
+                                console.print(f"  [cyan]{srv['name']}[/cyan] — {status}")
+                                if srv["tools"]:
+                                    console.print(f"    Tools: {', '.join(srv['tools'])}")
+                            console.print(
+                                "\n[dim]/mcp add <name> <cmd> [args]  "
+                                "| /mcp stop <name>  "
+                                "| /mcp start <name>[/dim]"
+                            )
                     console.print()
                     continue
 
@@ -1631,51 +1485,6 @@ def chat(
 
 
 @app.command()
-def ask(
-    prompt: str = typer.Argument(..., help="The prompt or question for DevOrch"),
-    provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
-    model: str = typer.Option(None, "--model", "-m", help="Model name"),
-):
-    """
-    Ask DevOrch a single question (non-interactive).
-    """
-    settings = Settings.load()
-
-    if not provider:
-        provider = settings.default_provider
-
-    llm = create_provider(provider, model, settings)
-
-    tools = [
-        ShellTool(),
-        TerminalSessionTool(),
-        FilesystemTool(),
-        SearchTool(),
-        GrepTool(),
-        EditTool(),
-        TaskTool(),
-        WebSearchTool(),
-        WebFetchTool(),
-        MemoryTool(),
-    ]
-
-    memory_mgr = MemoryManager()
-    memory_ctx = memory_mgr.get_context_prompt()
-
-    executor = ToolExecutor(tools=tools)
-    planner = SimplePlanner(memory_context=memory_ctx)
-
-    agent = Agent(provider=llm, planner=planner, executor=executor, tools=tools)
-
-    console.print(f"[dim]Using {llm.name}/{llm.model}[/dim]")
-    try:
-        result = agent.run(prompt, max_iterations=15)
-        print_panel(result, title="DevOrch", border_style="cyan")
-    except Exception as e:
-        print_error(str(e))
-
-
-@app.command()
 def config():
     """
     Show current configuration.
@@ -1761,6 +1570,30 @@ def providers():
     console.print("\n[bold]Available Providers:[/bold]\n")
     for name in PROVIDERS.keys():
         console.print(f"  - {name}")
+
+
+@app.command("skills")
+def skills_list():
+    """
+    List all available skills.
+    """
+    skill_manager = SkillManager()
+    all_skills = skill_manager.list_skills()
+
+    if not all_skills:
+        print_info("No skills found.")
+        return
+
+    table = Table(title="Available Skills")
+    table.add_column("Name", style="cyan")
+    table.add_column("Description", style="white")
+    table.add_column("Source", style="dim")
+
+    for s in all_skills:
+        table.add_row(s["name"], s["description"], s.get("source", "built-in"))
+
+    console.print(table)
+    console.print("\n[dim]Run a skill: devorch ask --skill <name>[/dim]")
 
 
 # Session commands
