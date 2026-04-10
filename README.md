@@ -60,6 +60,12 @@ devorch                    # Interactive setup on first run
 devorch -p openai          # Use a specific provider
 devorch -p local           # Use Ollama (local models)
 devorch --resume abc123    # Resume a previous session
+
+# Non-interactive (scripting / CI)
+devorch ask "explain this project"
+devorch ask --skill commit
+devorch run review "focus on security"
+devorch edit src/auth.py "add input validation"
 ```
 
 On first run, DevOrch walks you through provider selection and API key setup.
@@ -109,15 +115,23 @@ Memory types: **user** (preferences), **feedback** (corrections), **project** (c
 
 ### Skills
 
-Reusable prompt templates for common workflows:
+Reusable prompt templates for common workflows. Use them in chat or directly from the CLI:
 
-```
+```bash
+# In chat
 /commit       # Generate a descriptive git commit
 /review       # Review code changes for bugs
 /test         # Run tests and analyze results
 /fix          # Fix the last error
 /explain      # Explain project structure
 /simplify     # Simplify recent code changes
+
+# From the terminal (non-interactive)
+devorch run commit
+devorch run review "focus on auth module"
+devorch run test
+
+devorch skills              # List all available skills
 ```
 
 Add your own in `~/.devorch/skills/`:
@@ -169,6 +183,23 @@ mcp_servers:
 
 MCP tools appear alongside built-in tools automatically.
 
+**Manage MCP servers live in chat:**
+
+```
+/mcp                          # Show connected servers and their tools
+/mcp add github npx -y @modelcontextprotocol/server-github
+/mcp start github             # Reconnect a server from config
+/mcp stop github              # Disconnect and remove its tools
+```
+
+**Filter MCP servers per CLI run:**
+
+```bash
+devorch ask --mcp github "review open PRs"   # Use only the github server
+devorch ask --mcp github --mcp filesystem "..."  # Use specific servers
+devorch run commit --no-mcp                  # Skip MCP entirely
+```
+
 ### Modes
 
 | Mode | Behavior |
@@ -189,6 +220,32 @@ devorch permissions deny shell "rm -rf *"   # Block dangerous commands
 ```
 
 Or use `/auth` in-chat to set API keys without restarting.
+
+## Non-Interactive CLI Commands
+
+DevOrch works as a scriptable CLI too — no REPL needed:
+
+```bash
+# Ask a one-shot question
+devorch ask "what does this codebase do?"
+devorch ask --skill review "focus on security"
+devorch ask --mode plan "refactor the auth module"
+
+# Run a skill directly (shorthand for ask --skill)
+devorch run commit
+devorch run test "only unit tests"
+devorch run review --no-mcp
+
+# Edit a file with an instruction
+devorch edit src/auth.py "add input validation to login"
+devorch edit README.md "update the installation section"
+devorch edit app/models.py "add created_at field" --mcp sqlite
+
+# List available skills
+devorch skills
+```
+
+All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`, and `--no-mcp`.
 
 ## All Slash Commands
 
@@ -214,7 +271,10 @@ Or use `/auth` in-chat to set API keys without restarting.
 | `/compact` | Summarize history |
 | `/save` | Save to file |
 | `/undo` | Undo last message |
-| `/mcp` | MCP server status |
+| `/mcp` | Show MCP server status |
+| `/mcp add <name> <cmd> [args]` | Connect a new MCP server mid-session |
+| `/mcp start <name>` | Reconnect a server from config |
+| `/mcp stop <name>` | Disconnect a server and remove its tools |
 | `/config` | Show configuration |
 | `/permissions` | Show permissions |
 | `/tasks` | Show task list |
@@ -313,8 +373,15 @@ pytest
 
 ```
 DevOrch/
-├── cli/              # CLI entry point and REPL
-├── core/             # Agent, executor, memory, MCP, skills
+├── cli/
+│   ├── main.py           # App wiring, REPL, sessions/config commands
+│   ├── constants.py      # VERSION, banners, slash-command registry, styles
+│   └── commands/
+│       ├── _shared.py    # Shared helpers (agent builder, tool setup, etc.)
+│       ├── ask.py        # devorch ask
+│       ├── run.py        # devorch run
+│       └── edit.py       # devorch edit
+├── core/             # Agent, executor, memory, MCP, skills, modes
 ├── config/           # Settings, permissions
 ├── providers/        # AI provider implementations
 ├── tools/            # Built-in tools (shell, edit, search, etc.)
