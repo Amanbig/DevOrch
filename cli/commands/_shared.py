@@ -15,6 +15,7 @@ from core.modes import AgentMode, ModeManager
 from core.planner import Planner
 from providers import PROVIDERS, get_provider
 from schemas.message import Message
+from tools.agent import AgentTool
 from tools.edit import EditTool
 from tools.filesystem import FilesystemTool
 from tools.grep import GrepTool
@@ -87,6 +88,14 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
     - Memory types: user (profile), feedback (corrections), project (context), reference (links)
     - Proactively save memories when you learn something important about the user or project
     - Check memories at the start of conversations for relevant context
+
+12. **agent** - Spawn a focused sub-agent to handle a self-contained sub-task. Use when:
+    - A step is large enough to need its own isolated context (e.g. "review this file", "run and interpret tests", "research this topic")
+    - You want a clean-slate agent that won't be distracted by the main conversation
+    - A step only needs a specific subset of tools (pass the `tools` argument to restrict)
+    - Example: agent(task="review src/auth.py for security issues", tools=["filesystem", "grep"])
+    - The sub-agent returns its full result as a string — summarise or act on it as needed
+    - Do NOT use for trivial single-tool calls — use the tool directly instead
 
 RULES:
 - When the user asks you to CREATE something (app, file, project), USE THE TOOLS to actually do it
@@ -236,16 +245,26 @@ def resolve_mode(mode_str: str | None, default: AgentMode = AgentMode.AUTO) -> A
 def build_agent(llm, tools: list, memory_ctx: str, agent_mode: AgentMode) -> "Agent":
     """Construct a configured Agent ready to run.
 
-    The planner is stored on agent.planner so callers can call
-    agent.planner.update_tools(tools) after adding/removing MCP servers.
+    AgentTool is injected after construction since it needs the provider reference.
+    The planner is stored on agent.planner — call agent.planner.update_tools(tools)
+    after adding/removing MCP servers mid-session.
     """
     mode_manager = ModeManager(default_mode=agent_mode)
     executor = ToolExecutor(tools=tools, mode_manager=mode_manager)
     planner = SimplePlanner(memory_context=memory_ctx, tools=tools)
-    return Agent(
+
+    agent = Agent(
         provider=llm,
         planner=planner,
         executor=executor,
         tools=tools,
         mode_manager=mode_manager,
     )
+
+    # Inject AgentTool now that we have both the provider and the full tool list
+    agent_tool = AgentTool(provider=llm, tools=tools)
+    executor.tools[agent_tool.name] = agent_tool
+    agent.tools.append(agent_tool)
+    planner.update_tools(agent.tools)
+
+    return agent
