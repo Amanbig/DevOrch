@@ -548,7 +548,7 @@ def start_repl(
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
 
     executor = ToolExecutor(tools=tools, require_confirmation=True, mode_manager=mode_manager)
-    planner = SimplePlanner(memory_context=memory_context)
+    planner = SimplePlanner(memory_context=memory_context, tools=tools)
 
     def on_session_continue(new_session_id: str):
         print_info(f"Session continued: {new_session_id}")
@@ -1270,6 +1270,7 @@ def start_repl(
                                 for t in new_tools:
                                     executor.tools[t.name] = t
                                     agent.tools.append(t)
+                                planner.update_tools(agent.tools)
                                 print_success(
                                     f"'{mcp_name}' connected — {len(new_tools)} tool(s) added"
                                 )
@@ -1294,6 +1295,7 @@ def start_repl(
                                 agent.tools = [
                                     t for t in agent.tools if not t.name.startswith(prefix)
                                 ]
+                                planner.update_tools(agent.tools)
                                 print_success(
                                     f"'{mcp_name}' stopped — {len(removed)} tool(s) removed"
                                 )
@@ -1327,6 +1329,7 @@ def start_repl(
                                     for t in new_tools:
                                         executor.tools[t.name] = t
                                         agent.tools.append(t)
+                                    planner.update_tools(agent.tools)
                                     print_success(
                                         f"'{mcp_name}' started — {len(new_tools)} tool(s) added"
                                     )

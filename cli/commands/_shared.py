@@ -107,15 +107,31 @@ When executing shell commands, use the shell tool with the command to run."""
 
 
 class SimplePlanner(Planner):
-    def __init__(self, memory_context: str = ""):
+    def __init__(self, memory_context: str = "", tools: list | None = None):
         self.memory_context = memory_context
+        self._tools = tools or []
+
+    def update_tools(self, tools: list) -> None:
+        """Refresh the tool list — call this after adding/removing MCP servers."""
+        self._tools = tools
 
     def plan(self, history: list[Message]) -> list[Message]:
         prompt = SYSTEM_PROMPT
+
+        # Append a live tool summary so the LLM knows exactly what's loaded,
+        # including any MCP tools added after startup.
+        if self._tools:
+            builtin = [t.name for t in self._tools if not t.name.startswith("mcp_")]
+            mcp = [t.name for t in self._tools if t.name.startswith("mcp_")]
+            tool_section = f"\n\nLoaded tools: {', '.join(builtin)}"
+            if mcp:
+                tool_section += f"\nLoaded MCP tools: {', '.join(mcp)}"
+            prompt += tool_section
+
         if self.memory_context:
             prompt += "\n" + self.memory_context
-        system_prompt = Message(role="system", content=prompt)
-        return [system_prompt] + history
+
+        return [Message(role="system", content=prompt)] + history
 
 
 def create_provider(provider_name: str, model: str, settings: Settings):
@@ -217,11 +233,15 @@ def resolve_mode(mode_str: str | None, default: AgentMode = AgentMode.AUTO) -> A
         raise typer.Exit(1) from err
 
 
-def build_agent(llm, tools: list, memory_ctx: str, agent_mode: AgentMode):
-    """Construct a configured Agent ready to run."""
+def build_agent(llm, tools: list, memory_ctx: str, agent_mode: AgentMode) -> "Agent":
+    """Construct a configured Agent ready to run.
+
+    The planner is stored on agent.planner so callers can call
+    agent.planner.update_tools(tools) after adding/removing MCP servers.
+    """
     mode_manager = ModeManager(default_mode=agent_mode)
     executor = ToolExecutor(tools=tools, mode_manager=mode_manager)
-    planner = SimplePlanner(memory_context=memory_ctx)
+    planner = SimplePlanner(memory_context=memory_ctx, tools=tools)
     return Agent(
         provider=llm,
         planner=planner,

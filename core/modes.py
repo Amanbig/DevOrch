@@ -106,16 +106,14 @@ class ModeManager:
         """Check if we should ask for tool permission based on mode."""
         if self._mode == AgentMode.AUTO:
             return False
-        elif self._mode == AgentMode.PLAN:
-            # In plan mode, don't ask during planning, only during execution
-            if self._current_plan and self._current_plan.approved:
-                return False  # Plan approved, execute without asking
-            return True
-        else:  # ASK mode
-            return True
+        if self._mode == AgentMode.PLAN:
+            # Once the plan is approved, execute without asking — the plan IS the approval
+            return not (self._current_plan and self._current_plan.approved)
+        # ASK mode — always ask
+        return True
 
     def is_planning(self) -> bool:
-        """Check if we're currently in planning phase."""
+        """True while a plan has been shown but the user hasn't approved it yet."""
         return (
             self._mode == AgentMode.PLAN
             and self._current_plan is not None
