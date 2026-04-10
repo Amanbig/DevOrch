@@ -324,6 +324,38 @@ class MCPManager:
                 tools.append(proxy)
         return tools
 
+    def add_server(
+        self,
+        name: str,
+        command: str,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+    ) -> tuple[bool, list["MCPToolProxy"]]:
+        """Start a new MCP server and return (success, new_tools).
+
+        If a server with the same name already exists it is stopped first.
+        """
+        if name in self.servers:
+            self.servers[name].stop()
+            del self.servers[name]
+
+        server = MCPServer(name=name, command=command, args=args or [], env=env or {}, cwd=cwd)
+        if not server.start():
+            return False, []
+
+        self.servers[name] = server
+        tools = [MCPToolProxy(server=server, server_name=name, tool_def=t) for t in server.tools]
+        return True, tools
+
+    def stop_server(self, name: str) -> bool:
+        """Stop a specific server by name. Returns True if it existed."""
+        server = self.servers.pop(name, None)
+        if server is None:
+            return False
+        server.stop()
+        return True
+
     def stop_all(self):
         """Stop all MCP servers."""
         for server in self.servers.values():
