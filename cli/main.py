@@ -58,7 +58,6 @@ from tools.task import TaskTool
 from tools.terminal_session import TerminalSessionTool
 from tools.websearch import WebFetchTool, WebSearchTool
 from utils.logger import (
-    get_console,
     print_error,
     print_info,
     print_panel,
@@ -238,8 +237,6 @@ app.add_typer(permissions_app, name="permissions")
 app.command()(ask)
 app.command()(run)
 app.command()(edit)
-
-console = get_console()
 
 
 def has_any_provider_configured(settings: Settings) -> bool:
