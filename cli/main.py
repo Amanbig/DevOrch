@@ -49,6 +49,7 @@ from core.skills import SkillManager
 from core.tasks import get_task_manager, reset_task_manager
 from providers import PROVIDER_ENV_VARS, PROVIDER_INFO, PROVIDERS, get_provider
 from providers.base import ModelInfo
+from tools.agent import AgentTool  # noqa: E402
 from tools.edit import EditTool
 from tools.filesystem import FilesystemTool
 from tools.grep import GrepTool
@@ -562,6 +563,12 @@ def start_repl(
         on_session_continue=on_session_continue,
         mode_manager=mode_manager,
     )
+
+    # Inject AgentTool (needs provider + full tool list, so injected after construction)
+    agent_tool = AgentTool(provider=llm, tools=tools)
+    executor.tools[agent_tool.name] = agent_tool
+    agent.tools.append(agent_tool)
+    planner.update_tools(agent.tools)
 
     if messages:
         agent.set_history(messages)
