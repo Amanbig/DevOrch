@@ -589,3 +589,4 @@ class TestShellTool:
         assert normalize_windows_command("clear") == "cls"
         assert normalize_windows_command("git status && npm test") == "git status && npm test"
 
+

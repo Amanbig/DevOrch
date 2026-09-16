@@ -100,41 +100,147 @@ def _interactive_model_select(
     provider_name: str,
     current_model: str = "",
     prompt_text: str | None = None,
+    page_size: int = 15,
 ) -> str | None:
-    """Interactive model selection with search/filter support.
+    """Interactive model selection with 15-per-page pagination and search support.
 
-    Shows ALL models (no truncation), uses questionary fuzzy select
-    for large lists, regular select for small ones.
+    Shows 10-15 models per page to keep terminal display clean, with
+    Next/Previous page navigation and search across all available models.
     """
     if not models:
         print_warning("No models available.")
         return None
 
-    prompt_text = prompt_text or f"Select model for {provider_name}:"
+    # For small lists (<= page_size), show directly without pagination
+    if len(models) <= page_size:
+        max_name = max(len(m.id) for m in models)
+        max_name = min(max_name + 2, 45)
+        choices = [
+            _format_model_choice(m, current_model, i + 1, max_name) for i, m in enumerate(models)
+        ]
+        try:
+            console.print(
+                "\n[dim cyan]💡 Tip: Start typing anytime to search/filter models live | ↑↓ navigate | Enter select[/dim cyan]"
+            )
+            return questionary.select(
+                prompt_text or f"Select model for {provider_name}:",
+                choices=choices,
+                style=QUESTIONARY_STYLE,
+                use_search_filter=True,
+                use_jk_keys=False,
+                instruction="(Type to search live, ↑↓ navigate, Enter to select, Ctrl+C to cancel)",
+            ).ask()
+        except (KeyboardInterrupt, EOFError):
+            return None
 
-    # Compute max name length for aligned columns
-    max_name = max(len(m.id) for m in models) if models else 30
-    max_name = min(max_name + 2, 45)  # cap it so it doesn't get too wide
+    # Multi-page mode for lists larger than page_size
+    max_name = max(len(m.id) for m in models)
+    max_name = min(max_name + 2, 45)
+    total_models = len(models)
+    total_pages = (total_models + page_size - 1) // page_size
+    current_page = 0
 
-    choices = [
-        _format_model_choice(m, current_model, i + 1, max_name) for i, m in enumerate(models)
-    ]
+    while True:
+        start_idx = current_page * page_size
+        end_idx = min(start_idx + page_size, total_models)
+        page_models = models[start_idx:end_idx]
 
-    try:
-        console.print(
-            "\n[dim cyan]💡 Tip: Start typing anytime to search/filter models live | ↑↓ navigate | Enter select[/dim cyan]"
+        page_choices = []
+
+        # Previous page navigation if not on the first page
+        if current_page > 0:
+            prev_start = (current_page - 1) * page_size + 1
+            prev_end = current_page * page_size
+            page_choices.append(
+                questionary.Choice(
+                    f"  ◀  Previous Page ({prev_start}–{prev_end} of {total_models})",
+                    value="__prev__",
+                )
+            )
+            page_choices.append(questionary.Separator("─" * 40))
+
+        # Current page model choices
+        for i, m in enumerate(page_models):
+            global_idx = start_idx + i + 1
+            page_choices.append(_format_model_choice(m, current_model, global_idx, max_name))
+
+        # Bottom navigation controls
+        nav_choices = []
+        if current_page < total_pages - 1:
+            next_start = end_idx + 1
+            next_end = min(end_idx + page_size, total_models)
+            nav_choices.append(
+                questionary.Choice(
+                    f"  ▶  Next Page ({next_start}–{next_end} of {total_models})",
+                    value="__next__",
+                )
+            )
+
+        nav_choices.append(
+            questionary.Choice(
+                f"  🔍 Search all {total_models} models...",
+                value="__search__",
+            )
         )
-        selected = questionary.select(
-            prompt_text,
-            choices=choices,
-            style=QUESTIONARY_STYLE,
-            use_search_filter=True,
-            use_jk_keys=False,
-            instruction="(Type to search live, ↑↓ navigate, Enter to select, Ctrl+C to cancel)",
-        ).ask()
-        return selected
-    except (KeyboardInterrupt, EOFError):
-        return None
+
+        page_choices.append(questionary.Separator("─" * 40))
+        page_choices.extend(nav_choices)
+
+        base_prompt = prompt_text or f"Select model for {provider_name}"
+        page_prompt = f"{base_prompt} [Page {current_page + 1}/{total_pages} ({start_idx + 1}-{end_idx} of {total_models})]:"
+
+        try:
+            console.print(
+                f"\n[dim cyan]💡 Tip: Showing {len(page_models)} models (Page {current_page + 1}/{total_pages}) | Select Next/Prev to browse | Or choose Search[/dim cyan]"
+            )
+            selected = questionary.select(
+                page_prompt,
+                choices=page_choices,
+                style=QUESTIONARY_STYLE,
+                use_search_filter=True,
+                use_jk_keys=False,
+                instruction="(Type to filter page, ↑↓ navigate, Enter select, Ctrl+C cancel)",
+            ).ask()
+
+            if selected is None:
+                return None
+            elif selected == "__next__":
+                current_page += 1
+                continue
+            elif selected == "__prev__":
+                current_page -= 1
+                continue
+            elif selected == "__search__":
+                query = questionary.text(
+                    f"Search {provider_name} models (or press Enter to cancel):",
+                    style=QUESTIONARY_STYLE,
+                ).ask()
+                if not query or not query.strip():
+                    continue
+                q = query.strip().lower()
+                matched = [
+                    m
+                    for m in models
+                    if q in m.id.lower() or (m.name and q in m.name.lower())
+                ]
+                if not matched:
+                    console.print(f"[yellow]No models found matching '{query}'.[/yellow]")
+                    continue
+                console.print(f"[green]Found {len(matched)} matching models for '{query}':[/green]")
+                res = _interactive_model_select(
+                    matched,
+                    provider_name,
+                    current_model=current_model,
+                    prompt_text=f"Select from matches for '{query}':",
+                    page_size=page_size,
+                )
+                if res:
+                    return res
+                continue
+            else:
+                return selected
+        except (KeyboardInterrupt, EOFError):
+            return None
 
 
 def _interactive_provider_select(
