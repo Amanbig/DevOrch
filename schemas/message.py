@@ -26,7 +26,16 @@ class Tool:
 
 
 @dataclass
+class TokenUsage:
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cached_tokens: int = 0
+
+
+@dataclass
 class LLMResponse:
     message: Message
     tool_calls: list[ToolCall] | None = None
     raw: Any | None = None
+    usage: TokenUsage | None = None

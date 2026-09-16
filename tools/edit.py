@@ -99,6 +99,29 @@ Always use dry_run=true first to preview significant changes!"""
                 new_content = content.replace(find, replace_with, count)
                 replacements = min(content.count(find), count)
 
+            # Whitespace-tolerant fallback for multi-line find if exact match failed
+            if replacements == 0 and "\n" in find:
+                find_lines_stripped = [line.strip() for line in find.splitlines() if line.strip()]
+                if find_lines_stripped:
+                    file_lines_stripped = [line.strip() for line in lines]
+                    n_find = len(find_lines_stripped)
+                    matched_idx = -1
+                    match_count = 0
+                    for idx in range(len(file_lines_stripped) - n_find + 1):
+                        window = [
+                            item for item in file_lines_stripped[idx : idx + n_find] if item
+                        ]
+                        if window == find_lines_stripped:
+                            matched_idx = idx
+                            match_count += 1
+
+                    if match_count == 1 and matched_idx >= 0:
+                        rep_lines = replace_with.splitlines(keepends=True)
+                        if rep_lines and not rep_lines[-1].endswith("\n") and lines[matched_idx + n_find - 1].endswith("\n"):
+                            rep_lines[-1] += "\n"
+                        new_lines = lines[:matched_idx] + rep_lines + lines[matched_idx + n_find :]
+                        return new_lines, 1
+
         # Preserve line structure
         if new_content and not new_content.endswith("\n") and lines and lines[-1].endswith("\n"):
             new_content += "\n"
@@ -172,7 +195,11 @@ Always use dry_run=true first to preview significant changes!"""
                 )
 
                 if num_replacements == 0:
-                    return f"No matches found for: {find}"
+                    return (
+                        f"No matches found for: {find}\n"
+                        "Tip: Verify indentation/whitespace, use filesystem read_lines to see exact lines, "
+                        "or use edit action='replace_lines' with line_start and line_end."
+                    )
 
                 change_summary = f"Replaced {num_replacements} occurrence(s)"
 

@@ -59,6 +59,8 @@ SLASH_COMMANDS: dict[str, str] = {
     "/skill": "Run a skill (e.g. /skill commit)",
     "/mcp": "Show MCP servers | add/stop/start servers inline",
     "/auth": "Set or update API key for current/specified provider",
+    "/tokens": "Show session token usage, costs, and compaction stats",
+    "/init": "Generate a DEVORCH.md project context file for this repository",
 }
 
 # ── Questionary style (provider/model selection prompts) ─────────────────────

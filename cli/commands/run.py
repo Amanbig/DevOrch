@@ -5,6 +5,7 @@ import typer
 from cli.commands._shared import build_agent, build_tools, console, create_provider, resolve_mode
 from config.settings import Settings
 from core.memory import MemoryManager
+from core.project_context import ProjectContextLoader
 from core.skills import SkillManager
 from utils.logger import print_error, print_panel
 
@@ -49,7 +50,9 @@ def run(
     tools = build_tools(settings, no_mcp=no_mcp, mcp_only=mcp or None)
     agent_mode = resolve_mode(mode)
     memory_ctx = MemoryManager().get_context_prompt()
-    agent = build_agent(llm, tools, memory_ctx, agent_mode)
+    project_ctx = ProjectContextLoader().load()
+    project_prompt = project_ctx.to_system_prompt_block() if project_ctx else ""
+    agent = build_agent(llm, tools, memory_ctx, agent_mode, project_ctx=project_prompt)
 
     console.print(f"[dim]Skill: {skill_name} | {llm.name}/{llm.model}[/dim]")
     try:

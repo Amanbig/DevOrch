@@ -262,16 +262,21 @@ Examples:
         output_lines = [f"Found {len(results)} match(es):\n"]
 
         for r in results:
-            # Format: file:line: content
-            output_lines.append(f"{r['file']}:{r['line']}: {r['content']}")
+            # Format: file:line: content (capped at 200 chars to avoid blowing token context)
+            line_txt = r["content"]
+            if len(line_txt) > 200:
+                line_txt = line_txt[:197] + "..."
+            output_lines.append(f"{r['file']}:{r['line']}: {line_txt}")
 
             if "context_before" in r:
                 for ctx in r["context_before"]:
-                    output_lines.append(f"  {ctx}")
-                output_lines.append(f"  {r['line']}: {r['content']}  <-- match")
+                    ctx_txt = ctx if len(ctx) <= 200 else ctx[:197] + "..."
+                    output_lines.append(f"  {ctx_txt}")
+                output_lines.append(f"  {r['line']}: {line_txt}  <-- match")
             if "context_after" in r:
                 for ctx in r["context_after"]:
-                    output_lines.append(f"  {ctx}")
+                    ctx_txt = ctx if len(ctx) <= 200 else ctx[:197] + "..."
+                    output_lines.append(f"  {ctx_txt}")
                 output_lines.append("")
 
         if len(results) >= max_results:

@@ -337,6 +337,23 @@ def another_function():
             content = f.read()
         assert "new_function" in content
 
+    def test_replace_whitespace_tolerant(self, tool, temp_file):
+        """Test whitespace-tolerant multi-line replacement."""
+        # Intentionally use slightly different indentation in find string (8 spaces vs 4)
+        find_text = "def old_function():\n        pass"
+        result = tool.run(
+            {
+                "action": "replace",
+                "path": temp_file,
+                "find": find_text,
+                "replace_with": "def modern_function():\n    return True\n",
+            }
+        )
+        assert "Replaced" in result
+        with open(temp_file) as f:
+            content = f.read()
+        assert "modern_function" in content
+
     def test_replace_all(self, tool, temp_file):
         """Test replacing all occurrences."""
         result = tool.run(

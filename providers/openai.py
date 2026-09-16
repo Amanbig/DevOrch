@@ -3,7 +3,7 @@ import json
 from openai import OpenAI
 
 from providers.base import LLMProvider, ModelInfo
-from schemas.message import LLMResponse, Message, ToolCall
+from schemas.message import LLMResponse, Message, TokenUsage, ToolCall
 
 
 class OpenAIProvider(LLMProvider):
@@ -107,8 +107,20 @@ class OpenAIProvider(LLMProvider):
         # Handle case where assistant message has no content but has tool calls
         content = message.content if message.content else "Calling tool..."
 
+        usage = None
+        if hasattr(response, "usage") and response.usage:
+            prompt_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
+            completion_tokens = getattr(response.usage, "completion_tokens", 0) or 0
+            total_tokens = getattr(response.usage, "total_tokens", 0) or (prompt_tokens + completion_tokens)
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+            )
+
         return LLMResponse(
             message=Message(role="assistant", content=content),
             tool_calls=tool_calls if tool_calls else None,
             raw=response,
+            usage=usage,
         )

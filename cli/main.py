@@ -44,6 +44,7 @@ from core.executor import ToolExecutor
 from core.mcp import MCPManager
 from core.memory import MemoryManager, MemoryTool
 from core.modes import AgentMode, ModeManager
+from core.project_context import ProjectContextLoader
 from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
 from core.skills import SkillManager
 from core.tasks import get_task_manager, reset_task_manager
@@ -545,11 +546,20 @@ def start_repl(
             mcp_tools = mcp_manager.get_all_tools()
             tools.extend(mcp_tools)
 
+    # Load project context (DEVORCH.md, CLAUDE.md, etc.)
+    project_loader = ProjectContextLoader()
+    project_ctx = project_loader.load(os.getcwd())
+    project_prompt = project_ctx.to_system_prompt_block() if project_ctx else ""
+
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
 
     executor = ToolExecutor(tools=tools, require_confirmation=True, mode_manager=mode_manager)
-    planner = SimplePlanner(memory_context=memory_context, tools=tools)
+    planner = SimplePlanner(
+        memory_context=memory_context,
+        project_context=project_prompt,
+        tools=tools,
+    )
 
     def on_session_continue(new_session_id: str):
         print_info(f"Session continued: {new_session_id}")
@@ -591,6 +601,8 @@ def start_repl(
         f"[bold white]Model:[/bold white] [cyan]{llm.model}[/cyan]",
     ]
     extra_parts = []
+    if project_ctx:
+        extra_parts.append(f"[dim]{project_ctx.file_name} ({project_ctx.estimated_tokens:,} tok)[/dim]")
     if mem_count:
         extra_parts.append(f"[dim]{mem_count} memories[/dim]")
     extra_parts.append(f"[dim]{skill_count} skills[/dim]")
@@ -624,7 +636,9 @@ def start_repl(
     def get_bottom_toolbar():
         """Clean bottom status bar."""
         mode_char = {"plan": "Plan", "auto": "Auto", "ask": "Ask"}.get(mode_manager.mode.value, "?")
-        parts = [cwd_display, f"{current_llm.name}/{current_llm.model}", mode_char]
+        tok_count = agent.context_manager.stats.total_tokens
+        tok_str = f"⚡ {tok_count:,} tok" if tok_count else "⚡ 0 tok"
+        parts = [cwd_display, f"{current_llm.name}/{current_llm.model}", mode_char, tok_str]
         mcp_n = len(mcp_manager.servers)
         if mcp_n:
             parts.append(f"MCP: {mcp_n}")
@@ -665,10 +679,19 @@ def start_repl(
                     categories = {
                         "Modes": ["/mode", "/plan", "/auto", "/ask"],
                         "Provider & Model": ["/providers", "/provider", "/models", "/model"],
-                        "Session": ["/session", "/history", "/undo", "/clear", "/compact", "/save"],
+                        "Session": [
+                            "/session",
+                            "/history",
+                            "/tokens",
+                            "/undo",
+                            "/clear",
+                            "/compact",
+                            "/save",
+                        ],
                         "Memory": ["/memory", "/remember", "/forget"],
                         "Skills": ["/skills", "/skill"],
                         "Tools & Config": [
+                            "/init",
                             "/tasks",
                             "/config",
                             "/permissions",
@@ -892,6 +915,48 @@ def start_repl(
                     agent.history = []
                     agent.set_context_summary(summary)
                     print_success("History compacted. Summary preserved.")
+                    continue
+
+                elif cmd == "tokens":
+                    stats = agent.context_manager.stats
+                    console.print()
+                    table = Table(title="Token Usage & Session Statistics", border_style="cyan")
+                    table.add_column("Metric", style="bold white")
+                    table.add_column("Value", style="cyan")
+
+                    table.add_row("Total Turns", f"{stats.total_turns:,}")
+                    table.add_row("Prompt Tokens", f"{stats.prompt_tokens:,}")
+                    table.add_row("Completion Tokens", f"{stats.completion_tokens:,}")
+                    table.add_row("Cached Tokens", f"{stats.cached_tokens:,}")
+                    table.add_row("Total Tokens", f"[bold]{stats.total_tokens:,}[/bold]")
+                    table.add_row("History Compactions", f"{stats.history_compactions:,}")
+
+                    if agent.last_turn_usage:
+                        table.add_row(
+                            "Last Turn",
+                            f"{agent.last_turn_usage.total_tokens:,} tok ({agent.last_turn_usage.prompt_tokens:,} prompt, {agent.last_turn_usage.completion_tokens:,} comp)",
+                        )
+
+                    console.print(table)
+                    console.print()
+                    continue
+
+                elif cmd == "init":
+                    try:
+                        target = ProjectContextLoader.init_project_file(
+                            directory=os.getcwd(), overwrite=False
+                        )
+                        print_success(f"Initialized {target.name} successfully!")
+                        pctx = project_loader.load(os.getcwd(), force_reload=True)
+                        if pctx:
+                            planner.project_context = pctx.to_system_prompt_block()
+                            print_info(
+                                f"Loaded {pctx.file_name} into active session guidelines ({pctx.estimated_tokens:,} tokens)."
+                            )
+                    except FileExistsError:
+                        print_warning("DEVORCH.md already exists in this directory.")
+                    except Exception as e:
+                        print_error(f"Failed to initialize DEVORCH.md: {e}")
                     continue
 
                 elif cmd in ("models", "model"):
@@ -1384,6 +1449,12 @@ def start_repl(
                         )
                         result = agent.run(skill["prompt"], max_iterations=15)
                         print_response(result)
+                        if agent.last_turn_usage and agent.last_turn_usage.total_tokens:
+                            u = agent.last_turn_usage
+                            console.print(
+                                f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp) | "
+                                f"Session: {agent.context_manager.stats.total_tokens:,} tok[/dim]\n"
+                            )
                         continue
 
                 else:
@@ -1393,6 +1464,12 @@ def start_repl(
 
             result = agent.run(user_input, max_iterations=15)
             print_response(result)
+            if agent.last_turn_usage and agent.last_turn_usage.total_tokens:
+                u = agent.last_turn_usage
+                console.print(
+                    f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp) | "
+                    f"Session: {agent.context_manager.stats.total_tokens:,} tok[/dim]\n"
+                )
 
         except (typer.Abort, EOFError):
             mcp_manager.stop_all()
@@ -1809,6 +1886,23 @@ def permissions_reset(force: bool = typer.Option(False, "--force", "-f", help="S
 
     reset_permissions()
     print_success("Permissions reset to defaults.")
+
+
+@app.command(name="init")
+def init_project(
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing DEVORCH.md"),
+):
+    """
+    Initialize a DEVORCH.md project context file in the current directory.
+    """
+    try:
+        target = ProjectContextLoader.init_project_file(directory=os.getcwd(), overwrite=force)
+        print_success(f"Initialized {target.name} successfully!")
+        console.print(f"  [dim]Project instructions generated at {target}[/dim]")
+    except FileExistsError:
+        print_warning("DEVORCH.md already exists in this directory. Use --force to overwrite.")
+    except Exception as e:
+        print_error(f"Failed to initialize: {e}")
 
 
 def main():

@@ -4,7 +4,7 @@ from google import genai
 from google.genai import types
 
 from providers.base import LLMProvider, ModelInfo
-from schemas.message import LLMResponse, Message, ToolCall
+from schemas.message import LLMResponse, Message, TokenUsage, ToolCall
 
 
 class GeminiProvider(LLMProvider):
@@ -161,10 +161,24 @@ class GeminiProvider(LLMProvider):
         # Store function calls in metadata for history reconstruction
         metadata = {"function_calls": function_call_metadata} if function_call_metadata else None
 
+        usage = None
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+            candidates_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+            total_tokens = getattr(response.usage_metadata, "total_token_count", 0) or (prompt_tokens + candidates_tokens)
+            cached_tokens = getattr(response.usage_metadata, "cached_content_token_count", 0) or 0
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=candidates_tokens,
+                total_tokens=total_tokens,
+                cached_tokens=cached_tokens,
+            )
+
         return LLMResponse(
             message=Message(role="assistant", content=content, metadata=metadata),
             tool_calls=tool_calls if tool_calls else None,
             raw=response,
+            usage=usage,
         )
 
     def _convert_params(self, params: dict[str, Any]) -> dict[str, Any]:
