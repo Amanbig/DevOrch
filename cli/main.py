@@ -121,13 +121,16 @@ def _interactive_model_select(
     ]
 
     try:
+        console.print(
+            "\n[dim cyan]💡 Tip: Start typing anytime to search/filter models live | ↑↓ navigate | Enter select[/dim cyan]"
+        )
         selected = questionary.select(
             prompt_text,
             choices=choices,
             style=QUESTIONARY_STYLE,
             use_search_filter=True,
             use_jk_keys=False,
-            instruction="(Type to search, ↑↓ to navigate, Enter to select, Ctrl+C to cancel)",
+            instruction="(Type to search live, ↑↓ navigate, Enter to select, Ctrl+C to cancel)",
         ).ask()
         return selected
     except (KeyboardInterrupt, EOFError):
@@ -198,13 +201,16 @@ def _interactive_provider_select(
     provider_choices = cloud_choices + separator + local_choices
 
     try:
+        console.print(
+            "\n[dim cyan]💡 Tip: Start typing anytime to search/filter providers live | ↑↓ navigate | Enter select[/dim cyan]"
+        )
         return questionary.select(
             prompt_text,
             choices=provider_choices,
             style=QUESTIONARY_STYLE,
             use_search_filter=True,
             use_jk_keys=False,
-            instruction="(Type to search, ↑↓ to navigate, Enter to select, Ctrl+C to cancel)",
+            instruction="(Type to search live, ↑↓ navigate, Enter to select, Ctrl+C to cancel)",
         ).ask()
     except (KeyboardInterrupt, EOFError):
         return None
@@ -738,7 +744,7 @@ def start_repl(
                         "    [blue]ASK[/blue]  - Asks before each tool execution (default)"
                     )
                     console.print(
-                        "\n[dim]  Tip: Type / for autocomplete | /model and /provider support partial match[/dim]\n"
+                        "\n[dim]  Tip: Type / for autocomplete | /model and /provider support live search and partial matching[/dim]\n"
                     )
                     continue
 
