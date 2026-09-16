@@ -45,6 +45,7 @@ from core.mcp import MCPManager
 from core.memory import MemoryManager, MemoryTool
 from core.modes import AgentMode, ModeManager
 from core.project_context import ProjectContextLoader
+from core.project_memory import ProjectMemoryManager
 from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
 from core.skills import SkillManager
 from core.tasks import get_task_manager, reset_task_manager
@@ -219,9 +220,7 @@ def _interactive_model_select(
                     continue
                 q = query.strip().lower()
                 matched = [
-                    m
-                    for m in models
-                    if q in m.id.lower() or (m.name and q in m.name.lower())
+                    m for m in models if q in m.id.lower() or (m.name and q in m.name.lower())
                 ]
                 if not matched:
                     console.print(f"[yellow]No models found matching '{query}'.[/yellow]")
@@ -671,6 +670,10 @@ def start_repl(
     project_ctx = project_loader.load(os.getcwd())
     project_prompt = project_ctx.to_system_prompt_block() if project_ctx else ""
 
+    # Load persistent per-project memory (cross-session recall)
+    project_memory_manager = ProjectMemoryManager(os.getcwd())
+    project_memory_prompt = project_memory_manager.to_prompt_context()
+
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
 
@@ -678,6 +681,7 @@ def start_repl(
     planner = SimplePlanner(
         memory_context=memory_context,
         project_context=project_prompt,
+        project_memory_context=project_memory_prompt,
         tools=tools,
     )
 
@@ -725,7 +729,17 @@ def start_repl(
         extra_parts.append(
             f"[dim]{project_ctx.file_name} ({project_ctx.estimated_tokens:,} tok)[/dim]"
         )
-    if mem_count:
+    if project_memory_prompt:
+        dec_count = len(project_memory_manager.memory.decisions)
+        sess_count = len(project_memory_manager.memory.recent_sessions)
+        mem_info = []
+        if dec_count:
+            mem_info.append(f"{dec_count} decisions")
+        if sess_count:
+            mem_info.append(f"{sess_count} sessions")
+        desc = ", ".join(mem_info) if mem_info else "active"
+        extra_parts.append(f"[dim]🧠 memory ({desc})[/dim]")
+    elif mem_count:
         extra_parts.append(f"[dim]{mem_count} memories[/dim]")
     extra_parts.append(f"[dim]{skill_count} skills[/dim]")
     if mcp_count:
@@ -782,6 +796,10 @@ def start_repl(
 
             if user_input.lower() in ("exit", "quit", "q"):
                 mcp_manager.stop_all()
+                if agent.history and session_manager.current_session_id:
+                    project_memory_manager.update_from_session(
+                        session_manager.current_session_id, agent.history
+                    )
                 print_info(f"Session saved: {session_manager.current_session_id}")
                 break
 
@@ -913,9 +931,14 @@ def start_repl(
                     console.print("  [dim]I'll ask before each tool execution[/dim]")
                     continue
 
-                elif cmd == "clear":
+                elif cmd in ("clear", "new"):
+                    if agent.history and session_manager.current_session_id:
+                        project_memory_manager.update_from_session(
+                            session_manager.current_session_id, agent.history
+                        )
                     agent.history = []
-                    print_success("Conversation cleared.")
+                    planner.project_memory_context = project_memory_manager.to_prompt_context()
+                    print_success("Conversation cleared (project memory preserved).")
                     continue
 
                 elif cmd == "status":
@@ -1352,25 +1375,73 @@ def start_repl(
                     continue
 
                 elif cmd == "memory":
-                    memories = memory_manager.list_all()
-                    if not memories:
-                        print_info("No memories saved yet.")
-                    else:
-                        console.print(f"\n[bold]Saved Memories ({len(memories)}):[/bold]")
-                        for mem in memories:
-                            type_color = {
-                                "user": "cyan",
-                                "feedback": "yellow",
-                                "project": "green",
-                                "reference": "blue",
-                            }.get(mem["type"], "white")
-                            console.print(
-                                f"  [{type_color}][{mem['type']}][/{type_color}] "
-                                f"[bold]{mem['name']}[/bold]"
+                    pm = project_memory_manager.memory
+                    console.print(
+                        f"\n[bold]🧠 Project Memory: [cyan]{pm.project_name}[/cyan][/bold]"
+                    )
+                    console.print(f"  [dim]Storage:[/dim] {project_memory_manager.memory_file}")
+                    if pm.tech_stack:
+                        console.print(f"  [dim]Tech Stack:[/dim] {', '.join(pm.tech_stack)}")
+
+                    if cmd_arg:
+                        arg_parts = cmd_arg.split(maxsplit=1)
+                        sub_cmd = arg_parts[0].lower()
+                        sub_val = arg_parts[1] if len(arg_parts) > 1 else ""
+
+                        if sub_cmd == "add" and sub_val:
+                            project_memory_manager.add_decision(sub_val)
+                            planner.project_memory_context = (
+                                project_memory_manager.to_prompt_context()
                             )
-                            console.print(f"    [dim]{mem['description']}[/dim]")
-                            console.print(f"    [dim]File: {mem['filename']}[/dim]")
-                    console.print()
+                            print_success(f"Added to project memory: {sub_val}")
+                            continue
+                        elif sub_cmd == "pref" and sub_val:
+                            project_memory_manager.add_preference(sub_val)
+                            planner.project_memory_context = (
+                                project_memory_manager.to_prompt_context()
+                            )
+                            print_success(f"Saved user preference: {sub_val}")
+                            continue
+                        elif sub_cmd == "clear":
+                            project_memory_manager.clear()
+                            planner.project_memory_context = ""
+                            print_success("Project memory cleared.")
+                            continue
+
+                    if pm.decisions:
+                        console.print(
+                            "\n  [bold cyan]Architectural Decisions & Conventions:[/bold cyan]"
+                        )
+                        for d in pm.decisions:
+                            console.print(f"    • {d}")
+
+                    if pm.preferences:
+                        console.print("\n  [bold yellow]User Preferences:[/bold yellow]")
+                        for p in pm.preferences:
+                            console.print(f"    • {p}")
+
+                    if pm.recent_sessions:
+                        console.print(
+                            "\n  [bold green]Recent Sessions (Accomplishments):[/bold green]"
+                        )
+                        for s in pm.recent_sessions:
+                            console.print(f"    • [{s.get('date', '')}] {s.get('summary', '')}")
+
+                    if not (pm.decisions or pm.preferences or pm.recent_sessions):
+                        console.print(
+                            "\n  [dim]No project memories recorded yet. DevOrch records accomplishments automatically when sessions end.[/dim]"
+                        )
+
+                    # Show global memories count if any exist
+                    global_mems = memory_manager.list_all()
+                    if global_mems:
+                        console.print(
+                            f"\n  [dim]Global Memories: {len(global_mems)} item(s) in ~/.devorch/memory/[/dim]"
+                        )
+
+                    console.print(
+                        "\n[dim]  Commands: /memory add <decision> | /memory pref <pref> | /memory clear[/dim]\n"
+                    )
                     continue
 
                 elif cmd == "remember":
@@ -1620,10 +1691,18 @@ def start_repl(
 
         except (typer.Abort, EOFError):
             mcp_manager.stop_all()
+            if agent.history and session_manager.current_session_id:
+                project_memory_manager.update_from_session(
+                    session_manager.current_session_id, agent.history
+                )
             print_info(f"\nSession saved: {session_manager.current_session_id}")
             break
         except KeyboardInterrupt:
             mcp_manager.stop_all()
+            if agent.history and session_manager.current_session_id:
+                project_memory_manager.update_from_session(
+                    session_manager.current_session_id, agent.history
+                )
             console.print()
             print_info(f"Session saved: {session_manager.current_session_id}")
             break

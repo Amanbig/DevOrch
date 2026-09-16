@@ -509,4 +509,3 @@ class TestSimplePlanner:
         assert "ENVIRONMENT & SYSTEM CONTEXT:" in content
         assert "Host OS:" in content
         assert "Shell:" in content
-

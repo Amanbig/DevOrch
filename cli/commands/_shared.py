@@ -130,10 +130,12 @@ class SimplePlanner(Planner):
         self,
         memory_context: str = "",
         project_context: str = "",
+        project_memory_context: str = "",
         tools: list | None = None,
     ):
         self.memory_context = memory_context
         self.project_context = project_context
+        self.project_memory_context = project_memory_context
         self._tools = tools or []
 
     def update_tools(self, tools: list) -> None:
@@ -176,6 +178,10 @@ class SimplePlanner(Planner):
         # Append project rules/guidelines (from DEVORCH.md or CLAUDE.md)
         if self.project_context:
             prompt += "\n\n" + self.project_context
+
+        # Append persistent per-project memory (cross-session decisions & learnings)
+        if self.project_memory_context:
+            prompt += "\n\n" + self.project_memory_context
 
         # Append a live tool summary so the LLM knows exactly what's loaded,
         # including any MCP tools added after startup.
@@ -298,6 +304,7 @@ def build_agent(
     memory_ctx: str,
     agent_mode: AgentMode,
     project_ctx: str = "",
+    project_memory_ctx: str = "",
 ) -> "Agent":
     """Construct a configured Agent ready to run.
 
@@ -310,6 +317,7 @@ def build_agent(
     planner = SimplePlanner(
         memory_context=memory_ctx,
         project_context=project_ctx,
+        project_memory_context=project_memory_ctx,
         tools=tools,
     )
 
