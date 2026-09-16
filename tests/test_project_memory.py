@@ -24,6 +24,7 @@ class TestProjectMemoryId:
         p1 = "c:/projects/devorch"
         p2 = "c:\\projects\\devorch"
         assert get_project_id(p1) == get_project_id(p2)
+        assert get_project_id(p1).startswith("devorch_")
 
 
 class TestProjectMemoryManager:

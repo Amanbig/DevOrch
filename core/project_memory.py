@@ -24,15 +24,17 @@ PROJECTS_DATA_DIR = Path.home() / ".devorch" / "projects"
 def get_project_id(project_path: str | Path | None = None) -> str:
     """Generate a deterministic, human-readable project ID from a path.
 
-    Example: 'c:/Users/ROGST/OneDrive/Documents/DevOrch' -> 'DevOrch_4e3b8641'
+    Example: 'c:/Users/ROGST/OneDrive/Documents/DevOrch' -> 'devorch_4e3b8641'
     """
-    p = Path(project_path or os.getcwd()).resolve()
+    raw_str = str(project_path or os.getcwd()).replace("\\", "/")
+    p = Path(raw_str).resolve()
     # Normalize path string for consistent hashing across platforms
     normalized_path = str(p).replace("\\", "/").rstrip("/").lower()
     path_hash = hashlib.sha256(normalized_path.encode("utf-8")).hexdigest()[:8]
 
-    # Clean name slug
-    folder_name = p.name or "root"
+    # Clean name slug: extract the last path component from normalized_path
+    parts = [part for part in normalized_path.split("/") if part and not part.endswith(":")]
+    folder_name = parts[-1] if parts else (p.name or "root")
     slug = re.sub(r"[^\w-]", "_", folder_name).strip("_")
     slug = slug[:24] if slug else "project"
 
