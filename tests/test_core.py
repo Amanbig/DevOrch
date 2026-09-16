@@ -492,3 +492,20 @@ class TestSessionManager:
         assert len(chain) == 2
         assert chain[0]["id"] == first_id
         assert chain[1]["id"] == second_id
+
+
+class TestSimplePlanner:
+    """Tests for SimplePlanner prompt construction and environment context."""
+
+    def test_planner_injects_environment_context(self):
+        from cli.commands._shared import SimplePlanner
+
+        planner = SimplePlanner()
+        messages = planner.plan([])
+
+        assert len(messages) == 1
+        assert messages[0].role == "system"
+        content = messages[0].content
+        assert "ENVIRONMENT & SYSTEM CONTEXT:" in content
+        assert "Host OS:" in content
+        assert "Shell:" in content

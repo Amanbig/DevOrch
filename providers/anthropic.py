@@ -1,7 +1,7 @@
 from anthropic import Anthropic
 
 from providers.base import LLMProvider, ModelInfo
-from schemas.message import LLMResponse, Message, ToolCall
+from schemas.message import LLMResponse, Message, TokenUsage, ToolCall
 
 
 class AnthropicProvider(LLMProvider):
@@ -120,8 +120,21 @@ class AnthropicProvider(LLMProvider):
         # Store tool_use_blocks in metadata for message reconstruction
         metadata = {"tool_use_blocks": tool_use_blocks} if tool_use_blocks else None
 
+        usage = None
+        if hasattr(response, "usage") and response.usage:
+            input_tokens = getattr(response.usage, "input_tokens", 0) or 0
+            output_tokens = getattr(response.usage, "output_tokens", 0) or 0
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            usage = TokenUsage(
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+                cached_tokens=cache_read,
+            )
+
         return LLMResponse(
             message=Message(role="assistant", content=content, metadata=metadata),
             tool_calls=tool_calls if tool_calls else None,
             raw=response,
+            usage=usage,
         )

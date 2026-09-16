@@ -1,9 +1,12 @@
 import os
+import time
 from pathlib import Path
 
 import questionary
 import typer
 from prompt_toolkit import prompt as pt_prompt
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.key_binding import KeyBindings
 from rich.panel import Panel
 from rich.table import Table
 
@@ -44,6 +47,8 @@ from core.executor import ToolExecutor
 from core.mcp import MCPManager
 from core.memory import MemoryManager, MemoryTool
 from core.modes import AgentMode, ModeManager
+from core.project_context import ProjectContextLoader
+from core.project_memory import ProjectMemoryManager
 from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
 from core.skills import SkillManager
 from core.tasks import get_task_manager, reset_task_manager
@@ -99,44 +104,154 @@ def _interactive_model_select(
     provider_name: str,
     current_model: str = "",
     prompt_text: str | None = None,
+    page_size: int = 15,
 ) -> str | None:
-    """Interactive model selection with search/filter support.
+    """Interactive model selection with 15-per-page pagination and search support.
 
-    Shows ALL models (no truncation), uses questionary fuzzy select
-    for large lists, regular select for small ones.
+    Shows 10-15 models per page to keep terminal display clean, with
+    Next/Previous page navigation and search across all available models.
     """
     if not models:
         print_warning("No models available.")
         return None
 
-    prompt_text = prompt_text or f"Select model for {provider_name}:"
+    # For small lists (<= page_size), show directly without pagination
+    if len(models) <= page_size:
+        max_name = max(len(m.id) for m in models)
+        max_name = min(max_name + 2, 45)
+        choices = [
+            _format_model_choice(m, current_model, i + 1, max_name) for i, m in enumerate(models)
+        ]
+        try:
+            console.print(
+                "\n[dim cyan]💡 Tip: Start typing anytime to search/filter models live | ↑↓ navigate | Enter select[/dim cyan]"
+            )
+            return questionary.select(
+                prompt_text or f"Select model for {provider_name}:",
+                choices=choices,
+                style=QUESTIONARY_STYLE,
+                use_search_filter=True,
+                use_jk_keys=False,
+                instruction="(Type to search live, ↑↓ navigate, Enter to select, Ctrl+C to cancel)",
+            ).ask()
+        except (KeyboardInterrupt, EOFError):
+            return None
 
-    # Compute max name length for aligned columns
-    max_name = max(len(m.id) for m in models) if models else 30
-    max_name = min(max_name + 2, 45)  # cap it so it doesn't get too wide
+    # Multi-page mode for lists larger than page_size
+    max_name = max(len(m.id) for m in models)
+    max_name = min(max_name + 2, 45)
+    total_models = len(models)
+    total_pages = (total_models + page_size - 1) // page_size
+    current_page = 0
 
-    choices = [
-        _format_model_choice(m, current_model, i + 1, max_name) for i, m in enumerate(models)
-    ]
+    while True:
+        start_idx = current_page * page_size
+        end_idx = min(start_idx + page_size, total_models)
+        page_models = models[start_idx:end_idx]
 
-    try:
-        selected = questionary.select(
-            prompt_text,
-            choices=choices,
-            style=QUESTIONARY_STYLE,
-            instruction="(↑↓ navigate, Enter to select, Ctrl+C to cancel)",
-        ).ask()
-        return selected
-    except (KeyboardInterrupt, EOFError):
-        return None
+        page_choices = []
+
+        # Previous page navigation if not on the first page
+        if current_page > 0:
+            prev_start = (current_page - 1) * page_size + 1
+            prev_end = current_page * page_size
+            page_choices.append(
+                questionary.Choice(
+                    f"  ◀  Previous Page ({prev_start}–{prev_end} of {total_models})",
+                    value="__prev__",
+                )
+            )
+            page_choices.append(questionary.Separator("─" * 40))
+
+        # Current page model choices
+        for i, m in enumerate(page_models):
+            global_idx = start_idx + i + 1
+            page_choices.append(_format_model_choice(m, current_model, global_idx, max_name))
+
+        # Bottom navigation controls
+        nav_choices = []
+        if current_page < total_pages - 1:
+            next_start = end_idx + 1
+            next_end = min(end_idx + page_size, total_models)
+            nav_choices.append(
+                questionary.Choice(
+                    f"  ▶  Next Page ({next_start}–{next_end} of {total_models})",
+                    value="__next__",
+                )
+            )
+
+        nav_choices.append(
+            questionary.Choice(
+                f"  🔍 Search all {total_models} models...",
+                value="__search__",
+            )
+        )
+
+        page_choices.append(questionary.Separator("─" * 40))
+        page_choices.extend(nav_choices)
+
+        base_prompt = prompt_text or f"Select model for {provider_name}"
+        page_prompt = f"{base_prompt} [Page {current_page + 1}/{total_pages} ({start_idx + 1}-{end_idx} of {total_models})]:"
+
+        try:
+            console.print(
+                f"\n[dim cyan]💡 Tip: Showing {len(page_models)} models (Page {current_page + 1}/{total_pages}) | Select Next/Prev to browse | Or choose Search[/dim cyan]"
+            )
+            selected = questionary.select(
+                page_prompt,
+                choices=page_choices,
+                style=QUESTIONARY_STYLE,
+                use_search_filter=True,
+                use_jk_keys=False,
+                instruction="(Type to filter page, ↑↓ navigate, Enter select, Ctrl+C cancel)",
+            ).ask()
+
+            if selected is None:
+                return None
+            elif selected == "__next__":
+                current_page += 1
+                continue
+            elif selected == "__prev__":
+                current_page -= 1
+                continue
+            elif selected == "__search__":
+                query = questionary.text(
+                    f"Search {provider_name} models (or press Enter to cancel):",
+                    style=QUESTIONARY_STYLE,
+                ).ask()
+                if not query or not query.strip():
+                    continue
+                q = query.strip().lower()
+                matched = [
+                    m for m in models if q in m.id.lower() or (m.name and q in m.name.lower())
+                ]
+                if not matched:
+                    console.print(f"[yellow]No models found matching '{query}'.[/yellow]")
+                    continue
+                console.print(f"[green]Found {len(matched)} matching models for '{query}':[/green]")
+                res = _interactive_model_select(
+                    matched,
+                    provider_name,
+                    current_model=current_model,
+                    prompt_text=f"Select from matches for '{query}':",
+                    page_size=page_size,
+                )
+                if res:
+                    return res
+                continue
+            else:
+                return selected
+        except (KeyboardInterrupt, EOFError):
+            return None
 
 
 def _interactive_provider_select(
     current_provider: str,
     current_settings: "Settings",
     prompt_text: str = "Select provider:",
+    allowed_providers: list[str] | None = None,
 ) -> str | None:
-    """Interactive provider selection with status indicators."""
+    """Interactive provider selection with status indicators and search filter."""
     # Nice display names
     display_names = {
         "openai": "OpenAI",
@@ -159,6 +274,8 @@ def _interactive_provider_select(
     num = 1
 
     for name, desc in PROVIDER_INFO.items():
+        if allowed_providers and name not in allowed_providers:
+            continue
         has_key = bool(current_settings.get_api_key(name))
         is_current = name == current_provider
         nice_name = display_names.get(name, name.title())
@@ -188,14 +305,20 @@ def _interactive_provider_select(
         else:
             cloud_choices.append(choice)
 
-    provider_choices = cloud_choices + [questionary.Separator("── Local ──")] + local_choices
+    separator = [questionary.Separator("── Local ──")] if (cloud_choices and local_choices) else []
+    provider_choices = cloud_choices + separator + local_choices
 
     try:
+        console.print(
+            "\n[dim cyan]💡 Tip: Start typing anytime to search/filter providers live | ↑↓ navigate | Enter select[/dim cyan]"
+        )
         return questionary.select(
             prompt_text,
             choices=provider_choices,
             style=QUESTIONARY_STYLE,
-            instruction="(↑↓ navigate, Enter to select, Ctrl+C to cancel)",
+            use_search_filter=True,
+            use_jk_keys=False,
+            instruction="(Type to search live, ↑↓ navigate, Enter to select, Ctrl+C to cancel)",
         ).ask()
     except (KeyboardInterrupt, EOFError):
         return None
@@ -226,7 +349,14 @@ def _fuzzy_match_model(query: str, models: list[ModelInfo]) -> ModelInfo | None:
 
 # Main app with invoke_without_command=True so we can handle bare `devorch`
 app = typer.Typer(
-    help="DevOrch - Your AI Coding Assistant", invoke_without_command=True, no_args_is_help=False
+    help=(
+        "DevOrch - AI Coding Assistant CLI\n\n"
+        "Interactive REPL:  run 'devorch' or 'devorch chat'\n"
+        "Non-interactive:   run 'devorch ask', 'devorch edit', 'devorch run', "
+        "'devorch models', 'devorch memory', etc."
+    ),
+    invoke_without_command=True,
+    no_args_is_help=False,
 )
 sessions_app = typer.Typer(help="Manage chat sessions")
 app.add_typer(sessions_app, name="sessions")
@@ -464,6 +594,73 @@ def create_provider_safe(provider_name: str, model: str, settings: Settings):
     return get_provider(provider_name, model=model, api_key=api_key, **kwargs)
 
 
+def _get_git_branch(cwd: str | None = None) -> str | None:
+    """Get current git branch name if cwd is inside a git repository."""
+    try:
+        import subprocess
+
+        res = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=cwd or os.getcwd(),
+            capture_output=True,
+            text=True,
+            timeout=1,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        if res.returncode == 0:
+            branch = res.stdout.strip()
+            if branch and branch != "HEAD":
+                return branch
+    except Exception:
+        pass
+    return None
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    """Copy text to clipboard using platform-native utilities without extra dependencies."""
+    import platform
+    import subprocess
+
+    sys_name = platform.system().lower()
+    try:
+        if sys_name == "windows":
+            subprocess.run(
+                ["clip"],
+                input=text.encode("utf-8"),
+                check=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return True
+        elif sys_name == "darwin":
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+            return True
+        else:
+            for cmd in [
+                ["wl-copy"],
+                ["xclip", "-selection", "clipboard"],
+                ["xsel", "--clipboard", "--input"],
+            ]:
+                try:
+                    subprocess.run(cmd, input=text.encode("utf-8"), check=True)
+                    return True
+                except FileNotFoundError:
+                    continue
+    except Exception:
+        pass
+    return False
+
+
+def _create_prompt_keybindings() -> KeyBindings:
+    """Create prompt keybindings supporting Alt+Enter for multiline newline insertion."""
+    kb = KeyBindings()
+
+    @kb.add("escape", "enter")
+    def _(event):
+        event.current_buffer.insert_text("\n")
+
+    return kb
+
+
 def start_repl(
     provider: str | None = None,
     model: str | None = None,
@@ -545,11 +742,25 @@ def start_repl(
             mcp_tools = mcp_manager.get_all_tools()
             tools.extend(mcp_tools)
 
+    # Load project context (DEVORCH.md, CLAUDE.md, etc.)
+    project_loader = ProjectContextLoader()
+    project_ctx = project_loader.load(os.getcwd())
+    project_prompt = project_ctx.to_system_prompt_block() if project_ctx else ""
+
+    # Load persistent per-project memory (cross-session recall)
+    project_memory_manager = ProjectMemoryManager(os.getcwd())
+    project_memory_prompt = project_memory_manager.to_prompt_context()
+
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(default_mode=AgentMode.ASK)
 
     executor = ToolExecutor(tools=tools, require_confirmation=True, mode_manager=mode_manager)
-    planner = SimplePlanner(memory_context=memory_context, tools=tools)
+    planner = SimplePlanner(
+        memory_context=memory_context,
+        project_context=project_prompt,
+        project_memory_context=project_memory_prompt,
+        tools=tools,
+    )
 
     def on_session_continue(new_session_id: str):
         print_info(f"Session continued: {new_session_id}")
@@ -591,7 +802,21 @@ def start_repl(
         f"[bold white]Model:[/bold white] [cyan]{llm.model}[/cyan]",
     ]
     extra_parts = []
-    if mem_count:
+    if project_ctx:
+        extra_parts.append(
+            f"[dim]{project_ctx.file_name} ({project_ctx.estimated_tokens:,} tok)[/dim]"
+        )
+    if project_memory_prompt:
+        dec_count = len(project_memory_manager.memory.decisions)
+        sess_count = len(project_memory_manager.memory.recent_sessions)
+        mem_info = []
+        if dec_count:
+            mem_info.append(f"{dec_count} decisions")
+        if sess_count:
+            mem_info.append(f"{sess_count} sessions")
+        desc = ", ".join(mem_info) if mem_info else "active"
+        extra_parts.append(f"[dim]memory ({desc})[/dim]")
+    elif mem_count:
         extra_parts.append(f"[dim]{mem_count} memories[/dim]")
     extra_parts.append(f"[dim]{skill_count} skills[/dim]")
     if mcp_count:
@@ -620,32 +845,55 @@ def start_repl(
     # Track current provider/model for switching
     current_llm = llm
     current_settings = settings
+    last_response_text: str = ""
+    prompt_kb = _create_prompt_keybindings()
 
     def get_bottom_toolbar():
-        """Clean bottom status bar."""
-        mode_char = {"plan": "Plan", "auto": "Auto", "ask": "Ask"}.get(mode_manager.mode.value, "?")
-        parts = [cwd_display, f"{current_llm.name}/{current_llm.model}", mode_char]
+        """Clean bottom status bar with git branch, model, mode, and tokens."""
+        mode_char = {"plan": "PLAN", "auto": "AUTO", "ask": "ASK"}.get(mode_manager.mode.value, "?")
+        tok_count = agent.context_manager.stats.total_tokens
+        tok_str = f"⚡ {tok_count:,} tok" if tok_count else "⚡ 0 tok"
+        git_b = _get_git_branch()
+        parts = [cwd_display]
+        if git_b:
+            parts.append(f"git:{git_b}")
+        parts.extend([f"{current_llm.name}/{current_llm.model}", f"[{mode_char}]", tok_str])
         mcp_n = len(mcp_manager.servers)
         if mcp_n:
             parts.append(f"MCP: {mcp_n}")
         return "  " + "     ".join(parts)
 
+    history_file = Path.home() / ".devorch" / "history"
+    history_file.parent.mkdir(parents=True, exist_ok=True)
+    prompt_history = FileHistory(str(history_file))
+
     while True:
         try:
-            # Print a separator line above the prompt (Gemini-like)
-            console.print("[dim]─[/dim]" * console.width, highlight=False)
+            # Print a clean separator line above the prompt
+            rule_width = max(console.width - 1, 10)
+            console.print("[dim]─[/dim]" * rule_width, highlight=False)
 
-            # Use prompt_toolkit with autocomplete and bottom toolbar
+            # Use prompt_toolkit with autocomplete, mode badge, and bottom toolbar
+            mode_tag = mode_manager.mode.value.upper()
             user_input = pt_prompt(
-                [("class:prompt-arrow", "> ")],
+                [
+                    ("class:prompt-mode", f"[{mode_tag}] "),
+                    ("class:prompt-arrow", "> "),
+                ],
                 completer=completer,
                 complete_while_typing=True,
                 style=PROMPT_STYLE,
                 bottom_toolbar=get_bottom_toolbar,
+                history=prompt_history,
+                key_bindings=prompt_kb,
             )
 
             if user_input.lower() in ("exit", "quit", "q"):
                 mcp_manager.stop_all()
+                if agent.history and session_manager.current_session_id:
+                    project_memory_manager.update_from_session(
+                        session_manager.current_session_id, agent.history
+                    )
                 print_info(f"Session saved: {session_manager.current_session_id}")
                 break
 
@@ -665,10 +913,21 @@ def start_repl(
                     categories = {
                         "Modes": ["/mode", "/plan", "/auto", "/ask"],
                         "Provider & Model": ["/providers", "/provider", "/models", "/model"],
-                        "Session": ["/session", "/history", "/undo", "/clear", "/compact", "/save"],
+                        "Session & Utilities": [
+                            "/session",
+                            "/history",
+                            "/tokens",
+                            "/copy",
+                            "/paste",
+                            "/undo",
+                            "/clear",
+                            "/compact",
+                            "/save",
+                        ],
                         "Memory": ["/memory", "/remember", "/forget"],
                         "Skills": ["/skills", "/skill"],
                         "Tools & Config": [
+                            "/init",
                             "/tasks",
                             "/config",
                             "/permissions",
@@ -705,7 +964,11 @@ def start_repl(
                         "    [blue]ASK[/blue]  - Asks before each tool execution (default)"
                     )
                     console.print(
-                        "\n[dim]  Tip: Type / for autocomplete | /model and /provider support partial match[/dim]\n"
+                        "\n[dim]  Tips:\n"
+                        "  • Type / for command autocomplete\n"
+                        "  • /models and /providers support interactive search and 15-per-page pagination\n"
+                        "  • /memory add <decision> records conventions into persistent project memory\n"
+                        "  • /tokens shows prompt vs completion tokens, compaction savings, and costs[/dim]\n"
                     )
                     continue
 
@@ -768,9 +1031,14 @@ def start_repl(
                     console.print("  [dim]I'll ask before each tool execution[/dim]")
                     continue
 
-                elif cmd == "clear":
+                elif cmd in ("clear", "new"):
+                    if agent.history and session_manager.current_session_id:
+                        project_memory_manager.update_from_session(
+                            session_manager.current_session_id, agent.history
+                        )
                     agent.history = []
-                    print_success("Conversation cleared.")
+                    planner.project_memory_context = project_memory_manager.to_prompt_context()
+                    print_success("Conversation cleared (project memory preserved).")
                     continue
 
                 elif cmd == "status":
@@ -894,6 +1162,48 @@ def start_repl(
                     print_success("History compacted. Summary preserved.")
                     continue
 
+                elif cmd == "tokens":
+                    stats = agent.context_manager.stats
+                    console.print()
+                    table = Table(title="Token Usage & Session Statistics", border_style="cyan")
+                    table.add_column("Metric", style="bold white")
+                    table.add_column("Value", style="cyan")
+
+                    table.add_row("Total Turns", f"{stats.total_turns:,}")
+                    table.add_row("Prompt Tokens", f"{stats.prompt_tokens:,}")
+                    table.add_row("Completion Tokens", f"{stats.completion_tokens:,}")
+                    table.add_row("Cached Tokens", f"{stats.cached_tokens:,}")
+                    table.add_row("Total Tokens", f"[bold]{stats.total_tokens:,}[/bold]")
+                    table.add_row("History Compactions", f"{stats.history_compactions:,}")
+
+                    if agent.last_turn_usage:
+                        table.add_row(
+                            "Last Turn",
+                            f"{agent.last_turn_usage.total_tokens:,} tok ({agent.last_turn_usage.prompt_tokens:,} prompt, {agent.last_turn_usage.completion_tokens:,} comp)",
+                        )
+
+                    console.print(table)
+                    console.print()
+                    continue
+
+                elif cmd == "init":
+                    try:
+                        target = ProjectContextLoader.init_project_file(
+                            directory=os.getcwd(), overwrite=False
+                        )
+                        print_success(f"Initialized {target.name} successfully!")
+                        pctx = project_loader.load(os.getcwd(), force_reload=True)
+                        if pctx:
+                            planner.project_context = pctx.to_system_prompt_block()
+                            print_info(
+                                f"Loaded {pctx.file_name} into active session guidelines ({pctx.estimated_tokens:,} tokens)."
+                            )
+                    except FileExistsError:
+                        print_warning("DEVORCH.md already exists in this directory.")
+                    except Exception as e:
+                        print_error(f"Failed to initialize DEVORCH.md: {e}")
+                    continue
+
                 elif cmd in ("models", "model"):
                     selected_model = cmd_arg
 
@@ -982,7 +1292,32 @@ def start_repl(
 
                 elif cmd in ("providers", "provider"):
                     if cmd_arg:
-                        new_provider = cmd_arg.lower()
+                        arg_lower = cmd_arg.lower().strip()
+                        if arg_lower in PROVIDERS:
+                            new_provider = arg_lower
+                        else:
+                            # Check prefix / substring matches across provider keys
+                            matches = [p for p in PROVIDERS if arg_lower in p.lower()]
+                            if len(matches) == 1:
+                                new_provider = matches[0]
+                                print_info(f"Matched provider: {new_provider}")
+                            elif len(matches) > 1:
+                                console.print(
+                                    f"\n[yellow]Multiple matches for '{cmd_arg}':[/yellow]"
+                                )
+                                new_provider = _interactive_provider_select(
+                                    current_llm.name,
+                                    current_settings,
+                                    prompt_text="Select provider from matches:",
+                                    allowed_providers=matches,
+                                )
+                                if not new_provider:
+                                    continue
+                            else:
+                                print_error(
+                                    f"Unknown provider '{cmd_arg}'. Available: {', '.join(PROVIDERS.keys())}"
+                                )
+                                continue
                     else:
                         new_provider = _interactive_provider_select(
                             current_llm.name, current_settings
@@ -1140,25 +1475,73 @@ def start_repl(
                     continue
 
                 elif cmd == "memory":
-                    memories = memory_manager.list_all()
-                    if not memories:
-                        print_info("No memories saved yet.")
-                    else:
-                        console.print(f"\n[bold]Saved Memories ({len(memories)}):[/bold]")
-                        for mem in memories:
-                            type_color = {
-                                "user": "cyan",
-                                "feedback": "yellow",
-                                "project": "green",
-                                "reference": "blue",
-                            }.get(mem["type"], "white")
-                            console.print(
-                                f"  [{type_color}][{mem['type']}][/{type_color}] "
-                                f"[bold]{mem['name']}[/bold]"
+                    pm = project_memory_manager.memory
+                    console.print(
+                        f"\n[bold]🧠 Project Memory: [cyan]{pm.project_name}[/cyan][/bold]"
+                    )
+                    console.print(f"  [dim]Storage:[/dim] {project_memory_manager.memory_file}")
+                    if pm.tech_stack:
+                        console.print(f"  [dim]Tech Stack:[/dim] {', '.join(pm.tech_stack)}")
+
+                    if cmd_arg:
+                        arg_parts = cmd_arg.split(maxsplit=1)
+                        sub_cmd = arg_parts[0].lower()
+                        sub_val = arg_parts[1] if len(arg_parts) > 1 else ""
+
+                        if sub_cmd == "add" and sub_val:
+                            project_memory_manager.add_decision(sub_val)
+                            planner.project_memory_context = (
+                                project_memory_manager.to_prompt_context()
                             )
-                            console.print(f"    [dim]{mem['description']}[/dim]")
-                            console.print(f"    [dim]File: {mem['filename']}[/dim]")
-                    console.print()
+                            print_success(f"Added to project memory: {sub_val}")
+                            continue
+                        elif sub_cmd == "pref" and sub_val:
+                            project_memory_manager.add_preference(sub_val)
+                            planner.project_memory_context = (
+                                project_memory_manager.to_prompt_context()
+                            )
+                            print_success(f"Saved user preference: {sub_val}")
+                            continue
+                        elif sub_cmd == "clear":
+                            project_memory_manager.clear()
+                            planner.project_memory_context = ""
+                            print_success("Project memory cleared.")
+                            continue
+
+                    if pm.decisions:
+                        console.print(
+                            "\n  [bold cyan]Architectural Decisions & Conventions:[/bold cyan]"
+                        )
+                        for d in pm.decisions:
+                            console.print(f"    - {d}")
+
+                    if pm.preferences:
+                        console.print("\n  [bold yellow]User Preferences:[/bold yellow]")
+                        for p in pm.preferences:
+                            console.print(f"    - {p}")
+
+                    if pm.recent_sessions:
+                        console.print(
+                            "\n  [bold green]Recent Sessions (Accomplishments):[/bold green]"
+                        )
+                        for s in pm.recent_sessions:
+                            console.print(f"    - [{s.get('date', '')}] {s.get('summary', '')}")
+
+                    if not (pm.decisions or pm.preferences or pm.recent_sessions):
+                        console.print(
+                            "\n  [dim]No project memories recorded yet. DevOrch records accomplishments automatically when sessions end.[/dim]"
+                        )
+
+                    # Show global memories count if any exist
+                    global_mems = memory_manager.list_all()
+                    if global_mems:
+                        console.print(
+                            f"\n  [dim]Global Memories: {len(global_mems)} item(s) in ~/.devorch/memory/[/dim]"
+                        )
+
+                    console.print(
+                        "\n[dim]  Commands: /memory add <decision> | /memory pref <pref> | /memory clear[/dim]\n"
+                    )
                     continue
 
                 elif cmd == "remember":
@@ -1382,24 +1765,90 @@ def start_repl(
                         console.print(
                             f"  [dim]Running skill:[/dim] [cyan]{cmd}[/cyan] - {skill['description']}"
                         )
+                        t0 = time.time()
                         result = agent.run(skill["prompt"], max_iterations=15)
+                        elapsed = time.time() - t0
+                        last_response_text = result
                         print_response(result)
+                        if agent.last_turn_usage and agent.last_turn_usage.total_tokens:
+                            u = agent.last_turn_usage
+                            tok_sec = (
+                                f" | {elapsed:.1f}s ({int(u.completion_tokens / elapsed)} tok/s)"
+                                if elapsed > 0.1 and u.completion_tokens
+                                else f" | {elapsed:.1f}s"
+                            )
+                            console.print(
+                                f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp){tok_sec} | "
+                                f"Session: {agent.context_manager.stats.total_tokens:,} tok[/dim]\n"
+                            )
                         continue
+
+                elif cmd == "copy":
+                    if not last_response_text:
+                        print_warning("No assistant response to copy yet.")
+                    elif _copy_to_clipboard(last_response_text):
+                        print_success("Copied last response to clipboard.")
+                    else:
+                        print_warning("Clipboard utility not available on this system.")
+                    continue
+
+                elif cmd == "paste":
+                    console.print(
+                        "[cyan]Multi-line paste mode:[/cyan] Paste or type your text below. "
+                        "Type [bold]END[/bold] on an empty line or press [bold]Ctrl+D[/bold] to submit:\n"
+                    )
+                    lines = []
+                    try:
+                        while True:
+                            line = input()
+                            if line.strip() == "END":
+                                break
+                            lines.append(line)
+                    except (EOFError, KeyboardInterrupt):
+                        pass
+                    pasted_input = "\n".join(lines).strip()
+                    if not pasted_input:
+                        print_info("Paste cancelled.")
+                        continue
+                    console.print(f"[dim]Processing {len(lines)} pasted line(s)...[/dim]")
+                    user_input = pasted_input
 
                 else:
                     print_warning(f"Unknown command: /{cmd}")
                     print_info("Type /help to see available commands")
                     continue
 
+            t0 = time.time()
             result = agent.run(user_input, max_iterations=15)
+            elapsed = time.time() - t0
+            last_response_text = result
             print_response(result)
+            if agent.last_turn_usage and agent.last_turn_usage.total_tokens:
+                u = agent.last_turn_usage
+                tok_sec = (
+                    f" | {elapsed:.1f}s ({int(u.completion_tokens / elapsed)} tok/s)"
+                    if elapsed > 0.1 and u.completion_tokens
+                    else f" | {elapsed:.1f}s"
+                )
+                console.print(
+                    f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp){tok_sec} | "
+                    f"Session: {agent.context_manager.stats.total_tokens:,} tok[/dim]\n"
+                )
 
         except (typer.Abort, EOFError):
             mcp_manager.stop_all()
+            if agent.history and session_manager.current_session_id:
+                project_memory_manager.update_from_session(
+                    session_manager.current_session_id, agent.history
+                )
             print_info(f"\nSession saved: {session_manager.current_session_id}")
             break
         except KeyboardInterrupt:
             mcp_manager.stop_all()
+            if agent.history and session_manager.current_session_id:
+                project_memory_manager.update_from_session(
+                    session_manager.current_session_id, agent.history
+                )
             console.print()
             print_info(f"Session saved: {session_manager.current_session_id}")
             break
@@ -1565,11 +2014,149 @@ def set_key(
 @app.command()
 def providers():
     """
-    List available providers.
+    List available AI providers and their configuration status (non-interactive).
     """
-    console.print("\n[bold]Available Providers:[/bold]\n")
+    settings = Settings.load()
+    table = Table(title="DevOrch AI Providers")
+    table.add_column("Provider", style="cyan bold")
+    table.add_column("Description", style="white")
+    table.add_column("Status", style="green")
+    table.add_column("Default Model", style="blue")
+
     for name in PROVIDERS.keys():
-        console.print(f"  - {name}")
+        desc = PROVIDER_INFO.get(name, "")
+        short_desc = desc.split(" - ", 1)[1] if " - " in desc else desc
+        cfg = settings.providers.get(name)
+        if name in ("local", "lmstudio"):
+            status = "[cyan]Local (no key)[/cyan]"
+        elif cfg and cfg.api_key:
+            status = "[green]Configured[/green]"
+        else:
+            status = "[dim]Not configured[/dim]"
+
+        if name == settings.default_provider:
+            status += " [bold yellow](default)[/bold yellow]"
+
+        default_model = cfg.default_model if cfg and cfg.default_model else "-"
+        table.add_row(name, short_desc, status, default_model)
+
+    console.print(table)
+    console.print(
+        "\n[dim]Set API key: devorch set-key <provider> | In REPL: /providers or /provider <name>[/dim]"
+    )
+
+
+@app.command("models")
+def models_list(
+    provider: str = typer.Argument(
+        None,
+        help="Provider name (e.g. openai, anthropic, gemini, groq). Defaults to active provider.",
+    ),
+):
+    """
+    List available models for a provider (non-interactive).
+    """
+    settings = Settings.load()
+    target_provider = (provider or settings.default_provider or "openai").lower()
+
+    if target_provider not in PROVIDERS:
+        print_error(
+            f"Unknown provider '{target_provider}'. Available: {', '.join(PROVIDERS.keys())}"
+        )
+        raise typer.Exit(1)
+
+    api_key = settings.get_api_key(target_provider)
+    try:
+        temp_provider = get_provider(target_provider, api_key=api_key or "placeholder")
+        models = temp_provider.list_models()
+    except Exception as e:
+        print_error(f"Could not list models for {target_provider}: {e}")
+        raise typer.Exit(1) from e
+
+    if not models:
+        print_warning(f"No models returned for {target_provider}.")
+        return
+
+    table = Table(title=f"Models for {target_provider.title()}")
+    table.add_column("Model ID", style="cyan bold")
+    table.add_column("Description", style="white")
+    table.add_column("Context Window", style="green")
+
+    cfg = settings.providers.get(target_provider)
+    configured_model = cfg.default_model if cfg else ""
+
+    for m in models:
+        is_cur = " [bold yellow](current)[/bold yellow]" if m.id == configured_model else ""
+        ctx = f"{m.context_length:,} tok" if m.context_length else "-"
+        table.add_row(f"{m.id}{is_cur}", m.description or "-", ctx)
+
+    console.print(table)
+    console.print(
+        f"\n[dim]Use model: devorch -p {target_provider} -m <model_id> | In REPL: /models or /model <id>[/dim]"
+    )
+
+
+@app.command("memory")
+def memory_cmd(
+    action: str = typer.Argument(
+        "show",
+        help="Action: show (default), clear, add (record decision), or pref (record preference)",
+    ),
+    text: str = typer.Argument(None, help="Text to add (required if action is 'add' or 'pref')"),
+):
+    """
+    View or manage persistent project memory (decisions & conventions) non-interactively.
+    """
+    mgr = ProjectMemoryManager(os.getcwd())
+
+    if action == "clear":
+        mgr.clear()
+        print_success("Project memory cleared for this directory.")
+        return
+
+    if action in ("add", "decision"):
+        if not text:
+            print_error("Please specify the decision text: devorch memory add <text>")
+            raise typer.Exit(1)
+        mgr.add_decision(text)
+        print_success(f"Added architectural decision: {text}")
+        return
+
+    if action in ("pref", "preference"):
+        if not text:
+            print_error("Please specify the preference text: devorch memory pref <text>")
+            raise typer.Exit(1)
+        mgr.add_user_preference(text)
+        print_success(f"Added user preference: {text}")
+        return
+
+    # Default action: show
+    pm = mgr.memory
+    console.print(
+        f"\n[bold cyan]DevOrch Project Memory[/bold cyan] [dim]({mgr.memory_file})[/dim]\n"
+    )
+
+    if pm.decisions:
+        console.print("  [bold cyan]Architectural Decisions & Conventions:[/bold cyan]")
+        for d in pm.decisions:
+            console.print(f"    - {d}")
+
+    if pm.preferences:
+        console.print("\n  [bold yellow]User Preferences:[/bold yellow]")
+        for p in pm.preferences:
+            console.print(f"    - {p}")
+
+    if pm.recent_sessions:
+        console.print("\n  [bold green]Recent Sessions (Accomplishments):[/bold green]")
+        for s in pm.recent_sessions:
+            console.print(f"    - [{s.get('date', '')}] {s.get('summary', '')}")
+
+    if not (pm.decisions or pm.preferences or pm.recent_sessions):
+        console.print("  [dim]No project memories recorded yet for this directory.[/dim]")
+
+    console.print(
+        "\n[dim]Commands: devorch memory add <decision> | devorch memory pref <pref> | devorch memory clear[/dim]"
+    )
 
 
 @app.command("skills")
@@ -1809,6 +2396,23 @@ def permissions_reset(force: bool = typer.Option(False, "--force", "-f", help="S
 
     reset_permissions()
     print_success("Permissions reset to defaults.")
+
+
+@app.command(name="init")
+def init_project(
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing DEVORCH.md"),
+):
+    """
+    Initialize a DEVORCH.md project context file in the current directory.
+    """
+    try:
+        target = ProjectContextLoader.init_project_file(directory=os.getcwd(), overwrite=force)
+        print_success(f"Initialized {target.name} successfully!")
+        console.print(f"  [dim]Project instructions generated at {target}[/dim]")
+    except FileExistsError:
+        print_warning("DEVORCH.md already exists in this directory. Use --force to overwrite.")
+    except Exception as e:
+        print_error(f"Failed to initialize: {e}")
 
 
 def main():

@@ -10,6 +10,7 @@ from tools.edit import EditTool
 from tools.filesystem import FilesystemTool
 from tools.grep import GrepTool
 from tools.search import SearchTool
+from tools.shell import ShellTool, normalize_windows_command
 from tools.task import TaskTool
 
 
@@ -337,6 +338,23 @@ def another_function():
             content = f.read()
         assert "new_function" in content
 
+    def test_replace_whitespace_tolerant(self, tool, temp_file):
+        """Test whitespace-tolerant multi-line replacement."""
+        # Intentionally use slightly different indentation in find string (8 spaces vs 4)
+        find_text = "def old_function():\n        pass"
+        result = tool.run(
+            {
+                "action": "replace",
+                "path": temp_file,
+                "find": find_text,
+                "replace_with": "def modern_function():\n    return True\n",
+            }
+        )
+        assert "Replaced" in result
+        with open(temp_file) as f:
+            content = f.read()
+        assert "modern_function" in content
+
     def test_replace_all(self, tool, temp_file):
         """Test replacing all occurrences."""
         result = tool.run(
@@ -540,3 +558,33 @@ class TestTaskTool:
         )
 
         assert "Current: Working on current" in result
+
+
+class TestShellTool:
+    """Tests for ShellTool and Windows command normalization."""
+
+    @pytest.fixture
+    def tool(self):
+        return ShellTool()
+
+    def test_schema(self, tool):
+        schema = tool.schema()
+        assert schema["name"] == "shell"
+        assert "command" in schema["parameters"]["properties"]
+
+    def test_no_command(self, tool):
+        res = tool.run({})
+        assert "Error: No command provided" in res
+
+    def test_echo_command(self, tool):
+        res = tool.run({"command": "echo devorch_shell_test"})
+        assert "devorch_shell_test" in res
+
+    def test_windows_command_normalization(self):
+        assert normalize_windows_command("pwd") == "cd"
+        assert normalize_windows_command("pwd && ls -la") == "cd && dir"
+        assert normalize_windows_command("ls") == "dir"
+        assert normalize_windows_command("ls -la") == "dir"
+        assert normalize_windows_command("which python") == "where python"
+        assert normalize_windows_command("clear") == "cls"
+        assert normalize_windows_command("git status && npm test") == "git status && npm test"

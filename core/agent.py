@@ -1,12 +1,14 @@
 import json
 from collections.abc import Callable
 
+from core.context import ContextManager
 from core.executor import Executor
+from core.loop_detector import LoopDetector, LoopSeverity
 from core.modes import AgentMode, ModeManager
 from core.planner import Planner
 from core.sessions import SessionManager
-from providers.base import LLMProvider
-from schemas.message import Message, ToolCall
+from providers.base import LLMProvider, extract_token_usage
+from schemas.message import Message, TokenUsage, ToolCall
 from utils.logger import get_console, print_info, print_success, print_warning
 
 console = get_console()
@@ -46,6 +48,8 @@ class Agent:
         session_manager: SessionManager | None = None,
         on_session_continue: Callable[[str], None] | None = None,
         mode_manager: ModeManager | None = None,
+        context_manager: ContextManager | None = None,
+        loop_detector: LoopDetector | None = None,
     ):
         self.provider = provider
         self.planner = planner
@@ -54,6 +58,9 @@ class Agent:
         self.session_manager = session_manager
         self.on_session_continue = on_session_continue  # Callback when session continues
         self.mode_manager = mode_manager or ModeManager()
+        self.context_manager = context_manager or ContextManager()
+        self.loop_detector = loop_detector or LoopDetector()
+        self.last_turn_usage: TokenUsage | None = None
         self.history: list[Message] = []
         self._context_summary: str | None = None  # Summary from previous session
 
@@ -221,6 +228,25 @@ class Agent:
                 console.print(f"    [dim on #1a1a28]{line}[/]")
             return
 
+        # ── Edit tool — show syntax-highlighted diff summary ───────────
+        if tool_name == "edit":
+            lines = result_str.split("\n")
+            has_diff = any(line.startswith(("---", "+++", "@@")) for line in lines)
+            if has_diff:
+                for line in lines:
+                    if line.startswith("+++ ") or line.startswith("--- "):
+                        console.print(f"    [dim]{line}[/dim]")
+                    elif line.startswith("+"):
+                        console.print(f"    [green]{line}[/green]")
+                    elif line.startswith("-"):
+                        console.print(f"    [red]{line}[/red]")
+                    elif line.startswith("@@"):
+                        console.print(f"    [cyan]{line}[/cyan]")
+                return
+            first_line = lines[0] if lines else "Done"
+            console.print(f"    [green]✓[/green] [dim]{first_line[:80]}[/dim]")
+            return
+
         # ── Everything else — brief one-liner ────────────────────────────
         first_line = result_str.split("\n", 1)[0]
         if len(first_line) > 80:
@@ -339,12 +365,25 @@ class Agent:
         user_message = Message(role="user", content=user_input)
         self._save_message(user_message)
 
+        # Reset loop detector for this user request
+        self.loop_detector.reset()
+
         iteration = 0
         # A plan is "pending" on the first pass when in plan mode and no plan exists yet
         needs_plan = is_plan_mode and self.mode_manager.current_plan is None
 
         while iteration < max_iterations:
+            # Compact history if approaching context token budget
+            compacted_history, was_compacted = self.context_manager.compact_history(self.history)
+            if was_compacted:
+                self.history = compacted_history
+
             planned_messages = self.planner.plan(self.history)
+
+            # Inject advisory if approaching maximum iterations
+            advisory = self.loop_detector.get_turn_advisory(iteration, max_iterations)
+            if advisory:
+                planned_messages.append(Message(role="system", content=advisory))
 
             # Inject previous-session context after the system message (first iteration only)
             if self._context_summary and iteration == 0:
@@ -376,6 +415,13 @@ class Agent:
             with console.status(status_msg, spinner="dots"):
                 response = self.provider.generate(planned_messages, tools=tools_for_call)
 
+            # Record token usage
+            usage = getattr(response, "usage", None) or extract_token_usage(
+                getattr(response, "raw", None)
+            )
+            self.context_manager.record_usage(usage)
+            self.last_turn_usage = usage
+
             # Persist tool_calls metadata for providers that need it (e.g. Mistral)
             if response.tool_calls:
                 response.message.metadata = response.message.metadata or {}
@@ -403,12 +449,40 @@ class Agent:
 
             for call in response.tool_calls:
                 self._display_tool_call(call)
-                result = self.executor.execute(call.name, call.arguments)
-                self._display_tool_result(call.name, result)
+
+                # Loop safeguard check before execution
+                verdict = self.loop_detector.check_and_record(call.name, call.arguments)
+                if verdict.should_block:
+                    console.print(f"    [bold red]⛔ Safeguard: {verdict.message}[/bold red]")
+                    tool_output = (
+                        f"Error: Action blocked by DevOrch safeguard to prevent infinite loop. "
+                        f"{verdict.message}"
+                    )
+                else:
+                    tool_output = self.executor.execute(call.name, call.arguments)
+                    # Record result in loop detector to track errors and oscillations
+                    post_verdict = self.loop_detector.check_and_record(
+                        call.name, call.arguments, result=tool_output
+                    )
+                    if post_verdict.message and post_verdict.severity != LoopSeverity.NONE:
+                        notice_text = post_verdict.message
+                        if not notice_text.startswith("DevOrch Safeguard Notice:"):
+                            notice_text = f"DevOrch Safeguard Notice: {notice_text}"
+                        tool_output = f"{tool_output}\n\n[{notice_text}]"
+
+                self._display_tool_result(call.name, tool_output)
                 self._save_message(
-                    Message(role="tool", content=str(result), name=call.name, tool_call_id=call.id)
+                    Message(
+                        role="tool",
+                        content=str(tool_output),
+                        name=call.name,
+                        tool_call_id=call.id,
+                    )
                 )
 
             iteration += 1
 
-        return "Error: Maximum iterations reached without a final answer."
+        return (
+            "Reached maximum turn limit (15 iterations). "
+            "Please review progress so far or provide additional instructions."
+        )

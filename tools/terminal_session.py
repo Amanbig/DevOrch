@@ -402,7 +402,7 @@ Example workflow:
                 stderr=subprocess.STDOUT,
                 cwd=cwd,
                 bufsize=0,  # unbuffered for real-time output
-                preexec_fn=os.setsid,  # new process group for clean kill
+                preexec_fn=getattr(os, "setsid", None),  # new process group for clean kill (POSIX)
             )
         except Exception as e:
             return f"Error starting session '{session_id}': {e}"

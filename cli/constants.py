@@ -17,7 +17,7 @@ console = get_console()
 
 # ── Version ──────────────────────────────────────────────────────────────────
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 # ── Banners ───────────────────────────────────────────────────────────────────
 
@@ -33,32 +33,36 @@ BANNER_SMALL = "[bold cyan]DevOrch[/bold cyan]"
 # automatically.
 
 SLASH_COMMANDS: dict[str, str] = {
-    "/help": "Show available commands",
-    "/mode": "Show or change mode (plan/auto/ask)",
-    "/plan": "Switch to plan mode",
-    "/auto": "Switch to auto mode",
-    "/ask": "Switch to ask mode (default)",
-    "/clear": "Clear conversation history",
-    "/session": "Show current session info",
-    "/config": "Show configuration settings",
-    "/permissions": "Show permission settings",
-    "/compact": "Summarize and compact history",
-    "/models": "Browse and switch models (interactive)",
-    "/model": "Switch model (/model <name> or interactive)",
-    "/providers": "Browse and switch providers (interactive)",
-    "/provider": "Switch provider (/provider <name> or interactive)",
-    "/history": "Show conversation history",
-    "/undo": "Undo last message",
-    "/save": "Save conversation to file",
-    "/status": "Show current provider, model, and mode",
-    "/tasks": "Show current task list",
-    "/memory": "Show saved memories",
-    "/remember": "Save something to memory",
-    "/forget": "Delete a memory",
-    "/skills": "List available skills",
-    "/skill": "Run a skill (e.g. /skill commit)",
-    "/mcp": "Show MCP servers | add/stop/start servers inline",
-    "/auth": "Set or update API key for current/specified provider",
+    "/help": "Show categorized help and command shortcuts",
+    "/mode": "Show or switch mode: /mode [plan|auto|ask]",
+    "/plan": "Switch to plan mode (requires approval before tool execution)",
+    "/auto": "Switch to auto mode (executes approved tools autonomously)",
+    "/ask": "Switch to ask mode (default: read and suggest only)",
+    "/clear": "Clear conversation history (saves accomplishments to project memory)",
+    "/session": "Show current session ID, model, and message count",
+    "/config": "Show configuration settings and provider status",
+    "/permissions": "Show and manage tool permission settings",
+    "/compact": "Summarize and compact conversation history to save tokens",
+    "/models": "Search, browse, and switch models (interactive 15/page pagination)",
+    "/model": "Switch model directly (/model <name>) or open interactive search",
+    "/providers": "Search, browse, and switch providers (interactive pagination)",
+    "/provider": "Switch provider directly (/provider <name>) or open interactive search",
+    "/history": "Show full conversation history in this session",
+    "/undo": "Undo last message and agent turn",
+    "/save": "Save conversation history to a file",
+    "/status": "Show active provider, model, execution mode, and loaded context",
+    "/tasks": "Show active multi-step task list and execution progress",
+    "/memory": "Show project memory (/memory add <dec>, /memory pref <p>, /memory clear)",
+    "/remember": "Save something to global memory (/remember <note>)",
+    "/forget": "Delete a memory (/forget or /forget <name>)",
+    "/skills": "List available built-in and custom skills",
+    "/skill": "Run a skill directly (/skill <name>)",
+    "/mcp": "Show MCP servers (/mcp add, /mcp stop, /mcp start)",
+    "/auth": "Set or update API key for current or specified provider",
+    "/tokens": "Show session token usage, prompt/completion split, and costs",
+    "/copy": "Copy the last assistant response to clipboard",
+    "/paste": "Enter multi-line paste mode to input large text or code",
+    "/init": "Generate or update a DEVORCH.md project context file",
 }
 
 # ── Questionary style (provider/model selection prompts) ─────────────────────
@@ -83,6 +87,7 @@ QUESTIONARY_STYLE = QStyle(
 PROMPT_STYLE = Style.from_dict(
     {
         "prompt": "#55cc55 bold",
+        "prompt-mode": "#55aaff bold",
         "prompt-arrow": "#55cc55 bold",
         "": "#ffffff bold",
         "command": "#66ccff bold",
