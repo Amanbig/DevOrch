@@ -34,7 +34,9 @@ DevOrch gives you a coding assistant in your terminal that can execute shell com
 
 - **Provider freedom** — Switch between OpenAI, Anthropic, Gemini, Mistral, Groq, and 8 more providers (including local models) with a single command. No vendor lock-in.
 - **Actually does things** — Runs shell commands, edits files, manages background processes, searches the web. Not just a chatbot.
-- **Remembers you** — Persistent memory system stores your preferences, project context, and feedback across conversations.
+- **Cross-session project memory** — Per-project persistent memory system automatically recalls architecture decisions, coding preferences, and recent session milestones across sessions.
+- **Loop & thrashing safeguards** — Advanced safety layer detects duplicate calls, tool oscillation, and error loops, preventing runaway token drain.
+- **Full token & speed transparency** — Real-time prompt/completion token tracking, context compaction metrics, and generation speed (`tok/s`) across 13 providers.
 - **Extensible** — Add custom skills as YAML files, connect MCP servers for additional tools, configure permissions per-tool.
 
 ## Quick Start
@@ -100,18 +102,27 @@ DevOrch can act on your system, not just talk about it:
 | `memory` | Persistent memory across conversations |
 | `websearch` / `webfetch` | Search the web, fetch URLs |
 
-### Memory System
-
-DevOrch remembers context across conversations:
-
+### Memory & Project Context
+ 
+DevOrch maintains persistent memory so you never have to repeat context:
+ 
+**1. Per-Project Memory (Cross-Session Recall)**
+Stored automatically per repository in `~/.devorch/projects/<project_id>/`:
+```bash
+/memory                              # View active architectural decisions & session history
+/memory add Use uv for package management   # Record an architectural decision
+/memory pref Prefer clean async/await       # Record a coding style preference
+/memory clear                        # Clear project memory for this repository
 ```
-/remember I prefer TypeScript over JavaScript
-/remember This project uses PostgreSQL, not MySQL
-/memory                    # View all saved memories
-/forget                    # Delete a memory interactively
-```
+*Accomplishments are automatically extracted and summarized on session exit with zero raw command leakage.*
 
-Memory types: **user** (preferences), **feedback** (corrections), **project** (context), **reference** (external links).
+**2. Global Memory (Across All Projects)**
+Stored in `~/.devorch/memory/`:
+```bash
+/remember I prefer tabs over spaces
+/remember Use ruff for Python linting
+/forget                              # Interactively choose a memory to remove
+```
 
 ### Skills
 
@@ -243,6 +254,19 @@ devorch edit app/models.py "add created_at field" --mcp sqlite
 
 # List available skills
 devorch skills
+
+# Browse providers and models directly from terminal
+devorch providers               # View all 13 providers & configuration status
+devorch models                  # View models for active provider
+devorch models anthropic        # View models for a specific provider
+
+# Inspect or manage project memory
+devorch memory                  # View project decisions and recent accomplishments
+devorch memory add "Use pytest" # Record a decision from the terminal
+devorch memory clear            # Clear project memory
+
+# Repository initialization
+devorch init                    # Generate or update DEVORCH.md repository instructions
 ```
 
 All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`, and `--no-mcp`.
@@ -251,33 +275,38 @@ All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`,
 
 | Command | Description |
 |---------|-------------|
-| `/help` | Show all commands |
-| `/models` | Browse and switch models (interactive) |
-| `/model <name>` | Switch model (partial match supported) |
-| `/providers` | Browse and switch providers (interactive) |
-| `/provider <name>` | Switch provider directly |
-| `/mode` | Switch mode (Plan/Auto/Ask) |
-| `/status` | Show current config |
-| `/auth [provider]` | Set/update API key |
-| `/memory` | Show saved memories |
-| `/remember <text>` | Save to memory |
-| `/forget` | Delete a memory |
+| `/help` | Show categorized commands and shortcuts |
+| `/mode [plan\|auto\|ask]` | Show or switch execution mode |
+| `/plan` `/auto` `/ask` | Quick switch execution mode |
+| `/models` | Search and browse models with 15/page pagination |
+| `/model <name>` | Switch model directly or launch search |
+| `/providers` | Search and browse providers with interactive pagination |
+| `/provider <name>` | Switch provider directly or launch search |
+| `/tokens` | Show session token usage, prompt/completion split, and costs |
+| `/copy` | Copy last assistant response directly to clipboard |
+| `/paste` | Enter multi-line paste mode for large text or code (`Alt+Enter` also inserts newlines) |
+| `/status` | Show current provider, model, execution mode, and loaded context |
+| `/auth [provider]` | Set or update API key for any provider |
+| `/memory` | Show project memory (`/memory add <dec>`, `/memory pref <p>`, `/memory clear`) |
+| `/remember <text>` | Save a note or convention to global memory |
+| `/forget` | Delete a global memory interactively or by query |
+| `/init` | Generate or update a `DEVORCH.md` project context file |
 | `/skills` | List available skills |
-| `/skill <name>` | Run a skill |
+| `/skill <name>` | Run a skill directly |
 | `/commit` `/review` `/test` `/fix` `/explain` `/simplify` | Skill shortcuts |
-| `/session` | Session info |
-| `/history` | Conversation history |
-| `/clear` | Clear history |
-| `/compact` | Summarize history |
-| `/save` | Save to file |
-| `/undo` | Undo last message |
+| `/session` | Current session ID, model, and message count |
+| `/history` | Full conversation history in this session |
+| `/clear` | Clear history (saves accomplishments to project memory) |
+| `/compact` | Summarize and compact conversation history to save tokens |
+| `/save` | Save conversation history to a file |
+| `/undo` | Undo last message and agent turn |
 | `/mcp` | Show MCP server status |
 | `/mcp add <name> <cmd> [args]` | Connect a new MCP server mid-session |
 | `/mcp start <name>` | Reconnect a server from config |
 | `/mcp stop <name>` | Disconnect a server and remove its tools |
-| `/config` | Show configuration |
-| `/permissions` | Show permissions |
-| `/tasks` | Show task list |
+| `/config` | Show configuration settings |
+| `/permissions` | Show and manage tool permission settings |
+| `/tasks` | Show multi-step task list and execution progress |
 
 ## Configuration
 
