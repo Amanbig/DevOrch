@@ -33,9 +33,13 @@ class TestLoopDetector:
     def test_error_thrashing(self):
         detector = LoopDetector(error_threshold=3)
 
-        detector.check_and_record("shell", {"command": "invalid1"}, result="Error: command not found")
+        detector.check_and_record(
+            "shell", {"command": "invalid1"}, result="Error: command not found"
+        )
         detector.check_and_record("shell", {"command": "invalid2"}, result="Error: file not found")
-        v3 = detector.check_and_record("shell", {"command": "invalid3"}, result="Error: permission denied")
+        v3 = detector.check_and_record(
+            "shell", {"command": "invalid3"}, result="Error: permission denied"
+        )
 
         assert v3.severity == LoopSeverity.WARNING
         assert "Last 3 tool calls resulted in errors" in v3.message

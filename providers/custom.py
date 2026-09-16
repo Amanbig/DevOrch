@@ -156,7 +156,9 @@ class CustomProvider(LLMProvider):
                         )
                     )
 
-            content = message.content if message.content else ("Calling tool..." if tool_calls else "")
+            content = (
+                message.content if message.content else ("Calling tool..." if tool_calls else "")
+            )
             metadata = {
                 "model": response.model,
                 "tool_calls": [

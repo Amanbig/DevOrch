@@ -446,9 +446,10 @@ class Agent:
                         call.name, call.arguments, result=tool_output
                     )
                     if post_verdict.message and post_verdict.severity != LoopSeverity.NONE:
-                        tool_output = (
-                            f"{tool_output}\n\n[DevOrch Safeguard Notice: {post_verdict.message}]"
-                        )
+                        notice_text = post_verdict.message
+                        if not notice_text.startswith("DevOrch Safeguard Notice:"):
+                            notice_text = f"DevOrch Safeguard Notice: {notice_text}"
+                        tool_output = f"{tool_output}\n\n[{notice_text}]"
 
                 self._display_tool_result(call.name, tool_output)
                 self._save_message(

@@ -69,7 +69,9 @@ class ProjectContextLoader:
 
         return None
 
-    def load(self, start_dir: Path | str | None = None, force_reload: bool = False) -> ProjectContext | None:
+    def load(
+        self, start_dir: Path | str | None = None, force_reload: bool = False
+    ) -> ProjectContext | None:
         """Load project context from the nearest matching instruction file."""
         found = self.find_context_file(start_dir)
         if not found:
@@ -114,7 +116,11 @@ class ProjectContextLoader:
         project_name = pdir.name
 
         # Detect tech stack
-        has_python = (pdir / "pyproject.toml").exists() or (pdir / "setup.py").exists() or list(pdir.glob("*.py"))
+        has_python = (
+            (pdir / "pyproject.toml").exists()
+            or (pdir / "setup.py").exists()
+            or list(pdir.glob("*.py"))
+        )
         has_node = (pdir / "package.json").exists()
         has_rust = (pdir / "Cargo.toml").exists()
         has_go = (pdir / "go.mod").exists()
@@ -170,7 +176,9 @@ Brief description of the project and its core goals.
         return template
 
     @classmethod
-    def init_project_file(cls, directory: Path | str | None = None, overwrite: bool = False) -> Path:
+    def init_project_file(
+        cls, directory: Path | str | None = None, overwrite: bool = False
+    ) -> Path:
         """Create a new DEVORCH.md in the target directory."""
         pdir = Path(directory or os.getcwd()).resolve()
         target = pdir / "DEVORCH.md"

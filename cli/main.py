@@ -125,7 +125,9 @@ def _interactive_model_select(
             prompt_text,
             choices=choices,
             style=QUESTIONARY_STYLE,
-            instruction="(↑↓ navigate, Enter to select, Ctrl+C to cancel)",
+            use_search_filter=True,
+            use_jk_keys=False,
+            instruction="(Type to search, ↑↓ to navigate, Enter to select, Ctrl+C to cancel)",
         ).ask()
         return selected
     except (KeyboardInterrupt, EOFError):
@@ -136,8 +138,9 @@ def _interactive_provider_select(
     current_provider: str,
     current_settings: "Settings",
     prompt_text: str = "Select provider:",
+    allowed_providers: list[str] | None = None,
 ) -> str | None:
-    """Interactive provider selection with status indicators."""
+    """Interactive provider selection with status indicators and search filter."""
     # Nice display names
     display_names = {
         "openai": "OpenAI",
@@ -160,6 +163,8 @@ def _interactive_provider_select(
     num = 1
 
     for name, desc in PROVIDER_INFO.items():
+        if allowed_providers and name not in allowed_providers:
+            continue
         has_key = bool(current_settings.get_api_key(name))
         is_current = name == current_provider
         nice_name = display_names.get(name, name.title())
@@ -189,14 +194,17 @@ def _interactive_provider_select(
         else:
             cloud_choices.append(choice)
 
-    provider_choices = cloud_choices + [questionary.Separator("── Local ──")] + local_choices
+    separator = [questionary.Separator("── Local ──")] if (cloud_choices and local_choices) else []
+    provider_choices = cloud_choices + separator + local_choices
 
     try:
         return questionary.select(
             prompt_text,
             choices=provider_choices,
             style=QUESTIONARY_STYLE,
-            instruction="(↑↓ navigate, Enter to select, Ctrl+C to cancel)",
+            use_search_filter=True,
+            use_jk_keys=False,
+            instruction="(Type to search, ↑↓ to navigate, Enter to select, Ctrl+C to cancel)",
         ).ask()
     except (KeyboardInterrupt, EOFError):
         return None
@@ -602,7 +610,9 @@ def start_repl(
     ]
     extra_parts = []
     if project_ctx:
-        extra_parts.append(f"[dim]{project_ctx.file_name} ({project_ctx.estimated_tokens:,} tok)[/dim]")
+        extra_parts.append(
+            f"[dim]{project_ctx.file_name} ({project_ctx.estimated_tokens:,} tok)[/dim]"
+        )
     if mem_count:
         extra_parts.append(f"[dim]{mem_count} memories[/dim]")
     extra_parts.append(f"[dim]{skill_count} skills[/dim]")
@@ -1047,7 +1057,32 @@ def start_repl(
 
                 elif cmd in ("providers", "provider"):
                     if cmd_arg:
-                        new_provider = cmd_arg.lower()
+                        arg_lower = cmd_arg.lower().strip()
+                        if arg_lower in PROVIDERS:
+                            new_provider = arg_lower
+                        else:
+                            # Check prefix / substring matches across provider keys
+                            matches = [p for p in PROVIDERS if arg_lower in p.lower()]
+                            if len(matches) == 1:
+                                new_provider = matches[0]
+                                print_info(f"Matched provider: {new_provider}")
+                            elif len(matches) > 1:
+                                console.print(
+                                    f"\n[yellow]Multiple matches for '{cmd_arg}':[/yellow]"
+                                )
+                                new_provider = _interactive_provider_select(
+                                    current_llm.name,
+                                    current_settings,
+                                    prompt_text="Select provider from matches:",
+                                    allowed_providers=matches,
+                                )
+                                if not new_provider:
+                                    continue
+                            else:
+                                print_error(
+                                    f"Unknown provider '{cmd_arg}'. Available: {', '.join(PROVIDERS.keys())}"
+                                )
+                                continue
                     else:
                         new_provider = _interactive_provider_select(
                             current_llm.name, current_settings

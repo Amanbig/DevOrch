@@ -11,7 +11,9 @@ class TestProjectContextLoader:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             devorch_md = tmppath / "DEVORCH.md"
-            devorch_md.write_text("# Test Project Guidelines\nRun `pytest` to test.", encoding="utf-8")
+            devorch_md.write_text(
+                "# Test Project Guidelines\nRun `pytest` to test.", encoding="utf-8"
+            )
 
             loader = ProjectContextLoader()
             ctx = loader.load(start_dir=tmppath)

@@ -111,7 +111,9 @@ class OpenAIProvider(LLMProvider):
         if hasattr(response, "usage") and response.usage:
             prompt_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
             completion_tokens = getattr(response.usage, "completion_tokens", 0) or 0
-            total_tokens = getattr(response.usage, "total_tokens", 0) or (prompt_tokens + completion_tokens)
+            total_tokens = getattr(response.usage, "total_tokens", 0) or (
+                prompt_tokens + completion_tokens
+            )
             usage = TokenUsage(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,

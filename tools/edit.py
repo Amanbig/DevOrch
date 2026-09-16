@@ -108,16 +108,18 @@ Always use dry_run=true first to preview significant changes!"""
                     matched_idx = -1
                     match_count = 0
                     for idx in range(len(file_lines_stripped) - n_find + 1):
-                        window = [
-                            item for item in file_lines_stripped[idx : idx + n_find] if item
-                        ]
+                        window = [item for item in file_lines_stripped[idx : idx + n_find] if item]
                         if window == find_lines_stripped:
                             matched_idx = idx
                             match_count += 1
 
                     if match_count == 1 and matched_idx >= 0:
                         rep_lines = replace_with.splitlines(keepends=True)
-                        if rep_lines and not rep_lines[-1].endswith("\n") and lines[matched_idx + n_find - 1].endswith("\n"):
+                        if (
+                            rep_lines
+                            and not rep_lines[-1].endswith("\n")
+                            and lines[matched_idx + n_find - 1].endswith("\n")
+                        ):
                             rep_lines[-1] += "\n"
                         new_lines = lines[:matched_idx] + rep_lines + lines[matched_idx + n_find :]
                         return new_lines, 1

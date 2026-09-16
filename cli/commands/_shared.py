@@ -4,6 +4,9 @@ Shared utilities for DevOrch CLI commands.
 Exports: console, SYSTEM_PROMPT, SimplePlanner, create_provider, build_tools, resolve_mode
 """
 
+import os
+import platform
+
 import typer
 
 from config.settings import Settings
@@ -32,10 +35,10 @@ SYSTEM_PROMPT = """You are DevOrch, an AI coding assistant with access to tools 
 
 IMPORTANT: You have the following tools available and MUST use them to help the user:
 
-1. **shell** - Execute shell commands (bash/powershell). Use this to:
-   - Run commands like `npm install`, `git clone`, `git status`, etc.
-   - Navigate directories, create files, run scripts
-   - Any short-lived terminal command that returns output
+1. **shell** - Execute shell commands (builds, tests, git, package managers). Use this to:
+   - Run CLI tools: `npm`, `pip`, `uv`, `pytest`, `cargo`, `git`
+   - Run project test suites, linters, and compilation scripts
+   - Do NOT use shell to inspect directory contents or read files — use `filesystem` instead!
 
 2. **terminal_session** — The PRIMARY tool for all terminal/process needs:
    - `start` — launch a command in a managed session. Defaults to 'bash' if no command.
@@ -139,6 +142,36 @@ class SimplePlanner(Planner):
 
     def plan(self, history: list[Message]) -> list[Message]:
         prompt = SYSTEM_PROMPT
+
+        # Append runtime environment & host OS shell guidance
+        os_name = platform.system()
+        os_release = platform.release()
+        os_machine = platform.machine()
+        cwd = os.getcwd()
+
+        if os_name == "Windows":
+            shell_info = (
+                f"\n\nENVIRONMENT & SYSTEM CONTEXT:\n"
+                f"- Host OS: Windows ({os_release}, {os_machine})\n"
+                f"- Current Working Directory: {cwd}\n"
+                f"- Shell: Windows cmd.exe / PowerShell\n"
+                f"- IMPORTANT SHELL RULES FOR WINDOWS:\n"
+                f"  * Do NOT use Unix shell commands like `pwd`, `ls`, `ls -la`, `cat`, `touch`, `rm -rf`, `grep`, or `export`.\n"
+                f"  * To inspect directory contents: use the `filesystem` tool with `action='list'`, `path='.'`.\n"
+                f"  * To read files: use the `filesystem` tool with `action='read'`.\n"
+                f"  * To search files: use `search` (glob) or `grep` (content search).\n"
+                f"  * For builds & CLI tools, use direct commands: `pip`, `uv`, `npm`, `git`, `python`, `pytest`.\n"
+                f"  * For Windows file paths in shell commands, use backslashes `\\` or wrap paths in quotes."
+            )
+        else:
+            shell_info = (
+                f"\n\nENVIRONMENT & SYSTEM CONTEXT:\n"
+                f"- Host OS: {os_name} ({os_release}, {os_machine})\n"
+                f"- Current Working Directory: {cwd}\n"
+                f"- Shell: bash/sh\n"
+                f"- Prefer using `filesystem` tool for reading and listing files to minimize token usage."
+            )
+        prompt += shell_info
 
         # Append project rules/guidelines (from DEVORCH.md or CLAUDE.md)
         if self.project_context:
