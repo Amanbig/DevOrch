@@ -3,7 +3,7 @@ import json
 import httpx
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo
+from providers.base import LLMProvider, ModelInfo, extract_token_usage
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -211,4 +211,5 @@ class LocalProvider(LLMProvider):
             message=Message(role="assistant", content=content),
             tool_calls=tool_calls if tool_calls else None,
             raw=response,
+            usage=extract_token_usage(response),
         )

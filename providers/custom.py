@@ -10,7 +10,7 @@ import os
 
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo
+from providers.base import LLMProvider, ModelInfo, extract_token_usage
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -156,30 +156,27 @@ class CustomProvider(LLMProvider):
                         )
                     )
 
+            content = message.content if message.content else ("Calling tool..." if tool_calls else "")
+            metadata = {
+                "model": response.model,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in (message.tool_calls or [])
+                ],
+            }
+
             return LLMResponse(
-                content=message.content or "",
-                tool_calls=tool_calls,
-                metadata={
-                    "model": response.model,
-                    "usage": {
-                        "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                        "completion_tokens": (
-                            response.usage.completion_tokens if response.usage else 0
-                        ),
-                        "total_tokens": response.usage.total_tokens if response.usage else 0,
-                    },
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            },
-                        }
-                        for tc in (message.tool_calls or [])
-                    ],
-                },
+                message=Message(role="assistant", content=content, metadata=metadata),
+                tool_calls=tool_calls if tool_calls else None,
+                raw=response,
+                usage=extract_token_usage(response),
             )
 
         except Exception as e:
