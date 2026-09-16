@@ -60,6 +60,8 @@ SLASH_COMMANDS: dict[str, str] = {
     "/mcp": "Show MCP servers (/mcp add, /mcp stop, /mcp start)",
     "/auth": "Set or update API key for current or specified provider",
     "/tokens": "Show session token usage, prompt/completion split, and costs",
+    "/copy": "Copy the last assistant response to clipboard",
+    "/paste": "Enter multi-line paste mode to input large text or code",
     "/init": "Generate or update a DEVORCH.md project context file",
 }
 
@@ -85,6 +87,7 @@ QUESTIONARY_STYLE = QStyle(
 PROMPT_STYLE = Style.from_dict(
     {
         "prompt": "#55cc55 bold",
+        "prompt-mode": "#55aaff bold",
         "prompt-arrow": "#55cc55 bold",
         "": "#ffffff bold",
         "command": "#66ccff bold",

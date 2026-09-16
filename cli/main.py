@@ -1,10 +1,12 @@
 import os
+import time
 from pathlib import Path
 
 import questionary
 import typer
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.key_binding import KeyBindings
 from rich.panel import Panel
 from rich.table import Table
 
@@ -592,6 +594,73 @@ def create_provider_safe(provider_name: str, model: str, settings: Settings):
     return get_provider(provider_name, model=model, api_key=api_key, **kwargs)
 
 
+def _get_git_branch(cwd: str | None = None) -> str | None:
+    """Get current git branch name if cwd is inside a git repository."""
+    try:
+        import subprocess
+
+        res = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=cwd or os.getcwd(),
+            capture_output=True,
+            text=True,
+            timeout=1,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        if res.returncode == 0:
+            branch = res.stdout.strip()
+            if branch and branch != "HEAD":
+                return branch
+    except Exception:
+        pass
+    return None
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    """Copy text to clipboard using platform-native utilities without extra dependencies."""
+    import platform
+    import subprocess
+
+    sys_name = platform.system().lower()
+    try:
+        if sys_name == "windows":
+            subprocess.run(
+                ["clip"],
+                input=text.encode("utf-8"),
+                check=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return True
+        elif sys_name == "darwin":
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+            return True
+        else:
+            for cmd in [
+                ["wl-copy"],
+                ["xclip", "-selection", "clipboard"],
+                ["xsel", "--clipboard", "--input"],
+            ]:
+                try:
+                    subprocess.run(cmd, input=text.encode("utf-8"), check=True)
+                    return True
+                except FileNotFoundError:
+                    continue
+    except Exception:
+        pass
+    return False
+
+
+def _create_prompt_keybindings() -> KeyBindings:
+    """Create prompt keybindings supporting Alt+Enter for multiline newline insertion."""
+    kb = KeyBindings()
+
+    @kb.add("escape", "enter")
+    def _(event):
+        event.current_buffer.insert_text("\n")
+
+    return kb
+
+
 def start_repl(
     provider: str | None = None,
     model: str | None = None,
@@ -776,13 +845,19 @@ def start_repl(
     # Track current provider/model for switching
     current_llm = llm
     current_settings = settings
+    last_response_text: str = ""
+    prompt_kb = _create_prompt_keybindings()
 
     def get_bottom_toolbar():
-        """Clean bottom status bar."""
-        mode_char = {"plan": "Plan", "auto": "Auto", "ask": "Ask"}.get(mode_manager.mode.value, "?")
+        """Clean bottom status bar with git branch, model, mode, and tokens."""
+        mode_char = {"plan": "PLAN", "auto": "AUTO", "ask": "ASK"}.get(mode_manager.mode.value, "?")
         tok_count = agent.context_manager.stats.total_tokens
         tok_str = f"⚡ {tok_count:,} tok" if tok_count else "⚡ 0 tok"
-        parts = [cwd_display, f"{current_llm.name}/{current_llm.model}", mode_char, tok_str]
+        git_b = _get_git_branch()
+        parts = [cwd_display]
+        if git_b:
+            parts.append(f"git:{git_b}")
+        parts.extend([f"{current_llm.name}/{current_llm.model}", f"[{mode_char}]", tok_str])
         mcp_n = len(mcp_manager.servers)
         if mcp_n:
             parts.append(f"MCP: {mcp_n}")
@@ -798,14 +873,19 @@ def start_repl(
             rule_width = max(console.width - 1, 10)
             console.print("[dim]─[/dim]" * rule_width, highlight=False)
 
-            # Use prompt_toolkit with autocomplete and bottom toolbar
+            # Use prompt_toolkit with autocomplete, mode badge, and bottom toolbar
+            mode_tag = mode_manager.mode.value.upper()
             user_input = pt_prompt(
-                [("class:prompt-arrow", "> ")],
+                [
+                    ("class:prompt-mode", f"[{mode_tag}] "),
+                    ("class:prompt-arrow", "> "),
+                ],
                 completer=completer,
                 complete_while_typing=True,
                 style=PROMPT_STYLE,
                 bottom_toolbar=get_bottom_toolbar,
                 history=prompt_history,
+                key_bindings=prompt_kb,
             )
 
             if user_input.lower() in ("exit", "quit", "q"):
@@ -833,10 +913,12 @@ def start_repl(
                     categories = {
                         "Modes": ["/mode", "/plan", "/auto", "/ask"],
                         "Provider & Model": ["/providers", "/provider", "/models", "/model"],
-                        "Session": [
+                        "Session & Utilities": [
                             "/session",
                             "/history",
                             "/tokens",
+                            "/copy",
+                            "/paste",
                             "/undo",
                             "/clear",
                             "/compact",
@@ -1683,27 +1765,73 @@ def start_repl(
                         console.print(
                             f"  [dim]Running skill:[/dim] [cyan]{cmd}[/cyan] - {skill['description']}"
                         )
+                        t0 = time.time()
                         result = agent.run(skill["prompt"], max_iterations=15)
+                        elapsed = time.time() - t0
+                        last_response_text = result
                         print_response(result)
                         if agent.last_turn_usage and agent.last_turn_usage.total_tokens:
                             u = agent.last_turn_usage
+                            tok_sec = (
+                                f" | {elapsed:.1f}s ({int(u.completion_tokens / elapsed)} tok/s)"
+                                if elapsed > 0.1 and u.completion_tokens
+                                else f" | {elapsed:.1f}s"
+                            )
                             console.print(
-                                f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp) | "
+                                f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp){tok_sec} | "
                                 f"Session: {agent.context_manager.stats.total_tokens:,} tok[/dim]\n"
                             )
                         continue
+
+                elif cmd == "copy":
+                    if not last_response_text:
+                        print_warning("No assistant response to copy yet.")
+                    elif _copy_to_clipboard(last_response_text):
+                        print_success("Copied last response to clipboard.")
+                    else:
+                        print_warning("Clipboard utility not available on this system.")
+                    continue
+
+                elif cmd == "paste":
+                    console.print(
+                        "[cyan]Multi-line paste mode:[/cyan] Paste or type your text below. "
+                        "Type [bold]END[/bold] on an empty line or press [bold]Ctrl+D[/bold] to submit:\n"
+                    )
+                    lines = []
+                    try:
+                        while True:
+                            line = input()
+                            if line.strip() == "END":
+                                break
+                            lines.append(line)
+                    except (EOFError, KeyboardInterrupt):
+                        pass
+                    pasted_input = "\n".join(lines).strip()
+                    if not pasted_input:
+                        print_info("Paste cancelled.")
+                        continue
+                    console.print(f"[dim]Processing {len(lines)} pasted line(s)...[/dim]")
+                    user_input = pasted_input
 
                 else:
                     print_warning(f"Unknown command: /{cmd}")
                     print_info("Type /help to see available commands")
                     continue
 
+            t0 = time.time()
             result = agent.run(user_input, max_iterations=15)
+            elapsed = time.time() - t0
+            last_response_text = result
             print_response(result)
             if agent.last_turn_usage and agent.last_turn_usage.total_tokens:
                 u = agent.last_turn_usage
+                tok_sec = (
+                    f" | {elapsed:.1f}s ({int(u.completion_tokens / elapsed)} tok/s)"
+                    if elapsed > 0.1 and u.completion_tokens
+                    else f" | {elapsed:.1f}s"
+                )
                 console.print(
-                    f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp) | "
+                    f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp){tok_sec} | "
                     f"Session: {agent.context_manager.stats.total_tokens:,} tok[/dim]\n"
                 )
 
