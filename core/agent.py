@@ -228,6 +228,25 @@ class Agent:
                 console.print(f"    [dim on #1a1a28]{line}[/]")
             return
 
+        # ── Edit tool — show syntax-highlighted diff summary ───────────
+        if tool_name == "edit":
+            lines = result_str.split("\n")
+            has_diff = any(line.startswith(("---", "+++", "@@")) for line in lines)
+            if has_diff:
+                for line in lines:
+                    if line.startswith("+++ ") or line.startswith("--- "):
+                        console.print(f"    [dim]{line}[/dim]")
+                    elif line.startswith("+"):
+                        console.print(f"    [green]{line}[/green]")
+                    elif line.startswith("-"):
+                        console.print(f"    [red]{line}[/red]")
+                    elif line.startswith("@@"):
+                        console.print(f"    [cyan]{line}[/cyan]")
+                return
+            first_line = lines[0] if lines else "Done"
+            console.print(f"    [green]✓[/green] [dim]{first_line[:80]}[/dim]")
+            return
+
         # ── Everything else — brief one-liner ────────────────────────────
         first_line = result_str.split("\n", 1)[0]
         if len(first_line) > 80:

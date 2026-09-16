@@ -4,6 +4,7 @@ from pathlib import Path
 import questionary
 import typer
 from prompt_toolkit import prompt as pt_prompt
+from prompt_toolkit.history import FileHistory
 from rich.panel import Panel
 from rich.table import Table
 
@@ -346,7 +347,14 @@ def _fuzzy_match_model(query: str, models: list[ModelInfo]) -> ModelInfo | None:
 
 # Main app with invoke_without_command=True so we can handle bare `devorch`
 app = typer.Typer(
-    help="DevOrch - Your AI Coding Assistant", invoke_without_command=True, no_args_is_help=False
+    help=(
+        "DevOrch - AI Coding Assistant CLI\n\n"
+        "Interactive REPL:  run 'devorch' or 'devorch chat'\n"
+        "Non-interactive:   run 'devorch ask', 'devorch edit', 'devorch run', "
+        "'devorch models', 'devorch memory', etc."
+    ),
+    invoke_without_command=True,
+    no_args_is_help=False,
 )
 sessions_app = typer.Typer(help="Manage chat sessions")
 app.add_typer(sessions_app, name="sessions")
@@ -738,7 +746,7 @@ def start_repl(
         if sess_count:
             mem_info.append(f"{sess_count} sessions")
         desc = ", ".join(mem_info) if mem_info else "active"
-        extra_parts.append(f"[dim]🧠 memory ({desc})[/dim]")
+        extra_parts.append(f"[dim]memory ({desc})[/dim]")
     elif mem_count:
         extra_parts.append(f"[dim]{mem_count} memories[/dim]")
     extra_parts.append(f"[dim]{skill_count} skills[/dim]")
@@ -780,10 +788,15 @@ def start_repl(
             parts.append(f"MCP: {mcp_n}")
         return "  " + "     ".join(parts)
 
+    history_file = Path.home() / ".devorch" / "history"
+    history_file.parent.mkdir(parents=True, exist_ok=True)
+    prompt_history = FileHistory(str(history_file))
+
     while True:
         try:
-            # Print a separator line above the prompt (Gemini-like)
-            console.print("[dim]─[/dim]" * console.width, highlight=False)
+            # Print a clean separator line above the prompt
+            rule_width = max(console.width - 1, 10)
+            console.print("[dim]─[/dim]" * rule_width, highlight=False)
 
             # Use prompt_toolkit with autocomplete and bottom toolbar
             user_input = pt_prompt(
@@ -792,6 +805,7 @@ def start_repl(
                 complete_while_typing=True,
                 style=PROMPT_STYLE,
                 bottom_toolbar=get_bottom_toolbar,
+                history=prompt_history,
             )
 
             if user_input.lower() in ("exit", "quit", "q"):
@@ -868,7 +882,11 @@ def start_repl(
                         "    [blue]ASK[/blue]  - Asks before each tool execution (default)"
                     )
                     console.print(
-                        "\n[dim]  Tip: Type / for autocomplete | /model and /provider support live search and partial matching[/dim]\n"
+                        "\n[dim]  Tips:\n"
+                        "  • Type / for command autocomplete\n"
+                        "  • /models and /providers support interactive search and 15-per-page pagination\n"
+                        "  • /memory add <decision> records conventions into persistent project memory\n"
+                        "  • /tokens shows prompt vs completion tokens, compaction savings, and costs[/dim]\n"
                     )
                     continue
 
@@ -1413,19 +1431,19 @@ def start_repl(
                             "\n  [bold cyan]Architectural Decisions & Conventions:[/bold cyan]"
                         )
                         for d in pm.decisions:
-                            console.print(f"    • {d}")
+                            console.print(f"    - {d}")
 
                     if pm.preferences:
                         console.print("\n  [bold yellow]User Preferences:[/bold yellow]")
                         for p in pm.preferences:
-                            console.print(f"    • {p}")
+                            console.print(f"    - {p}")
 
                     if pm.recent_sessions:
                         console.print(
                             "\n  [bold green]Recent Sessions (Accomplishments):[/bold green]"
                         )
                         for s in pm.recent_sessions:
-                            console.print(f"    • [{s.get('date', '')}] {s.get('summary', '')}")
+                            console.print(f"    - [{s.get('date', '')}] {s.get('summary', '')}")
 
                     if not (pm.decisions or pm.preferences or pm.recent_sessions):
                         console.print(
@@ -1868,11 +1886,149 @@ def set_key(
 @app.command()
 def providers():
     """
-    List available providers.
+    List available AI providers and their configuration status (non-interactive).
     """
-    console.print("\n[bold]Available Providers:[/bold]\n")
+    settings = Settings.load()
+    table = Table(title="DevOrch AI Providers")
+    table.add_column("Provider", style="cyan bold")
+    table.add_column("Description", style="white")
+    table.add_column("Status", style="green")
+    table.add_column("Default Model", style="blue")
+
     for name in PROVIDERS.keys():
-        console.print(f"  - {name}")
+        desc = PROVIDER_INFO.get(name, "")
+        short_desc = desc.split(" - ", 1)[1] if " - " in desc else desc
+        cfg = settings.providers.get(name)
+        if name in ("local", "lmstudio"):
+            status = "[cyan]Local (no key)[/cyan]"
+        elif cfg and cfg.api_key:
+            status = "[green]Configured[/green]"
+        else:
+            status = "[dim]Not configured[/dim]"
+
+        if name == settings.default_provider:
+            status += " [bold yellow](default)[/bold yellow]"
+
+        default_model = cfg.default_model if cfg and cfg.default_model else "-"
+        table.add_row(name, short_desc, status, default_model)
+
+    console.print(table)
+    console.print(
+        "\n[dim]Set API key: devorch set-key <provider> | In REPL: /providers or /provider <name>[/dim]"
+    )
+
+
+@app.command("models")
+def models_list(
+    provider: str = typer.Argument(
+        None,
+        help="Provider name (e.g. openai, anthropic, gemini, groq). Defaults to active provider.",
+    ),
+):
+    """
+    List available models for a provider (non-interactive).
+    """
+    settings = Settings.load()
+    target_provider = (provider or settings.default_provider or "openai").lower()
+
+    if target_provider not in PROVIDERS:
+        print_error(
+            f"Unknown provider '{target_provider}'. Available: {', '.join(PROVIDERS.keys())}"
+        )
+        raise typer.Exit(1)
+
+    api_key = settings.get_api_key(target_provider)
+    try:
+        temp_provider = get_provider(target_provider, api_key=api_key or "placeholder")
+        models = temp_provider.list_models()
+    except Exception as e:
+        print_error(f"Could not list models for {target_provider}: {e}")
+        raise typer.Exit(1) from e
+
+    if not models:
+        print_warning(f"No models returned for {target_provider}.")
+        return
+
+    table = Table(title=f"Models for {target_provider.title()}")
+    table.add_column("Model ID", style="cyan bold")
+    table.add_column("Description", style="white")
+    table.add_column("Context Window", style="green")
+
+    cfg = settings.providers.get(target_provider)
+    configured_model = cfg.default_model if cfg else ""
+
+    for m in models:
+        is_cur = " [bold yellow](current)[/bold yellow]" if m.id == configured_model else ""
+        ctx = f"{m.context_length:,} tok" if m.context_length else "-"
+        table.add_row(f"{m.id}{is_cur}", m.description or "-", ctx)
+
+    console.print(table)
+    console.print(
+        f"\n[dim]Use model: devorch -p {target_provider} -m <model_id> | In REPL: /models or /model <id>[/dim]"
+    )
+
+
+@app.command("memory")
+def memory_cmd(
+    action: str = typer.Argument(
+        "show",
+        help="Action: show (default), clear, add (record decision), or pref (record preference)",
+    ),
+    text: str = typer.Argument(None, help="Text to add (required if action is 'add' or 'pref')"),
+):
+    """
+    View or manage persistent project memory (decisions & conventions) non-interactively.
+    """
+    mgr = ProjectMemoryManager(os.getcwd())
+
+    if action == "clear":
+        mgr.clear()
+        print_success("Project memory cleared for this directory.")
+        return
+
+    if action in ("add", "decision"):
+        if not text:
+            print_error("Please specify the decision text: devorch memory add <text>")
+            raise typer.Exit(1)
+        mgr.add_decision(text)
+        print_success(f"Added architectural decision: {text}")
+        return
+
+    if action in ("pref", "preference"):
+        if not text:
+            print_error("Please specify the preference text: devorch memory pref <text>")
+            raise typer.Exit(1)
+        mgr.add_user_preference(text)
+        print_success(f"Added user preference: {text}")
+        return
+
+    # Default action: show
+    pm = mgr.memory
+    console.print(
+        f"\n[bold cyan]DevOrch Project Memory[/bold cyan] [dim]({mgr.memory_file})[/dim]\n"
+    )
+
+    if pm.decisions:
+        console.print("  [bold cyan]Architectural Decisions & Conventions:[/bold cyan]")
+        for d in pm.decisions:
+            console.print(f"    - {d}")
+
+    if pm.preferences:
+        console.print("\n  [bold yellow]User Preferences:[/bold yellow]")
+        for p in pm.preferences:
+            console.print(f"    - {p}")
+
+    if pm.recent_sessions:
+        console.print("\n  [bold green]Recent Sessions (Accomplishments):[/bold green]")
+        for s in pm.recent_sessions:
+            console.print(f"    - [{s.get('date', '')}] {s.get('summary', '')}")
+
+    if not (pm.decisions or pm.preferences or pm.recent_sessions):
+        console.print("  [dim]No project memories recorded yet for this directory.[/dim]")
+
+    console.print(
+        "\n[dim]Commands: devorch memory add <decision> | devorch memory pref <pref> | devorch memory clear[/dim]"
+    )
 
 
 @app.command("skills")
