@@ -50,7 +50,7 @@ from core.modes import AgentMode, ModeManager
 from core.project_context import ProjectContextLoader
 from core.project_memory import ProjectMemoryManager
 from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
-from core.skills import SkillManager
+from core.skills import SkillManager, render_prompt
 from core.tasks import get_task_manager, reset_task_manager
 from providers import PROVIDER_ENV_VARS, PROVIDER_INFO, PROVIDERS, get_provider
 from providers.base import ModelInfo
@@ -1644,7 +1644,10 @@ def start_repl(
                         f"  [dim]Running skill:[/dim] [cyan]{skill_name}[/cyan] - {skill['description']}"
                     )
                     executor.checkpoints.begin_turn(skill.get("name", "skill"))
-                    result = agent.run(skill["prompt"], max_iterations=15)
+                    skill_args = (
+                        cmd_arg.split(None, 1)[1] if len(cmd_arg.split(None, 1)) > 1 else ""
+                    )
+                    result = agent.run(render_prompt(skill, skill_args), max_iterations=15)
                     print_response(result)
                     continue
 
@@ -1781,7 +1784,7 @@ def start_repl(
                         )
                         t0 = time.time()
                         executor.checkpoints.begin_turn(skill.get("name", "skill"))
-                        result = agent.run(skill["prompt"], max_iterations=15)
+                        result = agent.run(render_prompt(skill, cmd_arg), max_iterations=15)
                         elapsed = time.time() - t0
                         last_response_text = result
                         print_response(result)

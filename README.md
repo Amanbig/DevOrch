@@ -156,6 +156,22 @@ prompt: |
   Check the deploy logs for any errors.
 ```
 
+### Custom Slash Commands (Markdown)
+
+Drop a Markdown file in `~/.devorch/commands/` (global) or `<project>/.devorch/commands/` (project;
+overrides global and built-ins). The file name becomes the command:
+
+```markdown
+<!-- .devorch/commands/pr.md  →  /pr 123 -->
+---
+description: Review a pull request
+---
+Review PR $ARGUMENTS: summarize the change, then list bugs and risks.
+```
+
+`$ARGUMENTS` is replaced with whatever follows the command; without the placeholder, arguments are
+appended to the prompt. Works in chat (`/pr 123`) and from the CLI (`devorch run pr 123`).
+
 ### Terminal Sessions
 
 Background processes that persist across DevOrch restarts:
