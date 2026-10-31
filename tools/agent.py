@@ -72,8 +72,10 @@ class AgentTool(Tool):
     )
     args_schema = AgentToolSchema
 
-    def __init__(self, provider, tools: list[Tool]):
+    def __init__(self, provider, tools: list[Tool], costs=None):
         self._provider = provider
+        # Shared with the parent agent so sub-agent calls show up in the session cost
+        self.costs = costs
         # Store all tools except this one — sub-agents can't spawn sub-agents
         self._available_tools = [t for t in tools if t.name != "agent"]
 
@@ -102,6 +104,8 @@ class AgentTool(Tool):
             mode_manager=mode_manager,
         )
 
+        if self.costs is not None:
+            sub_agent.costs = self.costs
         result = sub_agent.run(task, max_iterations=10)
         if sub_agent.last_run_interrupted:
             # The user pressed Ctrl+C inside the sub-agent: don't hand the parent a normal-looking

@@ -229,6 +229,7 @@ def extract_token_usage(raw: Any) -> TokenUsage | None:
                     completion_tokens=output_tokens,
                     total_tokens=input_tokens + output_tokens,
                     cached_tokens=cached,
+                    cache_write_tokens=written,
                 )
 
         # Gemini SDK usage_metadata

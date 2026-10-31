@@ -44,7 +44,7 @@ def edit(
     tools = build_tools(settings, include_terminal=False, no_mcp=no_mcp, mcp_only=mcp or None)
     agent_mode = resolve_mode(mode)
     memory_ctx = MemoryManager().get_context_prompt()
-    agent = build_agent(llm, tools, memory_ctx, agent_mode)
+    agent = build_agent(llm, tools, memory_ctx, agent_mode, pricing=settings.pricing)
 
     prompt = (
         f"Edit the file `{file}` with the following instruction:\n\n"

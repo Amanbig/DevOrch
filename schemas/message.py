@@ -45,6 +45,7 @@ class TokenUsage:
     completion_tokens: int = 0
     total_tokens: int = 0
     cached_tokens: int = 0
+    cache_write_tokens: int = 0  # tokens written to a provider cache (Anthropic bills a premium)
 
 
 @dataclass

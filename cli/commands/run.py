@@ -66,7 +66,9 @@ def run(
     memory_ctx = MemoryManager().get_context_prompt()
     project_ctx = ProjectContextLoader().load()
     project_prompt = project_ctx.to_system_prompt_block() if project_ctx else ""
-    agent = build_agent(llm, tools, memory_ctx, agent_mode, project_ctx=project_prompt)
+    agent = build_agent(
+        llm, tools, memory_ctx, agent_mode, project_ctx=project_prompt, pricing=settings.pricing
+    )
 
     console.print(f"[dim]Skill: {skill_name} | {llm.name}/{llm.model}[/dim]")
     run_with_output(

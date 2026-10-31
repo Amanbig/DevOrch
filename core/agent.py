@@ -7,6 +7,7 @@ from core.images import prune_old_images
 from core.loop_detector import LoopDetector, LoopSeverity
 from core.modes import AgentMode, ModeManager
 from core.planner import Planner
+from core.pricing import CostTracker
 from core.sessions import SessionManager
 from providers.base import LLMProvider, extract_token_usage
 from schemas.message import ImageData, Message, TokenUsage, ToolCall
@@ -72,6 +73,8 @@ class Agent:
         # Render model text live as it streams (interactive use); off for ask/run/json output
         self.stream_output = False
         self.last_run_interrupted = False
+        self.costs = CostTracker()
+        self.last_turn_cost: float | None = None
         self.history: list[Message] = []
         self._context_summary: str | None = None  # Summary from previous session
 
@@ -500,6 +503,7 @@ class Agent:
             )
             self.context_manager.record_usage(usage)
             self.last_turn_usage = usage
+            self.last_turn_cost = self.costs.add(self.provider.name, self.provider.model, usage)
 
             # Persist tool_calls metadata for providers that need it (e.g. Mistral)
             if response.tool_calls:
