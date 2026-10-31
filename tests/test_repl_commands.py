@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 import typer
 from rich.console import Console
-from typer.testing import CliRunner
 
 from cli import repl_commands as rc
 from cli.commands._shared import resolve_mode
@@ -253,15 +252,37 @@ def test_skipping_prompts_still_enforces_deny_rules_and_dangerous_blocks(home):
     assert "denied" in ex.execute("shell", {"command": "rm -rf *"}).lower()
 
 
+def _option_names(command) -> set[str]:
+    return {opt for param in command.params for opt in getattr(param, "opts", [])}
+
+
 def test_flag_is_available_on_every_entry_point():
+    # Inspect the registered options, not the --help text: help output is colourised, wrapped to the
+    # terminal width and truncated, so substring checks on it break between environments (CI).
+    import typer.main
+
     from cli.main import app
 
-    runner = CliRunner()
-    for args in ([], ["chat"], ["ask"], ["run"], ["edit"]):
-        result = runner.invoke(app, [*args, "--help"])
-        assert result.exit_code == 0, args
-        assert "--dangerously-skip-permissions" in result.output, args
-        assert "--mode" in result.output, args
+    root = typer.main.get_command(app)
+    entry_points = {
+        "devorch": root,
+        **{name: root.commands[name] for name in ("chat", "ask", "run", "edit")},
+    }
+    for name, command in entry_points.items():
+        options = _option_names(command)
+        assert "--dangerously-skip-permissions" in options, name
+        assert "--mode" in options, name
+
+
+def test_flag_is_a_boolean_switch_with_help_text():
+    import typer.main
+
+    from cli.main import app
+
+    ask = typer.main.get_command(app).commands["ask"]
+    flag = next(p for p in ask.params if "--dangerously-skip-permissions" in p.opts)
+    assert flag.is_flag and flag.default is False
+    assert "same as --mode auto" in flag.help
 
 
 # ── dropdown <-> dispatcher consistency ─────────────────────────────────────
