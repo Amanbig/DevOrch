@@ -1,3 +1,4 @@
+import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -194,6 +195,8 @@ class ToolExecutor(Executor):
         return f"{base}*"
 
     def execute(self, tool_name: str, arguments: dict[str, Any]) -> str:
+        # Seconds the tool itself ran (excludes permission prompts and hooks); None if it did not
+        self.last_run_seconds: float | None = None
         if tool_name not in self.tools:
             return f"Error: Tool '{tool_name}' not found."
 
@@ -238,7 +241,11 @@ class ToolExecutor(Executor):
             self.checkpoints.before_tool(tool_name, arguments)
 
             # Execute the tool
-            output = str(tool.run(arguments))
+            started = time.monotonic()
+            try:
+                output = str(tool.run(arguments))
+            finally:
+                self.last_run_seconds = time.monotonic() - started
 
             if self.hooks.has_hooks():
                 post = self.hooks.run(POST_TOOL_USE, tool_name, arguments, tool_output=output)

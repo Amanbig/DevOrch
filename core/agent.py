@@ -12,6 +12,7 @@ from providers.base import LLMProvider, extract_token_usage
 from schemas.message import ImageData, Message, TokenUsage, ToolCall
 from utils.logger import get_console, print_info, print_success, print_warning
 from utils.streaming import StreamRenderer
+from utils.tool_display import call_line, result_lines
 
 console = get_console()
 
@@ -85,184 +86,14 @@ class Agent:
 
     def _display_tool_call(self, call: ToolCall):
         """Display a tool call in a compact, user-friendly format."""
-        args = call.arguments
+        line = call_line(call.name, call.arguments)
+        if line is not None:
+            console.print(line)
 
-        # Build a clean summary based on tool type
-        if call.name == "shell":
-            cmd = args.get("command", "")
-            # Shell command with subtle background
-            console.print(f"  [dim]>[/dim] [on #1e2030][cyan]shell[/cyan] [bold]{cmd}[/bold][/]")
-
-        elif call.name == "filesystem":
-            action = args.get("action", "")
-            path = args.get("path", "")
-            content = args.get("content", "")
-
-            if action == "write":
-                lines = content.count("\n") + 1 if content else 0
-                summary = f"[cyan]write[/cyan] {lines} lines to [bold]{path}[/bold]"
-            elif action == "read":
-                summary = f"[cyan]read[/cyan] [bold]{path}[/bold]"
-            elif action == "list":
-                summary = f"[cyan]list[/cyan] [bold]{path}[/bold]"
-            else:
-                summary = f"[cyan]{action}[/cyan] [bold]{path}[/bold]"
-
-            console.print(f"  [dim]>[/dim] {summary}")
-
-        elif call.name == "search":
-            pattern = args.get("pattern", "")
-            path = args.get("path", ".")
-            console.print(f"  [dim]>[/dim] [cyan]search[/cyan] [bold]{pattern}[/bold] in {path}")
-
-        elif call.name == "grep":
-            pattern = args.get("pattern", "")
-            path = args.get("path", ".")
-            console.print(f"  [dim]>[/dim] [cyan]grep[/cyan] [bold]{pattern}[/bold] in {path}")
-
-        elif call.name == "edit":
-            path = args.get("path", "")
-            console.print(f"  [dim]>[/dim] [cyan]edit[/cyan] [bold]{path}[/bold]")
-
-        elif call.name == "task":
-            # Task tool - don't show anything, the task panel will display
-            pass
-
-        elif call.name == "websearch":
-            query = args.get("query", "")
-            console.print(f"  [dim]>[/dim] [cyan]searching web[/cyan] [bold]{query}[/bold]")
-
-        elif call.name == "webfetch":
-            url = args.get("url", "")
-            # Truncate long URLs
-            display_url = url[:60] + "..." if len(url) > 60 else url
-            console.print(f"  [dim]>[/dim] [cyan]fetching[/cyan] [bold]{display_url}[/bold]")
-
-        elif call.name == "memory":
-            action = args.get("action", "")
-            name = args.get("name", "")
-            query = args.get("query", "")
-            if action == "save":
-                console.print(f"  [dim]>[/dim] [cyan]saving memory[/cyan] [bold]{name}[/bold]")
-            elif action == "search":
-                console.print(f"  [dim]>[/dim] [cyan]searching memory[/cyan] [bold]{query}[/bold]")
-            elif action == "list":
-                console.print("  [dim]>[/dim] [cyan]listing memories[/cyan]")
-            elif action == "delete":
-                console.print(
-                    f"  [dim]>[/dim] [cyan]deleting memory[/cyan] [bold]{args.get('filename', '')}[/bold]"
-                )
-            else:
-                console.print(f"  [dim]>[/dim] [cyan]memory {action}[/cyan]")
-
-        elif call.name.startswith("mcp_"):
-            # MCP tool call
-            console.print(f"  [dim]>[/dim] [#6a8aaa]MCP[/#6a8aaa] [cyan]{call.name}[/cyan]")
-
-        else:
-            # Generic fallback - show tool name and brief args
-            brief_args = {
-                k: (v[:50] + "..." if isinstance(v, str) and len(v) > 50 else v)
-                for k, v in args.items()
-            }
-            console.print(f"  [dim]>[/dim] [cyan]{call.name}[/cyan] {brief_args}")
-
-    def _display_tool_result(self, tool_name: str, result: str):
-        """Display tool result in a compact, user-friendly format.
-
-        The full result always goes to the LLM — this only controls
-        what the USER sees in the terminal.
-        """
-        result_str = str(result)
-
-        # Skip display entirely for these tools
-        if tool_name == "task":
-            return
-
-        # ── Errors — always show ─────────────────────────────────────────
-        if "Error:" in result_str or result_str.startswith("Error"):
-            console.print(f"    [red]✗ {result_str[:300]}[/red]")
-            return
-
-        # ── File reads — never dump content, just show summary ───────────
-        if tool_name == "filesystem":
-            if "Successfully wrote" in result_str or "Successfully created" in result_str:
-                console.print(f"    [green]✓[/green] [dim]{result_str[:100]}[/dim]")
-            elif "] Lines " in result_str[:120]:
-                # Extract header like "[README.md] Lines 1-200 of 488"
-                header = result_str.split("\n", 1)[0]
-                console.print(f"    [green]✓[/green] [dim]{header}[/dim]")
-            else:
-                lines = result_str.count("\n")
-                console.print(f"    [green]✓[/green] [dim]Done ({lines} lines)[/dim]")
-            return
-
-        # ── Search/grep — just show match count ──────────────────────────
-        if tool_name in ("search", "grep"):
-            matches = [m for m in result_str.strip().split("\n") if m.strip()]
-            console.print(f"    [green]✓[/green] [dim]Found {len(matches)} matches[/dim]")
-            return
-
-        # ── Web tools — show summary ─────────────────────────────────────
-        if tool_name == "websearch":
-            result_count = sum(
-                1
-                for line in result_str.strip().split("\n")
-                if line.strip().startswith(("1.", "2.", "3.", "4.", "5."))
-            )
-            console.print(f"    [green]✓[/green] [dim]Found {result_count} web results[/dim]")
-            return
-
-        if tool_name == "webfetch":
-            lines = result_str.count("\n")
-            console.print(f"    [green]✓[/green] [dim]Fetched page ({lines} lines)[/dim]")
-            return
-
-        # ── Memory — show brief ──────────────────────────────────────────
-        if tool_name == "memory":
-            first_line = result_str.split("\n", 1)[0]
-            console.print(f"    [green]✓[/green] [dim]{first_line[:80]}[/dim]")
-            return
-
-        # ── Shell output — truncate heavily ──────────────────────────────
-        if result_str.startswith("STDOUT:") or result_str.startswith("STDERR:"):
-            max_display = 200
-            if len(result_str) > max_display:
-                display_result = (
-                    result_str[:max_display] + f"\n... ({result_str.count(chr(10))} total lines)"
-                )
-            else:
-                display_result = result_str
-
-            # Show output with subtle background
-            for line in display_result.split("\n"):
-                console.print(f"    [dim on #1a1a28]{line}[/]")
-            return
-
-        # ── Edit tool — show syntax-highlighted diff summary ───────────
-        if tool_name == "edit":
-            lines = result_str.split("\n")
-            has_diff = any(line.startswith(("---", "+++", "@@")) for line in lines)
-            if has_diff:
-                for line in lines:
-                    if line.startswith("+++ ") or line.startswith("--- "):
-                        console.print(f"    [dim]{line}[/dim]")
-                    elif line.startswith("+"):
-                        console.print(f"    [green]{line}[/green]")
-                    elif line.startswith("-"):
-                        console.print(f"    [red]{line}[/red]")
-                    elif line.startswith("@@"):
-                        console.print(f"    [cyan]{line}[/cyan]")
-                return
-            first_line = lines[0] if lines else "Done"
-            console.print(f"    [green]✓[/green] [dim]{first_line[:80]}[/dim]")
-            return
-
-        # ── Everything else — brief one-liner ────────────────────────────
-        first_line = result_str.split("\n", 1)[0]
-        if len(first_line) > 80:
-            first_line = first_line[:80] + "..."
-        console.print(f"    [green]✓[/green] [dim]{first_line}[/dim]")
+    def _display_tool_result(self, tool_name: str, result: str, elapsed: float | None = None):
+        """Display a tool result compactly. The full result always goes to the LLM."""
+        for line in result_lines(tool_name, result, elapsed):
+            console.print(line)
 
     def _save_message(self, message: Message):
         """Save a message to history and session storage."""
@@ -549,7 +380,9 @@ class Agent:
                             notice_text = f"DevOrch Safeguard Notice: {notice_text}"
                         tool_output = f"{tool_output}\n\n[{notice_text}]"
 
-                self._display_tool_result(call.name, tool_output)
+                self._display_tool_result(
+                    call.name, tool_output, getattr(self.executor, "last_run_seconds", None)
+                )
                 self._save_message(
                     Message(
                         role="tool",
