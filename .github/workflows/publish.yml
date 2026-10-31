@@ -41,7 +41,7 @@ jobs:
       url: https://pypi.org/p/devorch
     steps:
       - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: python-package-distributions
           path: dist/
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: python-package-distributions
           path: dist/
