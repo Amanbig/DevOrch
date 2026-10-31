@@ -7,7 +7,7 @@ from config.settings import Settings
 from core.memory import MemoryManager
 from core.modes import AgentMode
 from core.project_context import ProjectContextLoader
-from core.skills import SkillManager
+from core.skills import SkillManager, render_prompt
 from utils.logger import print_error, print_panel
 
 
@@ -53,9 +53,7 @@ def ask(
             available = ", ".join(s["name"] for s in skill_manager.list_skills())
             print_error(f"Unknown skill '{skill}'. Available: {available}")
             raise typer.Exit(1)
-        final_prompt = skill_data["prompt"]
-        if prompt:
-            final_prompt = f"{final_prompt}\n\n{prompt}"
+        final_prompt = render_prompt(skill_data, prompt)
         console.print(f"[dim]Skill: {skill} | {llm.name}/{llm.model}[/dim]")
     else:
         if not prompt:

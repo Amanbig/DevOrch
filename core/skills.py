@@ -23,6 +23,20 @@ Skills are defined as YAML files under ~/.devorch/skills/:
       4. Code style issues
       Provide specific, actionable feedback.
 
+Custom slash commands can also be written as Markdown files:
+
+    ~/.devorch/commands/<name>.md          (global)
+    <project>/.devorch/commands/<name>.md  (project; overrides global and skills)
+
+    ---
+    description: Review a pull request
+    ---
+    Review PR $ARGUMENTS: summarize the change, then list bugs and risks.
+
+The file name (without .md) is the command name. ``$ARGUMENTS`` in the body is replaced
+with whatever the user types after the command (e.g. ``/pr 123``); if the body has no
+``$ARGUMENTS`` placeholder, the arguments are appended to the prompt.
+
 Built-in skills are also provided for common workflows.
 """
 
@@ -37,6 +51,40 @@ except ImportError:
     YAML_AVAILABLE = False
 
 SKILLS_DIR = Path.home() / ".devorch" / "skills"
+
+COMMANDS_SUBDIR = Path(".devorch") / "commands"
+
+
+def parse_markdown_command(text: str) -> tuple[dict, str]:
+    """Split optional ``---`` YAML frontmatter from a Markdown command body."""
+    meta: dict = {}
+    body = text
+    if text.startswith("---"):
+        parts = text.split("\n")
+        for i in range(1, len(parts)):
+            if parts[i].strip() == "---":
+                if YAML_AVAILABLE:
+                    try:
+                        loaded = yaml.safe_load("\n".join(parts[1:i]))
+                        if isinstance(loaded, dict):
+                            meta = loaded
+                    except Exception:
+                        pass
+                body = "\n".join(parts[i + 1 :])
+                break
+    return meta, body.strip()
+
+
+def render_prompt(skill: dict, args: str | None = None) -> str:
+    """Build the final prompt for a skill/command, substituting user arguments."""
+    prompt = skill["prompt"]
+    args = (args or "").strip()
+    if "$ARGUMENTS" in prompt:
+        return prompt.replace("$ARGUMENTS", args)
+    if args:
+        return f"{prompt}\n\n{args}"
+    return prompt
+
 
 # ── Built-in skills ──────────────────────────────────────────────────────────
 
@@ -120,8 +168,18 @@ BUILTIN_SKILLS: dict[str, dict] = {
 class SkillManager:
     """Manages built-in and user-defined skills."""
 
-    def __init__(self, skills_dir: Path | None = None):
+    def __init__(
+        self,
+        skills_dir: Path | None = None,
+        commands_dirs: list[Path] | None = None,
+    ):
         self.skills_dir = skills_dir or SKILLS_DIR
+        # Later directories override earlier ones: global first, then project.
+        self.commands_dirs = (
+            commands_dirs
+            if commands_dirs is not None
+            else [Path.home() / COMMANDS_SUBDIR, Path.cwd() / COMMANDS_SUBDIR]
+        )
         self._skills: dict[str, dict] = {}
         self._load_skills()
 
@@ -161,6 +219,28 @@ class SkillManager:
                         }
                 except Exception:
                     continue
+
+        self._load_markdown_commands()
+
+    def _load_markdown_commands(self):
+        """Load Markdown slash commands (global, then project)."""
+        for directory in self.commands_dirs:
+            if not directory.is_dir():
+                continue
+            for filepath in sorted(directory.glob("*.md")):
+                try:
+                    meta, body = parse_markdown_command(filepath.read_text(encoding="utf-8"))
+                except OSError:
+                    continue
+                if not body:
+                    continue
+                name = filepath.stem
+                self._skills[name] = {
+                    "name": name,
+                    "description": str(meta.get("description", "")) or f"Custom command {name}",
+                    "prompt": body,
+                    "source": str(filepath),
+                }
 
     def get(self, name: str) -> dict | None:
         """Get a skill by name."""

@@ -6,7 +6,7 @@ from cli.commands._shared import build_agent, build_tools, console, create_provi
 from config.settings import Settings
 from core.memory import MemoryManager
 from core.project_context import ProjectContextLoader
-from core.skills import SkillManager
+from core.skills import SkillManager, render_prompt
 from utils.logger import print_error, print_panel
 
 
@@ -43,9 +43,7 @@ def run(
         print_error(f"Unknown skill '{skill_name}'. Available: {available}")
         raise typer.Exit(1)
 
-    final_prompt = skill_data["prompt"]
-    if extra:
-        final_prompt = f"{final_prompt}\n\n{extra}"
+    final_prompt = render_prompt(skill_data, extra)
 
     tools = build_tools(settings, no_mcp=no_mcp, mcp_only=mcp or None)
     agent_mode = resolve_mode(mode)
