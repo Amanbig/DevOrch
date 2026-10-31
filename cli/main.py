@@ -790,6 +790,7 @@ def start_repl(
         on_session_continue=on_session_continue,
         mode_manager=mode_manager,
     )
+    agent.stream_output = True  # render replies live as they stream
 
     # Inject AgentTool (needs provider + full tool list, so injected after construction)
     agent_tool = AgentTool(provider=llm, tools=tools)

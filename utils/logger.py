@@ -40,20 +40,37 @@ def print_info(msg: str):
     console.print(f"[blue]  {msg}[/blue]")
 
 
+_streamed_text: str | None = None
+
+
+def mark_streamed(text: str) -> None:
+    """Record text that was already shown live, so print_response doesn't repeat it."""
+    global _streamed_text
+    _streamed_text = text.strip()
+
+
+def response_panel(body) -> Panel:
+    """The panel used for assistant responses (grey background, invisible border)."""
+    return Panel(
+        body,
+        style="on #252540",
+        border_style="#252540",  # invisible border, blends with background
+        padding=(1, 2),
+        expand=True,
+    )
+
+
 def print_response(content: str):
     """Print an AI response with a subtle grey background, no border."""
+    global _streamed_text
+    if _streamed_text is not None:
+        already_shown = content.strip() == _streamed_text
+        _streamed_text = None
+        if already_shown:
+            return
     console.print()
     try:
-        md = Markdown(content)
-        console.print(
-            Panel(
-                md,
-                style="on #252540",
-                border_style="#252540",  # invisible border, blends with background
-                padding=(1, 2),
-                expand=True,
-            )
-        )
+        console.print(response_panel(Markdown(content)))
     except Exception:
         console.print(f"  {content}")
     console.print()

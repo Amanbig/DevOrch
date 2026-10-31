@@ -7,10 +7,17 @@ Perfect for self-hosted models, custom endpoints, or providers not officially su
 
 import json
 import os
+from collections.abc import Callable
 
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
+from providers.base import (
+    LLMProvider,
+    ModelInfo,
+    chat_create,
+    extract_token_usage,
+    openai_user_content,
+)
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -28,6 +35,7 @@ class CustomProvider(LLMProvider):
 
     name = "custom"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = []  # User must specify model
 
@@ -95,6 +103,7 @@ class CustomProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Format messages for OpenAI-compatible API
         formatted_messages = []
@@ -136,7 +145,9 @@ class CustomProvider(LLMProvider):
 
         # Make the API call
         try:
-            response = self.client.chat.completions.create(
+            response = chat_create(
+                self.client,
+                on_text,
                 model=self.model,
                 messages=formatted_messages,
                 tools=formatted_tools if formatted_tools else None,

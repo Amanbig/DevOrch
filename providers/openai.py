@@ -1,14 +1,16 @@
 import json
+from collections.abc import Callable
 
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo, openai_user_content
+from providers.base import LLMProvider, ModelInfo, chat_create, openai_user_content
 from schemas.message import LLMResponse, Message, TokenUsage, ToolCall
 
 
 class OpenAIProvider(LLMProvider):
     name = "openai"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = [
         "gpt-4o",
@@ -50,6 +52,7 @@ class OpenAIProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Format messages for OpenAI
         formatted_messages = []
@@ -89,8 +92,13 @@ class OpenAIProvider(LLMProvider):
                     }
                 )
 
-        response = self.client.chat.completions.create(
-            model=self.model, messages=formatted_messages, tools=formatted_tools, temperature=0.0
+        response = chat_create(
+            self.client,
+            on_text,
+            model=self.model,
+            messages=formatted_messages,
+            tools=formatted_tools,
+            temperature=0.0,
         )
 
         choice = response.choices[0]

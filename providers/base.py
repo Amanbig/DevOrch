@@ -1,8 +1,71 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from schemas.message import LLMResponse, Message, TokenUsage
+
+
+def stream_chat_completion(client: Any, on_text: Callable[[str], None], **kwargs: Any) -> Any:
+    """Run an OpenAI-style chat completion with streaming and return a non-streaming-shaped
+    response (``.choices[0].message.content/.tool_calls`` and ``.usage``), so each provider's
+    existing parsing code keeps working unchanged. ``on_text`` receives each text delta."""
+    try:
+        stream = client.chat.completions.create(
+            stream=True, stream_options={"include_usage": True}, **kwargs
+        )
+    except Exception:
+        # Some OpenAI-compatible servers reject stream_options; retry plainly (a real error,
+        # e.g. bad credentials, will simply be raised again).
+        stream = client.chat.completions.create(stream=True, **kwargs)
+
+    parts: list[str] = []
+    calls: dict[int, dict[str, str]] = {}
+    usage = None
+    finish_reason = None
+    for chunk in stream:
+        if getattr(chunk, "usage", None):
+            usage = chunk.usage
+        if not chunk.choices:
+            continue
+        choice = chunk.choices[0]
+        finish_reason = getattr(choice, "finish_reason", None) or finish_reason
+        delta = choice.delta
+        text = getattr(delta, "content", None)
+        if text:
+            parts.append(text)
+            on_text(text)
+        for tc in getattr(delta, "tool_calls", None) or []:
+            slot = calls.setdefault(tc.index or 0, {"id": "", "name": "", "arguments": ""})
+            if tc.id:
+                slot["id"] = tc.id
+            fn = getattr(tc, "function", None)
+            if fn is not None:
+                if fn.name:
+                    slot["name"] += fn.name
+                if fn.arguments:
+                    slot["arguments"] += fn.arguments
+
+    tool_calls = [
+        SimpleNamespace(
+            id=c["id"] or None,
+            type="function",
+            function=SimpleNamespace(name=c["name"], arguments=c["arguments"]),
+        )
+        for _, c in sorted(calls.items())
+    ]
+    message = SimpleNamespace(content="".join(parts) or None, tool_calls=tool_calls or None)
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=message, finish_reason=finish_reason)], usage=usage
+    )
+
+
+def chat_create(client: Any, on_text: Callable[[str], None] | None = None, **kwargs: Any) -> Any:
+    """``client.chat.completions.create`` that streams when ``on_text`` is given."""
+    if on_text is None:
+        return client.chat.completions.create(**kwargs)
+    return stream_chat_completion(client, on_text, **kwargs)
 
 
 def openai_user_content(msg: Message):
@@ -128,6 +191,9 @@ class LLMProvider(ABC):
     # accepts them still depends on the model; unsupported ones return an API error.
     supports_images: bool = False
 
+    # True if generate() accepts ``on_text`` and streams text deltas to it as they arrive.
+    supports_streaming: bool = False
+
     # Default models for this provider (can be overridden)
     DEFAULT_MODELS: list[str] = []
 
@@ -140,6 +206,9 @@ class LLMProvider(ABC):
     ) -> LLMResponse:
         """
         Generate a response from the model.
+
+        Providers with ``supports_streaming = True`` also accept ``on_text`` (a callback
+        receiving each text delta) and still return the complete LLMResponse at the end.
         """
         pass
 
