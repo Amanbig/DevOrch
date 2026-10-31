@@ -4,10 +4,13 @@ Each handler prints through ``console`` and takes its collaborators as arguments
 without a running REPL. The CLI commands call the same functions where they share logic.
 """
 
+import os
 import shlex
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
+from rich.markup import escape as rich_escape
 from rich.table import Table
 
 from config.permissions import PermissionLevel, Permissions
@@ -23,6 +26,11 @@ from utils.logger import get_console, print_error, print_info, print_success, pr
 console = get_console()
 
 Confirm = Callable[[str], bool]
+# select(message, [(label, value), ...]) -> chosen value, or None if cancelled
+Select = Callable[[str, list[tuple[str, str]]], str | None]
+
+PICK_SESSION = "__pick__"  # internal marker: a bare `--resume` means "let me choose"
+ALL_DIRECTORIES = "__all__"
 
 PERMISSIONS_USAGE = (
     "Usage: /permissions [list]\n"
@@ -119,8 +127,14 @@ def handle_permissions(arg: str | None, perms: Permissions, confirm: Confirm | N
 # ── sessions ────────────────────────────────────────────────────────────────
 
 
-def print_sessions_table(session_manager, limit: int = 20, current_id: str | None = None) -> None:
-    sessions = session_manager.list_sessions(limit=limit)
+def print_sessions_table(
+    session_manager,
+    limit: int = 20,
+    current_id: str | None = None,
+    here: bool = False,
+) -> None:
+    """List sessions (all, or only those started in the current directory with ``here``)."""
+    sessions = session_manager.list_sessions(limit=limit, cwd=os.getcwd() if here else None)
     if not sessions:
         print_info("No sessions found.")
         return
@@ -129,6 +143,7 @@ def print_sessions_table(session_manager, limit: int = 20, current_id: str | Non
     table.add_column("Name", style="white")
     table.add_column("Provider", style="green")
     table.add_column("Model", style="blue")
+    table.add_column("Directory", style="dim")
     table.add_column("Msgs", justify="right")
     table.add_column("Parent", style="dim")
     table.add_column("Updated", style="dim")
@@ -139,6 +154,7 @@ def print_sessions_table(session_manager, limit: int = 20, current_id: str | Non
             (session["name"] or "-")[:20],
             session["provider"],
             session["model"],
+            _short_dir(session.get("cwd")),
             str(session["message_count"]),
             session.get("parent_session_id") or "-",
             str(session["updated_at"])[:16],
@@ -172,14 +188,19 @@ def handle_sessions(
     tokens = (arg or "").split()
     action = tokens[0].lower() if tokens else "list"
     if action == "list":
+        extras = [t.lower() for t in tokens[1:]]
+        here = "here" in extras
+        counts = [t for t in extras if t != "here"]
         limit = 20
-        if len(tokens) > 1:
-            if not tokens[1].isdigit():
-                print_error("Usage: /sessions list [count]")
+        if counts:
+            if len(counts) > 1 or not counts[0].isdigit():
+                print_error("Usage: /sessions list [count] [here]")
                 return
-            limit = max(1, int(tokens[1]))
-        print_sessions_table(session_manager, limit, current_id)
-        console.print("[dim]  Resume a session with: devorch --resume <id>[/dim]\n")
+            limit = max(1, int(counts[0]))
+        print_sessions_table(session_manager, limit, current_id, here=here)
+        console.print(
+            "[dim]  Resume one with /resume, or devorch --continue / --resume <id>[/dim]\n"
+        )
     elif action == "show" and len(tokens) == 2:
         print_session_details(session_manager, tokens[1])
     elif action == "delete" and len(tokens) == 2:
@@ -198,7 +219,7 @@ def handle_sessions(
         else:
             print_error("Failed to delete session.")
     else:
-        print_error("Usage: /sessions [list [count]] | show <id> | delete <id>")
+        print_error("Usage: /sessions [list [count] [here]] | show <id> | delete <id>")
 
 
 # ── hooks / trust ───────────────────────────────────────────────────────────
@@ -257,3 +278,176 @@ def trust_status(start: Path | None = None) -> list[tuple[Path, bool]]:
     return [
         (root, is_trusted(root)) for root in dict.fromkeys(r for r, _ in project_trust_files(start))
     ]
+
+
+# ── resuming sessions ───────────────────────────────────────────────────────
+
+
+def questionary_select(message: str, choices: list[tuple[str, str]]) -> str | None:
+    """Default chooser: an arrow-key list. Returns None if the user cancels."""
+    import questionary
+
+    return questionary.select(
+        message,
+        choices=[questionary.Choice(title=label, value=value) for label, value in choices],
+    ).ask()
+
+
+def _short_dir(path: str | None) -> str:
+    if not path:
+        return "unknown directory"
+    home = os.path.normcase(os.path.realpath(Path.home()))
+    p = path
+    if p == home:
+        return "~"
+    if p.startswith(home + os.sep):
+        p = "~" + p[len(home) :]
+    parts = p.replace("\\", "/").split("/")
+    return "/".join(parts[-2:]) if len(parts) > 2 else p
+
+
+def session_label(session_manager, session: dict, show_dir: bool) -> str:
+    title = (
+        session_manager.first_user_message(session["id"], limit=60) or session.get("name") or "-"
+    )
+    when = str(session.get("updated_at", ""))[:16]
+    where = f"  [{_short_dir(session.get('cwd'))}]" if show_dir else ""
+    return f"{when}  {title}  ({session['provider']}/{session['model']}, {session['message_count']} msgs){where}"
+
+
+def pick_session(
+    session_manager,
+    cwd: str | os.PathLike | None = None,
+    select: Select | None = None,
+    limit: int = 20,
+) -> str | None:
+    """Let the user choose a session: this directory's first, with a way to see all of them.
+
+    Returns the session id, or None if there is nothing to choose or the user cancelled.
+    """
+    select = select or questionary_select
+    here = cwd if cwd is not None else os.getcwd()
+    total_here = session_manager.count_sessions(cwd=here)
+    total_all = session_manager.count_sessions()
+    if total_all == 0:
+        print_info("No saved sessions to resume.")
+        return None
+
+    scope_all = total_here == 0
+    if scope_all:
+        print_info("No sessions in this directory yet; showing sessions from all directories.")
+    while True:
+        sessions = session_manager.list_sessions(
+            limit=limit, cwd=None if scope_all else here, include_empty=False
+        )
+        choices = [
+            (session_label(session_manager, s, show_dir=scope_all), s["id"]) for s in sessions
+        ]
+        if not scope_all and total_all > total_here:
+            choices.append(("Show sessions from all directories…", ALL_DIRECTORIES))
+        title = "Resume which session?" + ("" if scope_all else " (this directory)")
+        picked = select(title, choices)
+        if picked == ALL_DIRECTORIES:
+            scope_all = True
+            continue
+        return picked
+
+
+@dataclass
+class StartupChoice:
+    session_id: str | None = None  # None = start a new session
+    notice: str | None = None
+    cancelled: bool = False  # the user backed out of the picker
+
+
+def resolve_startup_session(
+    session_manager,
+    resume: str | None,
+    continue_session: bool,
+    cwd: str | os.PathLike | None = None,
+    select: Select | None = None,
+) -> StartupChoice:
+    """Decide which session the REPL starts in from ``--resume`` / ``--continue``.
+
+    An explicit session id wins over ``--continue``; a bare ``--resume`` opens the picker.
+    """
+    if resume == PICK_SESSION:
+        picked = pick_session(session_manager, cwd, select)
+        if picked is None:
+            has_any = bool(session_manager.list_sessions(limit=1, include_empty=False))
+            return StartupChoice(
+                cancelled=has_any, notice=None if has_any else "Starting a new session."
+            )
+        return StartupChoice(session_id=picked)
+    if resume:
+        return StartupChoice(session_id=resume)
+    if continue_session:
+        sid = session_manager.latest_session_id(cwd)
+        if sid is None:
+            return StartupChoice(
+                notice="No earlier conversation in this directory; starting a new session."
+            )
+        return StartupChoice(session_id=sid)
+    return StartupChoice()
+
+
+def last_exchange_preview(messages, limit: int = 160) -> list[str]:
+    """One line each for the last thing you said and the last reply, to show where you left off."""
+
+    def flat(text: str) -> str:
+        text = " ".join(text.split()).split(" Attached context:")[0]
+        return text if len(text) <= limit else text[: limit - 1] + "…"
+
+    def last(role: str) -> str | None:
+        for m in reversed(messages):
+            if m.role == role and m.content and not m.content.startswith("[The user interrupted"):
+                if m.role == "assistant" and m.content == "Calling tool...":
+                    continue
+                return flat(m.content)
+        return None
+
+    lines = []
+    if (u := last("user")) is not None:
+        lines.append(f"You: {u}")
+    if (a := last("assistant")) is not None:
+        lines.append(f"DevOrch: {a}")
+    return lines
+
+
+def handle_resume(
+    arg: str | None,
+    session_manager,
+    agent,
+    executor,
+    select: Select | None = None,
+) -> bool:
+    """``/resume [id]``: switch this REPL to another saved session. True if it switched."""
+    from core.checkpoints import CheckpointManager
+    from core.tasks import reset_task_manager
+
+    target = (arg or "").strip() or pick_session(session_manager, select=select)
+    if not target:
+        return False
+    if target == session_manager.current_session_id:
+        print_info("Already in that session.")
+        return False
+    try:
+        info, messages = session_manager.load_session(target)
+    except ValueError as e:
+        print_error(str(e))
+        return False
+
+    agent.set_history(messages)
+    agent.set_context_summary(info.get("summary"))
+    executor.checkpoints = CheckpointManager()  # snapshots belong to the conversation we left
+    reset_task_manager()
+
+    print_success(f"Resumed session {target} ({len(messages)} messages)")
+    if (info["provider"], info["model"]) != (agent.provider.name, agent.provider.model):
+        print_info(
+            f"It used {info['provider']}/{info['model']}; still using "
+            f"{agent.provider.name}/{agent.provider.model}. Switch with /model or /provider."
+        )
+    for line in last_exchange_preview(messages):
+        console.print(f"  [dim]{rich_escape(line)}[/dim]")
+    return True

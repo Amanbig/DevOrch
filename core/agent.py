@@ -83,7 +83,7 @@ class Agent:
         """Set the conversation history (used when resuming a session)."""
         self.history = messages
 
-    def set_context_summary(self, summary: str):
+    def set_context_summary(self, summary: str | None):
         """Set context summary from a previous session."""
         self._context_summary = summary
 

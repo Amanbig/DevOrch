@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **`devorch --continue` / `-c`**: continue the latest conversation started in this directory. Sessions now record
+  their directory (older sessions have none and are not matched by `--continue`).
+- **`devorch --resume` with no ID** opens a session picker (this directory first, with an option for all); **`/resume`**
+  switches session inside the REPL.
+- **`devorch --version` / `-V`**.
+- **`devorch doctor`** (and `/doctor`): a read-only health report (providers, keys, permissions, project trust,
+  terminal). It never prints key values, and it warns when `edit`/`filesystem` are pre-approved.
+- `devorch sessions list --here`, and a Directory column in session listings.
+
+### Fixed
+- Messages in a resumed session could come back out of order when saved within the same second; they are now loaded
+  in the order they were saved.
+- A stray `pytest` run no longer overwrites your real `~/.devorch` (it replaced saved permissions with
+  `edit: allow` / `filesystem: allow`); each test also starts with an empty home.
+
 ## 0.5.0
 
 A large feature release: hooks, checkpoints, project settings, image input, streaming, prompt caching,

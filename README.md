@@ -47,7 +47,11 @@ cd DevOrch && pip install -e .
 devorch                    # Interactive setup on first run
 devorch -p openai          # Use a specific provider
 devorch -p local           # Use Ollama (local models)
-devorch --resume abc123    # Resume a previous session
+devorch --continue         # Continue the latest conversation started in this directory (-c)
+devorch --resume           # Pick a previous session from a list (this directory's first)
+devorch --resume abc123    # Resume a specific session by ID
+devorch --version          # Print the version (-V)
+devorch doctor             # Check your setup: providers, keys, permissions, project trust, terminal
 
 # Non-interactive (scripting / CI)
 devorch ask "explain this project"
@@ -261,6 +265,15 @@ pricing:
     cache_read: 0.30     # optional, defaults to the input price
     cache_write: 3.75    # optional, defaults to the input price
 ```
+
+### Continuing and resuming sessions
+
+Every session remembers the directory it was started in. `devorch --continue` (`-c`) reopens the most recent
+non-empty conversation from the current directory; if there is none it tells you and starts a new one. A bare
+`devorch --resume` shows a picker of this directory's sessions (labelled by what you first asked) with an option to
+widen it to every directory, and `/resume` does the same without leaving DevOrch. Sessions created by earlier versions have
+no recorded directory, so `--continue` cannot find them, but they still appear in the picker's "all directories"
+view and can be resumed by ID. `devorch sessions list --here` lists only this directory's sessions.
 
 ### Prompt Shortcuts
 
@@ -487,7 +500,9 @@ overrides a project's `default_mode`. In the REPL, `/auto` and `/ask` switch the
 | `/mcp stop <name>` | Disconnect a server and remove its tools |
 | `/config` | Show configuration settings |
 | `/permissions` | Show permissions; change them with `/permissions allow\|deny [--session] <tool> <pattern>`, `set <tool> <allow\|deny\|ask>`, `reset` |
-| `/sessions` | `list [n]`, `show <id>`, `delete <id>` (resume with `devorch --resume <id>`) |
+| `/sessions` | `list [n] [here]`, `show <id>`, `delete <id>` |
+| `/resume` | Switch to another saved session (`/resume` opens a picker, `/resume <id>` goes straight to it) |
+| `/doctor` | Check your setup (same as `devorch doctor`) |
 | `/hooks` | Show active hooks and whether project hooks are trusted |
 | `/trust` / `/untrust` | Trust (or stop trusting) this project's `.devorch` settings and hooks |
 | `/cost` | Estimated session cost per model |
