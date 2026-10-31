@@ -257,6 +257,13 @@ few hundred KB, with no visible loss for the model.
 Tab completes paths after `@`. Mentions only expand when the path exists (emails and handles are left
 alone); binary files are skipped, and large files are truncated.
 
+### Cancelling a turn
+
+**Ctrl+C** while DevOrch is working cancels just that turn (a running shell command is killed) and keeps
+your session; any tool call that was cut short is recorded as cancelled so the conversation stays valid.
+`/undo` reverts the turn's file changes. At an idle prompt, press **Ctrl+C twice** (or type `exit`) to
+quit. In `ask` / `run`, Ctrl+C exits with status 130 (`--output json` reports `"error": "interrupted"`).
+
 ### Checkpoints & Undo
 
 Before the agent modifies a file with `edit` or `filesystem write`, DevOrch snapshots the original.

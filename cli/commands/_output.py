@@ -15,7 +15,7 @@ from typing import Any
 
 import typer
 
-from utils.logger import get_console, print_error, print_panel
+from utils.logger import get_console, print_error, print_panel, print_warning
 
 FORMATS = ("text", "json", "stream-json")
 MAX_TOOL_OUTPUT_CHARS = 2000
@@ -89,9 +89,15 @@ def run_with_output(
     if output == "text":
         try:
             result = agent.run(prompt, max_iterations=max_iterations, **run_kwargs)
-            print_panel(result, title=title, border_style="cyan")
+            interrupted = getattr(agent, "last_run_interrupted", False)
+            if not interrupted:
+                print_panel(result, title=title, border_style="cyan")
         except Exception as e:
             print_error(str(e))
+            return
+        if interrupted:
+            print_warning("Interrupted.")
+            raise typer.Exit(130)
         return
 
     tool_calls: list[dict[str, Any]] = []
@@ -114,9 +120,11 @@ def run_with_output(
     agent.executor.execute = recording_execute
 
     started = time.time()
-    result, error = None, None
+    result, error, interrupted = None, None, False
     try:
         result = agent.run(prompt, max_iterations=max_iterations, **run_kwargs)
+        if getattr(agent, "last_run_interrupted", False):
+            error, interrupted = "interrupted", True
     except Exception as e:
         error = str(e) or e.__class__.__name__
     finally:
@@ -134,4 +142,4 @@ def run_with_output(
         )
     )
     if error is not None:
-        raise typer.Exit(1)
+        raise typer.Exit(130 if interrupted else 1)
