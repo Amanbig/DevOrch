@@ -234,6 +234,11 @@ local/LM Studio/custom endpoints — provided the *model* is vision-capable (oth
 error). DeepSeek has no image support here, so images are dropped with a warning. Images stay in the
 current session's context but are not saved to the session database.
 
+**Token savings:** only the 2 most recent image messages are re-sent on each call; older ones become a
+short text note (stored history is untouched). With Pillow installed (`pip install "devorch[images]"`),
+images larger than 1568px on the long side are downscaled before sending — typically several MB down to a
+few hundred KB, with no visible loss for the model.
+
 Tab completes paths after `@`. Mentions only expand when the path exists (emails and handles are left
 alone); binary files are skipped, and large files are truncated.
 

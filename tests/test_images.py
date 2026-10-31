@@ -3,8 +3,11 @@
 import base64
 from unittest.mock import MagicMock
 
+import pytest
+
 from core.agent import Agent
 from core.context import IMAGE_TOKEN_ESTIMATE, count_message_tokens
+from core.images import downscale, load_image, prune_old_images
 from providers import PROVIDERS
 from providers.base import openai_user_content
 from providers.openai import OpenAIProvider
@@ -125,3 +128,82 @@ def test_agent_keeps_images_for_supported_provider():
     agent = _agent(prov)
     agent.run("hi", images=[IMG])
     assert any(m.images for m in prov.seen)
+
+
+# ── token savings ───────────────────────────────────────────────────────────
+
+
+def _msgs(n_images: int):
+    out = []
+    for i in range(n_images):
+        out.append(
+            Message(
+                role="user", content=f"q{i}", images=[ImageData("image/png", "AA", f"s{i}.png")]
+            )
+        )
+        out.append(Message(role="assistant", content=f"a{i}"))
+    return out
+
+
+def test_prune_keeps_only_recent_images():
+    msgs = _msgs(4)
+    pruned = prune_old_images(msgs, keep=2)
+    with_images = [m for m in pruned if m.images]
+    assert [m.content for m in with_images] == ["q2", "q3"]
+    assert "s0.png" in pruned[0].content and "omitted" in pruned[0].content
+    assert pruned[0].images is None
+
+
+def test_prune_does_not_mutate_history():
+    msgs = _msgs(3)
+    prune_old_images(msgs, keep=1)
+    assert all(m.images for m in msgs if m.role == "user")
+    assert msgs[0].content == "q0"
+
+
+def test_prune_noop_when_within_limit():
+    msgs = _msgs(2)
+    assert prune_old_images(msgs, keep=2) is msgs
+
+
+def test_agent_sends_pruned_history():
+    prov = _TextOnly()
+    prov.supports_images = True
+    agent = _agent(prov)
+    agent.keep_recent_images = 1
+    agent.run("first", images=[IMG])
+    agent.run("second", images=[IMG])
+    sent_with_images = [m for m in prov.seen if m.images]
+    assert len(sent_with_images) == 1 and sent_with_images[0].content == "second"
+    assert any("omitted" in m.content for m in prov.seen if m.content.startswith("first"))
+    # stored history keeps the original
+    assert sum(1 for m in agent.history if m.images) == 2
+
+
+def test_downscale_shrinks_large_image(tmp_path):
+    PIL = pytest.importorskip("PIL.Image")
+    big = tmp_path / "big.png"
+    PIL.new("RGB", (4000, 2000), (10, 120, 200)).save(big)
+    image, warn = load_image(big)
+    assert warn is None
+    raw = base64.b64decode(image.data)
+    with PIL.open(__import__("io").BytesIO(raw)) as out:
+        assert max(out.size) == 1568 and out.size[0] / out.size[1] == pytest.approx(2, rel=0.01)
+    assert len(raw) < big.stat().st_size
+
+
+def test_downscale_leaves_small_and_gif_alone():
+    PIL = pytest.importorskip("PIL.Image")
+    import io
+
+    buf = io.BytesIO()
+    PIL.new("RGB", (100, 100)).save(buf, "PNG")
+    data = buf.getvalue()
+    assert downscale(data, "image/png") == (data, "image/png")
+    assert downscale(b"GIF89a....", "image/gif") == (b"GIF89a....", "image/gif")
+
+
+def test_downscale_survives_garbage():
+    pytest.importorskip("PIL")
+    junk = b"not an image at all"
+    assert downscale(junk, "image/png") == (junk, "image/png")
