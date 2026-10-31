@@ -920,6 +920,7 @@ def start_repl(
                             "/copy",
                             "/paste",
                             "/undo",
+                            "/checkpoints",
                             "/clear",
                             "/compact",
                             "/save",
@@ -1448,8 +1449,20 @@ def start_repl(
                             agent.history.pop()
                             removed += 1
                         print_success(f"Removed {removed} message(s)")
+                        for action in executor.checkpoints.rewind_turn():
+                            print_info(f"  {action}")
                     else:
                         print_warning("No messages to undo")
+                    continue
+
+                elif cmd == "checkpoints":
+                    entries = executor.checkpoints.summary()
+                    if not entries:
+                        print_info("No file changes recorded this session.")
+                    for turn, label, files in entries:
+                        console.print(f"[bold]Turn {turn}[/bold] {label}")
+                        for fpath in files:
+                            console.print(f"  [dim]{fpath}[/dim]")
                     continue
 
                 elif cmd == "save":
@@ -1630,6 +1643,7 @@ def start_repl(
                     console.print(
                         f"  [dim]Running skill:[/dim] [cyan]{skill_name}[/cyan] - {skill['description']}"
                     )
+                    executor.checkpoints.begin_turn(skill.get("name", "skill"))
                     skill_args = (
                         cmd_arg.split(None, 1)[1] if len(cmd_arg.split(None, 1)) > 1 else ""
                     )
@@ -1769,6 +1783,7 @@ def start_repl(
                             f"  [dim]Running skill:[/dim] [cyan]{cmd}[/cyan] - {skill['description']}"
                         )
                         t0 = time.time()
+                        executor.checkpoints.begin_turn(skill.get("name", "skill"))
                         result = agent.run(render_prompt(skill, cmd_arg), max_iterations=15)
                         elapsed = time.time() - t0
                         last_response_text = result
@@ -1822,6 +1837,7 @@ def start_repl(
                     continue
 
             t0 = time.time()
+            executor.checkpoints.begin_turn(user_input)
             result = agent.run(user_input, max_iterations=15)
             elapsed = time.time() - t0
             last_response_text = result
