@@ -2,6 +2,7 @@
 
 import subprocess
 
+import pytest
 from prompt_toolkit.application import create_app_session
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
@@ -9,10 +10,13 @@ from prompt_toolkit.shortcuts import prompt as pt_prompt
 
 from cli.prompt_ui import (
     PLACEHOLDER,
+    PLACEHOLDER_VARIANTS,
+    PROMPT_PREFIX_WIDTH,
     ContextGauge,
     GitBranchCache,
     create_prompt_keybindings,
     next_mode,
+    placeholder_for,
     toolbar_text,
 )
 from core.modes import AgentMode
@@ -149,3 +153,65 @@ def test_toolbar_omits_empty_parts():
         cwd="~", branch=None, provider_model="p/m", mode="auto", tokens=0, context_pct=0
     )
     assert "git:" not in text and "ctx" not in text and "MCP" not in text
+
+
+# ── width-aware placeholder and toolbar ─────────────────────────────────────
+
+LONG = {
+    "cwd": "~/Documents/DevOrch",
+    "branch": "feat/boxed-input",
+    "provider_model": "mistral/ministral-3b-latest",
+    "mode": "ask",
+    "tokens": 0,
+    "context_pct": 0,
+}
+
+
+@pytest.mark.parametrize("cols", [20, 30, 40, 60, 80, 100, 120, 200])
+def test_placeholder_always_fits_on_one_line(cols):
+    text = placeholder_for(cols)
+    assert PROMPT_PREFIX_WIDTH + len(text) < cols or text == ""
+
+
+def test_placeholder_picks_the_longest_that_fits():
+    assert placeholder_for(200) == PLACEHOLDER_VARIANTS[0]
+    assert placeholder_for(80) == PLACEHOLDER_VARIANTS[1]  # the 84-char one wrapped at 80
+    assert placeholder_for(40) == PLACEHOLDER_VARIANTS[2]
+    assert placeholder_for(10) == ""
+
+
+@pytest.mark.parametrize("cols", [50, 60, 70, 80, 100, 120])
+def test_toolbar_never_wider_than_the_terminal(cols):
+    assert len(toolbar_text(**LONG, columns=cols)) <= cols - 1
+
+
+@pytest.mark.parametrize("cols", [50, 60, 80, 120])
+def test_toolbar_keeps_mode_model_and_tokens(cols):
+    text = toolbar_text(**LONG, columns=cols)
+    assert "[ASK]" in text and "ministral-3b-latest" in text and "0 tok" in text
+
+
+def test_toolbar_screenshot_case_80_columns():
+    # the reported bug: at ~80 columns the mode and token count were clipped off the right edge
+    text = toolbar_text(**LONG, columns=80)
+    assert "[ASK]" in text and "⚡ 0 tok" in text
+
+
+def test_toolbar_drops_least_important_first():
+    base = {**LONG, "mcp_servers": 2, "tokens": 5000, "cost": 0.3}
+    wide = toolbar_text(**base, columns=200)
+    assert "Shift+Tab" in wide and "MCP: 2" in wide and "~/Documents/DevOrch" in wide
+    mid = toolbar_text(**base, columns=105)
+    assert "Shift+Tab" not in mid and "~$0.30" in mid
+    tight = toolbar_text(**base, columns=70)
+    assert "ctx" in tight and "~$0.30" in tight and "MCP" not in tight
+    assert "Documents" not in tight
+
+
+def test_toolbar_without_columns_is_unchanged():
+    assert "Shift+Tab" in toolbar_text(**LONG) and "~/Documents/DevOrch" in toolbar_text(**LONG)
+
+
+def test_toolbar_hard_clips_as_a_last_resort():
+    text = toolbar_text(**LONG, columns=20)
+    assert len(text) <= 19 and text.endswith("…")

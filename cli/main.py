@@ -28,12 +28,13 @@ from cli.constants import (  # noqa: E402
     print_banner,
 )
 from cli.prompt_ui import (
-    PLACEHOLDER,
     ContextGauge,
     GitBranchCache,
     create_prompt_keybindings,
     next_mode,
+    placeholder_for,
     prompt_continuation,
+    terminal_columns,
     toolbar_text,
 )
 from cli.prompt_ui import prompt_message as build_prompt_message
@@ -885,6 +886,7 @@ def start_repl(
             mode=mode_manager.mode.value,
             tokens=agent.context_manager.stats.total_tokens,
             context_pct=context_gauge.percent(agent.history),
+            columns=terminal_columns(),
             cost=agent.costs.total if agent.costs.has_priced else None,
             mcp_servers=len(mcp_manager.servers),
         )
@@ -907,7 +909,7 @@ def start_repl(
             user_input = pt_prompt(
                 prompt_message,
                 prompt_continuation=prompt_gutter,
-                placeholder=[("class:placeholder", PLACEHOLDER)],
+                placeholder=lambda: [("class:placeholder", placeholder_for(terminal_columns()))],
                 completer=completer,
                 complete_while_typing=True,
                 style=PROMPT_STYLE,

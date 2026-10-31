@@ -5,8 +5,10 @@ import pytest
 from cli.constants import PROMPT_STYLE, SlashCommandCompleter
 from cli.prompt_ui import (
     create_prompt_keybindings,
+    placeholder_for,
     prompt_continuation,
     prompt_message,
+    toolbar_text,
 )
 from core.modes import AgentMode
 from tests._screen import render_live, render_screen
@@ -127,3 +129,35 @@ def test_prompt_message_is_plain_formatted_text():
 def test_continuation_width_matches_prompt_width(mode):
     cont = prompt_continuation(mode)(4, 1, 0)
     assert sum(len(t) for _, t in cont) == 4
+
+
+# ── regression: the screenshot from a real 80-column terminal ───────────────
+
+REAL = {
+    "cwd": "~/Documents/DevOrch",
+    "branch": "feat/boxed-input",
+    "provider_model": "mistral/ministral-3b-latest",
+    "mode": "ask",
+    "tokens": 0,
+    "context_pct": 0,
+}
+
+
+@pytest.mark.parametrize("cols", [40, 60, 80, 120])
+def test_empty_prompt_is_one_line_and_toolbar_shows_the_mode(cols):
+    holder = Holder()
+    lines = render_live(
+        "",
+        **{
+            **common(holder),
+            "cols": cols,
+            "message": lambda c=cols: prompt_message(AgentMode.ASK, c),
+            "placeholder": lambda c=cols: [("class:placeholder", placeholder_for(c))],
+            "bottom_toolbar": lambda c=cols: toolbar_text(**REAL, columns=c),
+        },
+    )
+    assert lines[1].startswith("│ > Ask anything")
+    assert lines[2] == "", "placeholder wrapped onto a second line"  # the reported bug
+    assert "[ASK]" in lines[-1], "mode clipped off the toolbar"  # the reported bug
+    if cols >= 60:
+        assert "tok" in lines[-1]
