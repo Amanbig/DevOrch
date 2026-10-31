@@ -20,9 +20,46 @@ class AnthropicProvider(LLMProvider):
         "claude-3-haiku-20240307",
     ]
 
-    def __init__(self, model: str = "claude-sonnet-4-20250514", api_key: str | None = None):
+    def __init__(
+        self,
+        model: str = "claude-sonnet-4-20250514",
+        api_key: str | None = None,
+        prompt_caching: bool = True,
+    ):
         self.client = Anthropic(api_key=api_key)
         self.model = model
+        # Cache tools + system prompt + conversation prefix. Prompts under the model's minimum
+        # (1024-2048 tokens) are simply not cached, so this is safe to leave on.
+        self.prompt_caching = prompt_caching
+
+    def _system_blocks(self, texts: list[str]) -> list[dict] | str:
+        """System prompt as blocks. The first (stable) block is the cache breakpoint.
+
+        Anthropic's cache prefix order is tools -> system -> messages, so a breakpoint on the
+        first system block caches the tool definitions and base prompt together. Later system
+        texts (plan prompt, loop advisories) change between calls, so they stay after the
+        breakpoint and don't invalidate it.
+        """
+        blocks = [{"type": "text", "text": t} for t in texts]
+        if self.prompt_caching:
+            blocks[0]["cache_control"] = {"type": "ephemeral"}
+        return blocks
+
+    @staticmethod
+    def _mark_last_message(formatted_messages: list[dict]) -> None:
+        """Put a cache breakpoint on the last content block so the whole conversation so far
+        is cached; the next call in a tool loop then re-reads it at ~10% of the price."""
+        if not formatted_messages:
+            return
+        last = formatted_messages[-1]
+        content = last["content"]
+        if isinstance(content, str):
+            if not content:
+                return
+            content = [{"type": "text", "text": content}]
+            last["content"] = content
+        if content and isinstance(content[-1], dict):
+            content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
 
     def list_models(self) -> list[ModelInfo]:
         """Return available Claude models."""
@@ -35,13 +72,15 @@ class AnthropicProvider(LLMProvider):
         tools: list | None = None,
         stream: bool = False,
     ) -> LLMResponse:
-        # Extract system message (Anthropic handles it separately)
-        system_content = None
+        # Anthropic takes system text separately. Keep *all* system messages (the base prompt
+        # plus plan-mode / loop-advisory additions) in order instead of letting the last win.
+        system_texts: list[str] = []
         formatted_messages = []
 
         for msg in messages:
             if msg.role == "system":
-                system_content = msg.content
+                if msg.content:
+                    system_texts.append(msg.content)
             elif msg.role == "tool":
                 # Anthropic expects tool results as user messages with tool_result blocks
                 formatted_messages.append(
@@ -104,10 +143,12 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": 4096,
             "messages": formatted_messages,
         }
-        if system_content:
-            kwargs["system"] = system_content
+        if system_texts:
+            kwargs["system"] = self._system_blocks(system_texts)
         if formatted_tools:
             kwargs["tools"] = formatted_tools
+        if self.prompt_caching:
+            self._mark_last_message(formatted_messages)
 
         response = self.client.messages.create(**kwargs)
 
@@ -138,9 +179,14 @@ class AnthropicProvider(LLMProvider):
 
         usage = None
         if hasattr(response, "usage") and response.usage:
-            input_tokens = getattr(response.usage, "input_tokens", 0) or 0
             output_tokens = getattr(response.usage, "output_tokens", 0) or 0
             cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            cache_write = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+            # Anthropic's input_tokens excludes cached tokens; count all prompt tokens so the
+            # numbers mean the same as for OpenAI (cached_tokens is the subset read from cache).
+            input_tokens = (
+                (getattr(response.usage, "input_tokens", 0) or 0) + cache_read + cache_write
+            )
             usage = TokenUsage(
                 prompt_tokens=input_tokens,
                 completion_tokens=output_tokens,
