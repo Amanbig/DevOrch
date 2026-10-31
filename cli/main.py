@@ -6,7 +6,6 @@ import questionary
 import typer
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.key_binding import KeyBindings
 from rich.panel import Panel
 from rich.table import Table
 
@@ -27,6 +26,14 @@ from cli.constants import (  # noqa: E402
     SLASH_COMMANDS,
     SlashCommandCompleter,
     print_banner,
+)
+from cli.prompt_ui import (
+    PLACEHOLDER,
+    ContextGauge,
+    GitBranchCache,
+    create_prompt_keybindings,
+    next_mode,
+    toolbar_text,
 )
 from config.permissions import (
     PERMISSIONS_FILE,
@@ -50,6 +57,7 @@ from config.settings import (
     set_api_key,
 )
 from core.agent import Agent
+from core.context import count_history_tokens
 from core.executor import ToolExecutor
 from core.mcp import MCPManager
 from core.memory import MemoryManager, MemoryTool
@@ -659,17 +667,6 @@ def _copy_to_clipboard(text: str) -> bool:
     return False
 
 
-def _create_prompt_keybindings() -> KeyBindings:
-    """Create prompt keybindings supporting Alt+Enter for multiline newline insertion."""
-    kb = KeyBindings()
-
-    @kb.add("escape", "enter")
-    def _(event):
-        event.current_buffer.insert_text("\n")
-
-    return kb
-
-
 def start_repl(
     provider: str | None = None,
     model: str | None = None,
@@ -852,8 +849,9 @@ def start_repl(
         "  [dim]Getting started:[/dim]\n"
         "  [dim]1.[/dim] Type [cyan]/[/cyan] to see all commands\n"
         "  [dim]2.[/dim] [cyan]/help[/cyan] for detailed help\n"
-        "  [dim]3.[/dim] Ask coding questions or run commands\n"
-        "  [dim]4.[/dim] [cyan]Ctrl+C[/cyan] to exit\n"
+        "  [dim]3.[/dim] Ask coding questions, or attach files with [cyan]@path[/cyan]\n"
+        "  [dim]4.[/dim] [cyan]Shift+Tab[/cyan] switches mode, [cyan]Ctrl+C[/cyan] cancels a turn "
+        "(twice to exit)\n"
     )
 
     # Create completer for slash commands
@@ -864,22 +862,33 @@ def start_repl(
     current_settings = settings
     last_response_text: str = ""
     last_ctrl_c = 0.0  # time of the last Ctrl+C at the prompt (press twice to exit)
-    prompt_kb = _create_prompt_keybindings()
+
+    def cycle_mode():
+        mode_manager.mode = next_mode(mode_manager.mode)
+
+    prompt_kb = create_prompt_keybindings(on_cycle_mode=cycle_mode)
+    git_branch = GitBranchCache(_get_git_branch)
+    context_gauge = ContextGauge(
+        count_history_tokens, agent.context_manager.compact_threshold_tokens
+    )
 
     def get_bottom_toolbar():
-        """Clean bottom status bar with git branch, model, mode, and tokens."""
-        mode_char = {"plan": "PLAN", "auto": "AUTO", "ask": "ASK"}.get(mode_manager.mode.value, "?")
-        tok_count = agent.context_manager.stats.total_tokens
-        tok_str = f"⚡ {tok_count:,} tok" if tok_count else "⚡ 0 tok"
-        git_b = _get_git_branch()
-        parts = [cwd_display]
-        if git_b:
-            parts.append(f"git:{git_b}")
-        parts.extend([f"{current_llm.name}/{current_llm.model}", f"[{mode_char}]", tok_str])
-        mcp_n = len(mcp_manager.servers)
-        if mcp_n:
-            parts.append(f"MCP: {mcp_n}")
-        return "  " + "     ".join(parts)
+        """Bottom status bar: cwd, git branch, model, mode, tokens, context fill."""
+        return toolbar_text(
+            cwd=cwd_display,
+            branch=git_branch.get(),
+            provider_model=f"{current_llm.name}/{current_llm.model}",
+            mode=mode_manager.mode.value,
+            tokens=agent.context_manager.stats.total_tokens,
+            context_pct=context_gauge.percent(agent.history),
+            mcp_servers=len(mcp_manager.servers),
+        )
+
+    def prompt_message():
+        return [
+            ("class:prompt-mode", f"[{mode_manager.mode.value.upper()}] "),
+            ("class:prompt-arrow", "> "),
+        ]
 
     history_file = Path.home() / ".devorch" / "history"
     history_file.parent.mkdir(parents=True, exist_ok=True)
@@ -892,12 +901,9 @@ def start_repl(
             console.print("[dim]─[/dim]" * rule_width, highlight=False)
 
             # Use prompt_toolkit with autocomplete, mode badge, and bottom toolbar
-            mode_tag = mode_manager.mode.value.upper()
             user_input = pt_prompt(
-                [
-                    ("class:prompt-mode", f"[{mode_tag}] "),
-                    ("class:prompt-arrow", "> "),
-                ],
+                prompt_message,
+                placeholder=[("class:placeholder", PLACEHOLDER)],
                 completer=completer,
                 complete_while_typing=True,
                 style=PROMPT_STYLE,
