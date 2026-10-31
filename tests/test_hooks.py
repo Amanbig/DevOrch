@@ -18,6 +18,13 @@ class EchoTool(Tool):
         return "ran"
 
 
+def py(code: str) -> str:
+    """A hook command that runs Python code. Works in sh and in Windows cmd.exe, where `echo x >&2;
+    exit 2` is not valid (cmd has no `;` separator and no `sleep`). Use single quotes inside `code`."""
+    exe = f'"{sys.executable}"' if " " in sys.executable else sys.executable
+    return f'{exe} -c "{code}"'
+
+
 def _executor(hooks):
     return ToolExecutor([EchoTool()], require_confirmation=False, hooks=hooks)
 
@@ -29,25 +36,27 @@ def test_matcher():
 
 
 def test_pre_hook_blocks_with_exit_2():
-    h = HookManager({PRE_TOOL_USE: [Hook("echo nope >&2; exit 2")]})
+    h = HookManager({PRE_TOOL_USE: [Hook(py("import sys; sys.stderr.write('nope'); sys.exit(2)"))]})
     out = _executor(h).execute("echo", {})
     assert "Blocked by PreToolUse hook" in out and "nope" in out
 
 
 def test_pre_hook_nonblocking_error_allows():
-    h = HookManager({PRE_TOOL_USE: [Hook("exit 1")]})
+    h = HookManager({PRE_TOOL_USE: [Hook(py("import sys; sys.exit(1)"))]})
     assert _executor(h).execute("echo", {}) == "ran"
 
 
 def test_post_hook_feedback_appended():
-    h = HookManager({POST_TOOL_USE: [Hook("echo lint failed >&2; exit 2")]})
+    h = HookManager(
+        {POST_TOOL_USE: [Hook(py("import sys; sys.stderr.write('lint failed'); sys.exit(2)"))]}
+    )
     out = _executor(h).execute("echo", {})
     assert out.startswith("ran") and "lint failed" in out
 
 
 def test_hook_receives_json_payload(tmp_path):
     dump = tmp_path / "payload.json"
-    cmd = f"{sys.executable} -c \"import sys; open(r'{dump}','w').write(sys.stdin.read())\""
+    cmd = py(f"import sys; open(r'{dump}','w').write(sys.stdin.read())")
     h = HookManager({POST_TOOL_USE: [Hook(cmd)]}, cwd=tmp_path)
     _executor(h).execute("echo", {"a": 1})
     data = json.loads(dump.read_text())
@@ -58,8 +67,12 @@ def test_hook_receives_json_payload(tmp_path):
 
 
 def test_timeout_does_not_block():
-    h = HookManager({PRE_TOOL_USE: [Hook("sleep 5", timeout=1)]})
+    import time
+
+    h = HookManager({PRE_TOOL_USE: [Hook(py("import time; time.sleep(30)"), timeout=1)]})
+    started = time.monotonic()
     assert _executor(h).execute("echo", {}) == "ran"
+    assert time.monotonic() - started < 15, "the hook was not stopped by its timeout"
 
 
 def test_load_file(tmp_path: Path):
