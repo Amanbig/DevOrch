@@ -1,9 +1,16 @@
 import json
+from collections.abc import Callable
 
 import httpx
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
+from providers.base import (
+    LLMProvider,
+    ModelInfo,
+    chat_create,
+    extract_token_usage,
+    openai_user_content,
+)
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -12,6 +19,7 @@ class LocalProvider(LLMProvider):
 
     name = "local"
     supports_images = True
+    supports_streaming = True
 
     # Models known to support function calling well
     TOOL_CAPABLE_MODELS = [
@@ -124,6 +132,7 @@ class LocalProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Format messages (same as OpenAI)
         formatted_messages = []
@@ -185,13 +194,17 @@ class LocalProvider(LLMProvider):
             if formatted_tools:
                 kwargs["tools"] = formatted_tools
 
-            response = self.client.chat.completions.create(**kwargs)
+            response = chat_create(self.client, on_text, **kwargs)
         except Exception as e:
             error_str = str(e).lower()
             # Retry without tools if the model doesn't support function calling
             if formatted_tools and ("tool" in error_str or "function" in error_str):
-                response = self.client.chat.completions.create(
-                    model=self.model, messages=formatted_messages, temperature=0.0
+                response = chat_create(
+                    self.client,
+                    on_text,
+                    model=self.model,
+                    messages=formatted_messages,
+                    temperature=0.0,
                 )
             else:
                 raise

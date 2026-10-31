@@ -7,16 +7,24 @@ Uses OpenAI-compatible API with GitHub's models.
 
 import json
 import os
+from collections.abc import Callable
 
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
+from providers.base import (
+    LLMProvider,
+    ModelInfo,
+    chat_create,
+    extract_token_usage,
+    openai_user_content,
+)
 from schemas.message import LLMResponse, Message, ToolCall
 
 
 class GitHubCopilotProvider(LLMProvider):
     name = "github_copilot"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = [
         "gpt-4o",
@@ -110,6 +118,7 @@ class GitHubCopilotProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Format messages for OpenAI-compatible API
         formatted_messages = []
@@ -149,7 +158,9 @@ class GitHubCopilotProvider(LLMProvider):
                     }
                 )
 
-        response = self.client.chat.completions.create(
+        response = chat_create(
+            self.client,
+            on_text,
             model=self.model,
             messages=formatted_messages,
             tools=formatted_tools,

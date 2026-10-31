@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from anthropic import Anthropic
 
 from providers.base import LLMProvider, ModelInfo
@@ -9,6 +11,7 @@ class AnthropicProvider(LLMProvider):
 
     name = "anthropic"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = [
         "claude-sonnet-4-20250514",
@@ -71,6 +74,7 @@ class AnthropicProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Anthropic takes system text separately. Keep *all* system messages (the base prompt
         # plus plan-mode / loop-advisory additions) in order instead of letting the last win.
@@ -150,7 +154,13 @@ class AnthropicProvider(LLMProvider):
         if self.prompt_caching:
             self._mark_last_message(formatted_messages)
 
-        response = self.client.messages.create(**kwargs)
+        if on_text is None:
+            response = self.client.messages.create(**kwargs)
+        else:
+            with self.client.messages.stream(**kwargs) as stream_ctx:
+                for text in stream_ctx.text_stream:
+                    on_text(text)
+                response = stream_ctx.get_final_message()
 
         # Parse response - Anthropic returns content as a list of blocks
         tool_calls = []

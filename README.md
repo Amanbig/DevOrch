@@ -103,6 +103,13 @@ DevOrch can act on your system, not just talk about it:
 | `memory` | Persistent memory across conversations |
 | `websearch` / `webfetch` | Search the web, fetch URLs |
 
+### Streaming
+
+Replies render live as the model generates them (a spinner shows until the first token). Streaming is
+available for OpenAI, Anthropic, Kimi, DeepSeek, GitHub Copilot, Ollama (`local`) and custom
+OpenAI-compatible endpoints; other providers still show the full reply when it is ready. Streaming is only
+used in the interactive REPL; `ask`, `run` and `--output json` are unchanged.
+
 ### Prompt Caching (Anthropic)
 
 With the Anthropic provider, DevOrch marks the tool definitions + system prompt and the conversation so far

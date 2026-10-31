@@ -11,6 +11,7 @@ from core.sessions import SessionManager
 from providers.base import LLMProvider, extract_token_usage
 from schemas.message import ImageData, Message, TokenUsage, ToolCall
 from utils.logger import get_console, print_info, print_success, print_warning
+from utils.streaming import StreamRenderer
 
 console = get_console()
 
@@ -64,6 +65,8 @@ class Agent:
         self.last_turn_usage: TokenUsage | None = None
         # Image payloads older than this many image messages are replaced by a text note
         self.keep_recent_images = 2
+        # Render model text live as it streams (interactive use); off for ask/run/json output
+        self.stream_output = False
         self.history: list[Message] = []
         self._context_summary: str | None = None  # Summary from previous session
 
@@ -427,11 +430,16 @@ class Agent:
                 tools_for_call = [tool.schema() for tool in self.tools]
                 status_msg = "[bold blue]DevOrch is thinking..."
 
-            with console.status(status_msg, spinner="dots"):
-                response = self.provider.generate(
-                    prune_old_images(planned_messages, keep=self.keep_recent_images),
-                    tools=tools_for_call,
-                )
+            send_messages = prune_old_images(planned_messages, keep=self.keep_recent_images)
+            if self.stream_output and getattr(self.provider, "supports_streaming", False):
+                with StreamRenderer(console, status_msg) as renderer:
+                    response = self.provider.generate(
+                        send_messages, tools=tools_for_call, on_text=renderer.write
+                    )
+                renderer.finish(is_final_answer=not response.tool_calls)
+            else:
+                with console.status(status_msg, spinner="dots"):
+                    response = self.provider.generate(send_messages, tools=tools_for_call)
 
             # Record token usage
             usage = getattr(response, "usage", None) or extract_token_usage(
