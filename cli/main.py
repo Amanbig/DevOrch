@@ -9,15 +9,14 @@ from prompt_toolkit.history import FileHistory
 from rich.panel import Panel
 from rich.table import Table
 
+# Import commands dynamically using Typer's app.add_command
 from cli.commands._shared import (  # noqa: E402
     SYSTEM_PROMPT,  # noqa: E402, F401 (used by start_repl via SimplePlanner)
     SimplePlanner,
     console,
     create_provider,
 )
-from cli.commands.ask import ask  # noqa: E402
-from cli.commands.edit import edit  # noqa: E402
-from cli.commands.run import run  # noqa: E402
+from cli.commands import ask, edit, run
 
 # Custom style for questionary prompts
 from cli.constants import (  # noqa: E402

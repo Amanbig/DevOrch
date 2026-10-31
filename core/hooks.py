@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from config.project_settings import HOOKS_REL, find_hooks_root, is_trusted
+from utils.proc import run_shell
 
 try:
     import yaml
@@ -161,15 +162,7 @@ class HookManager:
             if not hook.matches(tool_name):
                 continue
             try:
-                proc = subprocess.run(
-                    hook.command,
-                    shell=True,
-                    input=stdin,
-                    capture_output=True,
-                    text=True,
-                    timeout=hook.timeout,
-                    cwd=self.cwd,
-                )
+                proc = run_shell(hook.command, input=stdin, timeout=hook.timeout, cwd=self.cwd)
             except subprocess.TimeoutExpired:
                 feedback.append(f"hook '{hook.command}' timed out after {hook.timeout}s")
                 continue
