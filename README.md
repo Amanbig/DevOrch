@@ -287,6 +287,10 @@ pricing:
 | `↑` / `Ctrl+R` | Previous prompts / search history |
 | `Ctrl+C` | Cancel the running turn (twice at an idle prompt to exit) |
 
+The input sits in an open box whose border and label are coloured by mode (blue ASK, amber AUTO, yellow PLAN),
+with a gutter that follows multi-line and wrapped input, so the mode that decides whether tools run unasked is always
+visible.
+
 The bottom bar shows the directory, git branch, model, mode, session tokens and how full the context window is
 (`ctx 42%` — compaction starts at 100%).
 

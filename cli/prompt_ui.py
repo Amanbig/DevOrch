@@ -3,6 +3,7 @@
 Kept separate from ``cli/main.py`` so the behaviour can be unit-tested without a terminal.
 """
 
+import shutil
 import subprocess
 import time
 from collections.abc import Callable
@@ -24,6 +25,59 @@ def next_mode(current: AgentMode) -> AgentMode:
         return MODE_CYCLE[(MODE_CYCLE.index(current) + 1) % len(MODE_CYCLE)]
     except ValueError:
         return MODE_CYCLE[0]
+
+
+# Border/label colour per mode, so the mode is visible at a glance (AUTO runs tools unasked)
+MODE_BORDER_CLASS = {
+    AgentMode.ASK: "class:border-ask",
+    AgentMode.AUTO: "class:border-auto",
+    AgentMode.PLAN: "class:border-plan",
+}
+
+
+def terminal_columns(default: int = 80) -> int:
+    """Current terminal width (prompt_toolkit's view when a prompt is active, else the OS's)."""
+    try:
+        from prompt_toolkit.application import get_app_or_none
+
+        app = get_app_or_none()
+        if app is not None:
+            return app.output.get_size().columns
+    except Exception:
+        pass
+    return shutil.get_terminal_size((default, 24)).columns
+
+
+def prompt_message(mode: AgentMode, columns: int | None = None) -> list[tuple[str, str]]:
+    """Two-line prompt: a mode-coloured top border with the mode name, then ``│ > ``.
+
+    A full four-sided box is not possible with a normal prompt (the toolbar is pinned to the bottom
+    of the terminal, not under the input), so this is an open box with a left gutter that
+    ``prompt_continuation`` extends over multi-line and wrapped input.
+    """
+    cols = columns if columns is not None else terminal_columns()
+    border = MODE_BORDER_CLASS.get(mode, "class:border-ask")
+    label = f" {mode.value.upper()} "
+    # one column short of the edge so the rule never wraps onto an extra line
+    rule = "─" * max(0, cols - 1 - 2 - len(label))
+    return [
+        (border, "╭─"),
+        (f"{border} bold", label),
+        (border, rule + "\n"),
+        (border, "│ "),
+        ("class:prompt-arrow", "> "),
+    ]
+
+
+def prompt_continuation(mode: AgentMode):
+    """Factory for prompt_toolkit's ``prompt_continuation``: keep the gutter on every extra line."""
+    border = MODE_BORDER_CLASS.get(mode, "class:border-ask")
+
+    def continuation(width: int, line_number: int, wrap_count: int):
+        # `width` is the prompt's width (4 for "│ > "); line up under the text after "> "
+        return [(border, "│ "), ("", " " * max(0, width - 2))]
+
+    return continuation
 
 
 def create_prompt_keybindings(on_cycle_mode: Callable[[], None] | None = None) -> KeyBindings:
