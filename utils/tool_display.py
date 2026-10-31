@@ -14,7 +14,7 @@ MAX_LINE_CHARS = 160
 MAX_CMD_CHARS = 200
 SHOW_DURATION_AFTER = 1.0  # seconds; faster calls don't need a timing
 
-_BG = "on #1a1a28"
+_BG = "on #202020"  # neutral grey behind shell commands and output
 
 
 def _clip(text: str, limit: int) -> str:

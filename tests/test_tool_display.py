@@ -236,3 +236,43 @@ def test_logger_helpers_accept_non_strings(monkeypatch):
     )
     logger.print_error(ValueError("boom [/x]"))
     assert "boom [/x]" in buf.getvalue()
+
+
+# ── colours: neutral greys, no blue tint ────────────────────────────────────
+
+
+def _is_neutral(hex6: str, tolerance: int = 6) -> bool:
+    r, g, b = int(hex6[0:2], 16), int(hex6[2:4], 16), int(hex6[4:6], 16)
+    return max(r, g, b) - min(r, g, b) <= tolerance
+
+
+def test_response_panel_background_is_neutral_grey():
+    from rich.style import Style
+
+    from utils.logger import response_panel
+
+    panel = response_panel("hello")
+    bg = Style.parse(str(panel.style)).bgcolor.triplet
+    assert _is_neutral("{:02x}{:02x}{:02x}".format(*bg)), bg
+    border = Style.parse(str(panel.border_style)).color.triplet
+    assert tuple(border) == tuple(bg), "border should blend into the panel"
+
+
+def test_shell_output_background_is_neutral_grey():
+    from rich.style import Style
+
+    assert _is_neutral("{:02x}{:02x}{:02x}".format(*Style.parse(td._BG).bgcolor.triplet))
+
+
+def test_completion_menu_has_no_blue_tint():
+    import re
+
+    from cli.constants import PROMPT_STYLE
+
+    menu_bgs = [
+        m
+        for cls, style in PROMPT_STYLE.style_rules
+        if cls.startswith(("completion-menu", "scrollbar"))
+        for m in re.findall(r"bg:#([0-9a-fA-F]{6})", style)
+    ]
+    assert menu_bgs and all(_is_neutral(c) for c in menu_bgs), menu_bgs

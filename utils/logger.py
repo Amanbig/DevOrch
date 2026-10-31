@@ -41,6 +41,9 @@ def print_info(msg: str):
     console.print(f"[blue]  {escape(str(msg))}[/blue]")
 
 
+# Neutral grey (no blue tint) behind assistant replies
+RESPONSE_BG = "#262626"
+
 _streamed_text: str | None = None
 
 
@@ -54,8 +57,8 @@ def response_panel(body) -> Panel:
     """The panel used for assistant responses (grey background, invisible border)."""
     return Panel(
         body,
-        style="on #252540",
-        border_style="#252540",  # invisible border, blends with background
+        style=f"on {RESPONSE_BG}",
+        border_style=RESPONSE_BG,  # invisible border, blends with the panel
         padding=(1, 2),
         expand=True,
     )
