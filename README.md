@@ -93,7 +93,8 @@ DevOrch can act on your system, not just talk about it:
 
 | Tool | What it does |
 |------|-------------|
-| `shell` | Execute commands (`git status`, `npm install`, etc.) |
+| `shell` | Execute commands (`npm install`, `pytest`, etc.) |
+| `git` | Structured, safe git: status, diff, log, show, branch, switch, add, commit |
 | `terminal_session` | Managed background processes with optional GUI window |
 | `filesystem` | Read, write, list files |
 | `search` / `grep` | Find files and search contents |

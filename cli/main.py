@@ -58,6 +58,7 @@ from providers.base import ModelInfo
 from tools.agent import AgentTool  # noqa: E402
 from tools.edit import EditTool
 from tools.filesystem import FilesystemTool
+from tools.git import GitTool
 from tools.grep import GrepTool
 from tools.search import SearchTool
 from tools.shell import ShellTool
@@ -712,6 +713,7 @@ def start_repl(
 
     tools = [
         ShellTool(),
+        GitTool(),
         TerminalSessionTool(),
         FilesystemTool(),
         SearchTool(),

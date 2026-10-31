@@ -6,6 +6,7 @@ Available tools:
 - TerminalSessionTool: Managed terminal sessions with gui option, read/send/stop/list (persistent)
 - FilesystemTool: Read, write, list files with line-specific control
 - SearchTool: Find files by glob patterns
+- GitTool: Structured, safe git operations
 - GrepTool: Search file contents with regex
 - EditTool: Make targeted edits to files
 - MemoryTool: Persistent memory across conversations
@@ -13,6 +14,7 @@ Available tools:
 
 from tools.edit import EditTool
 from tools.filesystem import FilesystemTool
+from tools.git import GitTool
 from tools.grep import GrepTool
 from tools.search import SearchTool
 from tools.shell import ShellTool
@@ -23,6 +25,7 @@ __all__ = [
     "TerminalSessionTool",
     "FilesystemTool",
     "SearchTool",
+    "GitTool",
     "GrepTool",
     "EditTool",
 ]

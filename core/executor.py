@@ -10,6 +10,7 @@ from config.permissions import PermissionChoice, PermissionLevel, Permissions, g
 from core.checkpoints import CheckpointManager
 from core.hooks import POST_TOOL_USE, PRE_TOOL_USE, HookManager
 from tools.base import Tool
+from tools.git import describe as describe_git
 from utils.logger import get_console, print_success, print_warning
 
 if TYPE_CHECKING:
@@ -73,6 +74,8 @@ class ToolExecutor(Executor):
             elif action == "list":
                 return f"list {path}"
             return f"{action} {path}"
+        elif tool_name == "git":
+            return describe_git(arguments)
         elif tool_name == "agent":
             task = arguments.get("task", "")
             tools = arguments.get("tools")
