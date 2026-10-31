@@ -16,20 +16,6 @@
 
 DevOrch gives you a coding assistant in your terminal that can execute shell commands, edit files, search your codebase, manage terminal sessions, and remember context across conversations — powered by any of 13+ AI providers or your own local models.
 
-## Screenshots
-
-| Startup | Chat |
-|---------|------|
-| ![Startup](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/startup.png) | ![Chat](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/chat.png) |
-
-| Provider Selection | Model Selection |
-|--------------------|-----------------|
-| ![Providers](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/providers.png) | ![Models](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/models.png) |
-
-| Tool Execution | Terminal Session |
-|----------------|-----------------|
-| ![Tools](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/tools.png) | ![Terminal](https://raw.githubusercontent.com/Amanbig/DevOrch/main/assets/terminal.png) |
-
 ## Why DevOrch?
 
 - **Provider freedom** — Switch between OpenAI, Anthropic, Gemini, Mistral, Groq, and 8 more providers (including local models) with a single command. No vendor lock-in.
@@ -447,7 +433,23 @@ With `--output json` stdout contains a single JSON object (`result`, `is_error`,
 on failure, so it is safe to use in scripts and CI. `stream-json` emits `tool_call` events as they happen
 followed by a final `result` event. Available on `ask` and `run`.
 
-All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`, and `--no-mcp`.
+All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`, `--no-mcp` and
+`--dangerously-skip-permissions`. `devorch` / `devorch chat` take `--mode` and `--dangerously-skip-permissions`
+too, so you can start the REPL in a given mode.
+
+### Skipping permission prompts
+
+```bash
+devorch --dangerously-skip-permissions        # start the REPL in AUTO mode
+devorch ask --dangerously-skip-permissions "run the tests and fix failures"
+devorch --mode plan                           # or start in plan / ask mode
+```
+
+`--dangerously-skip-permissions` is the same as `--mode auto`: **no prompts at all**, so the agent can edit files
+and run commands unasked. It is not a full bypass: the built-in dangerous-command blocks (`rm -rf *`, `sudo`, ...)
+and your own `deny` rules still apply, and project hooks still run. It conflicts with `--mode ask|plan`, and it
+overrides a project's `default_mode`. In the REPL, `/auto` and `/ask` switch the same behaviour on and off, and
+`/permissions allow --session shell pytest*` skips prompts for just one kind of command.
 
 ## All Slash Commands
 
@@ -484,7 +486,12 @@ All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`,
 | `/mcp start <name>` | Reconnect a server from config |
 | `/mcp stop <name>` | Disconnect a server and remove its tools |
 | `/config` | Show configuration settings |
-| `/permissions` | Show and manage tool permission settings |
+| `/permissions` | Show permissions; change them with `/permissions allow\|deny [--session] <tool> <pattern>`, `set <tool> <allow\|deny\|ask>`, `reset` |
+| `/sessions` | `list [n]`, `show <id>`, `delete <id>` (resume with `devorch --resume <id>`) |
+| `/hooks` | Show active hooks and whether project hooks are trusted |
+| `/trust` / `/untrust` | Trust (or stop trusting) this project's `.devorch` settings and hooks |
+| `/cost` | Estimated session cost per model |
+| `/exit` | Exit DevOrch (also `exit`, `quit`, or Ctrl+C twice) |
 | `/tasks` | Show multi-step task list and execution progress |
 
 ## Configuration
@@ -554,28 +561,21 @@ mcp_servers:
 
 ## Contributing
 
-Contributions are welcome! Here's how to get started:
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide (setup, workflow, how to add a
+provider, tool or slash command, testing notes). The short version:
 
 ```bash
-# Clone and install in development mode
 git clone https://github.com/Amanbig/DevOrch.git
 cd DevOrch
 pip install -e ".[dev]"
 
-# Run linting
-ruff check .
-ruff format .
-
-# Run tests
-pytest
+ruff check . && ruff format .   # lint and format
+pytest                          # tests (no network or API keys needed)
 ```
 
-### Guidelines
-
-- Run `ruff check .` and `ruff format .` before submitting
-- Add tests for new features
-- Keep PRs focused — one feature or fix per PR
-- Update the README if adding user-facing features
+- Keep PRs focused: one feature or fix per PR, with tests, and update the README/CHANGELOG for user-facing changes
+- Please follow the [Code of Conduct](CODE_OF_CONDUCT.md)
+- Security issues: report them privately, see [SECURITY.md](SECURITY.md)
 
 ### Project Structure
 
@@ -600,8 +600,9 @@ DevOrch/
 
 ## Roadmap
 
-- [ ] Streaming responses
-- [ ] Multi-file context awareness
+- [x] Streaming responses
+- [x] Image input
+- [x] `@file` mentions (multi-file context)
 - [ ] Plugin marketplace
 - [ ] VS Code extension
 - [ ] Agent-to-agent delegation
