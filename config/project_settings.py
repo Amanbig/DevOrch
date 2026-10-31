@@ -15,6 +15,9 @@ Per-project settings — ``<project>/.devorch/settings.yaml`` — so a team can 
         allow: ["pytest*", "ruff *"]
         deny: ["git push*"]
 
+The same trust gates ``<project>/.devorch/hooks.yaml``: project hooks run arbitrary shell commands,
+so they are ignored until trusted. Trust covers settings.yaml and hooks.yaml together.
+
 Precedence: CLI flags > project settings > ~/.devorch config.
 
 A cloned repository must not be able to silently grant itself power, so some keys need *trust*
@@ -35,6 +38,7 @@ except ImportError:  # pragma: no cover
     yaml = None
 
 SETTINGS_REL = Path(".devorch") / "settings.yaml"
+HOOKS_REL = Path(".devorch") / "hooks.yaml"
 VALID_MODES = ("ask", "auto", "plan")
 
 
@@ -80,6 +84,44 @@ def _digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def project_files_digest(root: Path) -> str:
+    """Hash of everything in a project that needs trust: settings.yaml + hooks.yaml.
+
+    A missing file contributes nothing, so a project with only settings.yaml keeps the same
+    digest as before hooks were covered.
+    """
+    return _digest(_read(root / SETTINGS_REL) + _read(root / HOOKS_REL))
+
+
+def find_hooks_root(start: Path | None = None) -> Path | None:
+    """Nearest directory (walking up, stopping at home) that has ``.devorch/hooks.yaml``."""
+    current = (start or Path.cwd()).resolve()
+    home = Path.home().resolve()
+    for directory in [current, *current.parents]:
+        if (directory / HOOKS_REL).is_file():
+            return directory
+        if directory == home:
+            break
+    return None
+
+
+def is_trusted(root: Path) -> bool:
+    return _load_trust().get(str(root)) == project_files_digest(root)
+
+
+def trust_root(root: Path) -> None:
+    trusted = _load_trust()
+    trusted[str(root)] = project_files_digest(root)
+    _save_trust(trusted)
+
+
 def _load_trust() -> dict[str, str]:
     path = trust_file()
     if yaml is None or not path.is_file():
@@ -98,9 +140,7 @@ def _save_trust(trusted: dict[str, str]) -> None:
 
 
 def trust_project(settings: ProjectSettings) -> None:
-    trusted = _load_trust()
-    trusted[str(settings.root)] = settings.digest
-    _save_trust(trusted)
+    trust_root(settings.root)
 
 
 def untrust_project(root: Path) -> bool:
@@ -135,13 +175,8 @@ def load_project_settings(start: Path | None = None) -> ProjectSettings | None:
         data = {}
 
     root = path.parent.parent
-    digest = _digest(text)
-    ps = ProjectSettings(
-        path=path,
-        root=root,
-        digest=digest,
-        trusted=_load_trust().get(str(root)) == digest,
-    )
+    digest = project_files_digest(root)
+    ps = ProjectSettings(path=path, root=root, digest=digest, trusted=is_trusted(root))
 
     mode = data.get("default_mode")
     if mode is not None:

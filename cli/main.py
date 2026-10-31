@@ -34,7 +34,13 @@ from config.permissions import (
     get_permissions,
     reset_permissions,
 )
-from config.project_settings import load_project_settings, trust_project, untrust_project
+from config.project_settings import (
+    HOOKS_REL,
+    find_hooks_root,
+    load_project_settings,
+    trust_root,
+    untrust_project,
+)
 from config.settings import (
     CONFIG_FILE,
     ProviderConfig,
@@ -2433,38 +2439,52 @@ def permissions_reset(force: bool = typer.Option(False, "--force", "-f", help="S
     print_success("Permissions reset to defaults.")
 
 
+def _project_trust_files() -> list[tuple[Path, Path]]:
+    """(root, file) pairs needing trust for the current project: settings and hooks."""
+    pairs: list[tuple[Path, Path]] = []
+    ps = load_project_settings()
+    if ps is not None:
+        pairs.append((ps.root, ps.path))
+    hooks_root = find_hooks_root()
+    if hooks_root is not None:
+        pairs.append((hooks_root, hooks_root / HOOKS_REL))
+    return pairs
+
+
 @app.command("trust")
 def trust_command():
     """
-    Trust this project's .devorch/settings.yaml (enables its MCP servers, allow rules, auto mode).
+    Trust this project's .devorch settings and hooks (MCP servers, allow rules, auto mode, hooks).
     """
-    ps = load_project_settings()
-    if ps is None:
-        print_warning("No .devorch/settings.yaml found in this directory or its parents.")
+    pairs = _project_trust_files()
+    if not pairs:
+        print_warning("No .devorch/settings.yaml or hooks.yaml found here or in a parent folder.")
         raise typer.Exit(1)
-    console.print(f"[bold]{ps.path}[/bold]")
-    console.print(ps.path.read_text(encoding="utf-8"))
+    for _root, path in pairs:
+        console.print(f"[bold]{path}[/bold]")
+        console.print(path.read_text(encoding="utf-8"), markup=False, highlight=False)
     if not questionary.confirm(
-        "Trust these settings? (MCP servers launch programs; allow rules skip prompts)",
+        "Trust these files? (MCP servers and hooks run programs; allow rules skip prompts)",
         default=False,
     ).ask():
         print_info("Not trusted.")
         raise typer.Exit(1)
-    trust_project(ps)
-    print_success(f"Trusted {ps.root}. Re-run `devorch trust` if the file changes.")
+    for root in dict.fromkeys(root for root, _ in pairs):
+        trust_root(root)
+        print_success(f"Trusted {root}. Re-run `devorch trust` if these files change.")
 
 
 @app.command("untrust")
 def untrust_command():
     """
-    Revoke trust for this project's .devorch/settings.yaml.
+    Revoke trust for this project's .devorch settings and hooks.
     """
-    ps = load_project_settings()
-    root = ps.root if ps else Path.cwd()
-    if untrust_project(root):
-        print_success(f"Revoked trust for {root}")
-    else:
-        print_info(f"{root} was not trusted.")
+    roots = list(dict.fromkeys(root for root, _ in _project_trust_files())) or [Path.cwd()]
+    for root in roots:
+        if untrust_project(root):
+            print_success(f"Revoked trust for {root}")
+        else:
+            print_info(f"{root} was not trusted.")
 
 
 @app.command(name="init")
