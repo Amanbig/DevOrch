@@ -102,4 +102,9 @@ class AgentTool(Tool):
             mode_manager=mode_manager,
         )
 
-        return sub_agent.run(task, max_iterations=10)
+        result = sub_agent.run(task, max_iterations=10)
+        if sub_agent.last_run_interrupted:
+            # The user pressed Ctrl+C inside the sub-agent: don't hand the parent a normal-looking
+            # result and let it carry on; propagate so the whole turn is cancelled.
+            raise KeyboardInterrupt
+        return result
