@@ -303,8 +303,27 @@ def print_project_notices(settings) -> None:
         print_warning(notice)
 
 
-def resolve_mode(mode_str: str | None, default: AgentMode = AgentMode.AUTO) -> AgentMode:
-    """Parse and validate a mode string, exit with error on bad input."""
+SKIP_PERMISSIONS_HELP = (
+    "Skip every permission prompt (same as --mode auto). Built-in dangerous-command blocks and "
+    "your deny rules still apply."
+)
+
+
+def resolve_mode(
+    mode_str: str | None,
+    default: AgentMode = AgentMode.AUTO,
+    skip_permissions: bool = False,
+) -> AgentMode:
+    """Parse and validate a mode string, exit with error on bad input.
+
+    ``skip_permissions`` (``--dangerously-skip-permissions``) forces AUTO, which never prompts; deny
+    rules and the built-in dangerous-command blocks are still enforced by the executor.
+    """
+    if skip_permissions:
+        if mode_str and mode_str.lower() != "auto":
+            print_error(f"--dangerously-skip-permissions conflicts with --mode {mode_str}")
+            raise typer.Exit(1)
+        return AgentMode.AUTO
     if not mode_str:
         project_mode = load_project_mode()
         return AgentMode(project_mode) if project_mode else default

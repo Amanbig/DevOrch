@@ -221,3 +221,15 @@ def load_project_settings(start: Path | None = None) -> ProjectSettings | None:
                 f"review the file, then run `devorch trust` to enable"
             )
     return ps
+
+
+def project_trust_files(start: Path | None = None) -> list[tuple[Path, Path]]:
+    """(root, file) pairs that need trust for the project containing ``start``: settings and hooks."""
+    pairs: list[tuple[Path, Path]] = []
+    settings_file = find_settings_file(start)
+    if settings_file is not None:
+        pairs.append((settings_file.parent.parent, settings_file))
+    hooks_root = find_hooks_root(start)
+    if hooks_root is not None:
+        pairs.append((hooks_root, hooks_root / HOOKS_REL))
+    return pairs

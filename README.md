@@ -447,7 +447,23 @@ With `--output json` stdout contains a single JSON object (`result`, `is_error`,
 on failure, so it is safe to use in scripts and CI. `stream-json` emits `tool_call` events as they happen
 followed by a final `result` event. Available on `ask` and `run`.
 
-All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`, and `--no-mcp`.
+All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`, `--no-mcp` and
+`--dangerously-skip-permissions`. `devorch` / `devorch chat` take `--mode` and `--dangerously-skip-permissions`
+too, so you can start the REPL in a given mode.
+
+### Skipping permission prompts
+
+```bash
+devorch --dangerously-skip-permissions        # start the REPL in AUTO mode
+devorch ask --dangerously-skip-permissions "run the tests and fix failures"
+devorch --mode plan                           # or start in plan / ask mode
+```
+
+`--dangerously-skip-permissions` is the same as `--mode auto`: **no prompts at all**, so the agent can edit files
+and run commands unasked. It is not a full bypass: the built-in dangerous-command blocks (`rm -rf *`, `sudo`, ...)
+and your own `deny` rules still apply, and project hooks still run. It conflicts with `--mode ask|plan`, and it
+overrides a project's `default_mode`. In the REPL, `/auto` and `/ask` switch the same behaviour on and off, and
+`/permissions allow --session shell pytest*` skips prompts for just one kind of command.
 
 ## All Slash Commands
 
@@ -484,7 +500,12 @@ All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`,
 | `/mcp start <name>` | Reconnect a server from config |
 | `/mcp stop <name>` | Disconnect a server and remove its tools |
 | `/config` | Show configuration settings |
-| `/permissions` | Show and manage tool permission settings |
+| `/permissions` | Show permissions; change them with `/permissions allow\|deny [--session] <tool> <pattern>`, `set <tool> <allow\|deny\|ask>`, `reset` |
+| `/sessions` | `list [n]`, `show <id>`, `delete <id>` (resume with `devorch --resume <id>`) |
+| `/hooks` | Show active hooks and whether project hooks are trusted |
+| `/trust` / `/untrust` | Trust (or stop trusting) this project's `.devorch` settings and hooks |
+| `/cost` | Estimated session cost per model |
+| `/exit` | Exit DevOrch (also `exit`, `quit`, or Ctrl+C twice) |
 | `/tasks` | Show multi-step task list and execution progress |
 
 ## Configuration
