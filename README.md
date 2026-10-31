@@ -325,6 +325,18 @@ devorch memory clear            # Clear project memory
 devorch init                    # Generate or update DEVORCH.md repository instructions
 ```
 
+### Machine-readable output
+
+```bash
+devorch ask --output json "list the TODOs in this repo" | jq .result
+devorch run review --output stream-json    # NDJSON: one event per tool call, then the result
+```
+
+With `--output json` stdout contains a single JSON object (`result`, `is_error`, `error`, `provider`,
+`model`, `duration_ms`, `usage`, `tool_calls`); UI output goes to stderr and the exit code is non-zero
+on failure, so it is safe to use in scripts and CI. `stream-json` emits `tool_call` events as they happen
+followed by a final `result` event. Available on `ask` and `run`.
+
 All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`, and `--no-mcp`.
 
 ## All Slash Commands

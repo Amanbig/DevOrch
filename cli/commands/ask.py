@@ -2,13 +2,14 @@
 
 import typer
 
+from cli.commands._output import configure_output, run_with_output, validate_format
 from cli.commands._shared import build_agent, build_tools, console, create_provider, resolve_mode
 from config.settings import Settings
 from core.memory import MemoryManager
 from core.modes import AgentMode
 from core.project_context import ProjectContextLoader
 from core.skills import SkillManager, render_prompt
-from utils.logger import print_error, print_panel
+from utils.logger import print_error
 
 
 def ask(
@@ -21,6 +22,9 @@ def ask(
     mode: str = typer.Option(None, "--mode", help="Execution mode: ask, auto, plan"),
     no_mcp: bool = typer.Option(False, "--no-mcp", help="Disable all MCP servers for this run"),
     mcp: list[str] = typer.Option(None, "--mcp", help="Use only these MCP servers (repeatable)"),
+    output: str = typer.Option(
+        "text", "--output", "-o", help="Output format: text, json, stream-json"
+    ),
 ):
     """
     Ask DevOrch a single question (non-interactive).
@@ -32,7 +36,10 @@ def ask(
       devorch ask --mode auto "run the tests"
       devorch ask --no-mcp "quick question"
       devorch ask --mcp github --mcp filesystem "..."
+      devorch ask --output json "list the TODOs" | jq .result
     """
+    output = validate_format(output)
+    configure_output(output)
     settings = Settings.load()
 
     if not provider:
@@ -62,8 +69,6 @@ def ask(
         final_prompt = prompt
         console.print(f"[dim]Using {llm.name}/{llm.model}[/dim]")
 
-    try:
-        result = agent.run(final_prompt, max_iterations=15)
-        print_panel(result, title="DevOrch", border_style="cyan")
-    except Exception as e:
-        print_error(str(e))
+    run_with_output(
+        agent, final_prompt, output=output, provider=llm.name, model=llm.model, title="DevOrch"
+    )
