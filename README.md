@@ -195,7 +195,7 @@ Background processes that persist across DevOrch restarts:
 ### Hooks
 
 Run your own shell commands before and after any tool call — block risky actions, auto-format, run linters.
-Configure in `~/.devorch/hooks.yaml` (global) or `<project>/.devorch/hooks.yaml`:
+Configure in `~/.devorch/hooks.yaml` (global) or `<project>/.devorch/hooks.yaml` (project hooks only run after `devorch trust`, since they execute shell commands):
 
 ```yaml
 hooks:
@@ -292,10 +292,10 @@ Precedence: CLI flags > project settings > `~/.devorch/config.yaml`. The file is
 directory upward. API keys are never read from it, and project values are never written back to your
 global config.
 
-**Trust:** a cloned repo must not be able to grant itself power. Without trust, `deny` rules, provider/model
-and `default_mode: ask|plan` apply, but `mcp_servers`, `allow` rules and `default_mode: auto` are ignored
-(you get a warning). Review the file and run `devorch trust` to enable them; trust is tied to the file's
-hash, so any change needs `devorch trust` again. `devorch untrust` revokes it.
+**Trust:** a cloned repo must not be able to grant itself power. Project `hooks.yaml` is covered too and is ignored until trusted. Without trust, `deny` rules, provider/model
+and `default_mode: ask|plan` apply, but `mcp_servers`, `allow` rules, `default_mode: auto` and project hooks are ignored
+(you get a warning). Review the files and run `devorch trust` to enable them; trust is tied to a hash of
+`settings.yaml` + `hooks.yaml`, so any change to either needs `devorch trust` again. `devorch untrust` revokes it.
 
 ### Modes
 

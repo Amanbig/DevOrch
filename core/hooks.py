@@ -2,7 +2,8 @@
 Hooks — user-defined shell commands that run around tool execution.
 
 Configured in ``~/.devorch/hooks.yaml`` (global) and ``<project>/.devorch/hooks.yaml``
-(project). Project hooks run after global ones.
+(project). Project hooks run after global ones, but only once the project is trusted
+(``devorch trust``) — they execute shell commands, so a freshly cloned repo can't run them.
 
     hooks:
       PreToolUse:
@@ -31,6 +32,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from config.project_settings import HOOKS_REL, find_hooks_root, is_trusted
 
 try:
     import yaml
@@ -93,18 +96,45 @@ def _load_file(path: Path) -> dict[str, list[Hook]]:
 
 
 class HookManager:
-    def __init__(self, hooks: dict[str, list[Hook]] | None = None, cwd: Path | None = None):
+    def __init__(
+        self,
+        hooks: dict[str, list[Hook]] | None = None,
+        cwd: Path | None = None,
+        notices: list[str] | None = None,
+    ):
         self.hooks = hooks or {}
         self.cwd = cwd or Path.cwd()
+        self.notices = notices or []
 
     @classmethod
     def load(cls, cwd: Path | None = None) -> "HookManager":
+        """Load global hooks, plus project hooks if the project is trusted.
+
+        Project hooks execute shell commands from a repository the user may have just cloned,
+        so they are skipped (with a notice) until ``devorch trust`` is run for the project.
+        """
         cwd = cwd or Path.cwd()
         merged: dict[str, list[Hook]] = {}
-        for path in (Path.home() / ".devorch" / "hooks.yaml", cwd / ".devorch" / "hooks.yaml"):
-            for event, hooks in _load_file(path).items():
-                merged.setdefault(event, []).extend(hooks)
-        return cls(merged, cwd)
+        notices: list[str] = []
+
+        for event, hooks in _load_file(Path.home() / ".devorch" / "hooks.yaml").items():
+            merged.setdefault(event, []).extend(hooks)
+
+        root = find_hooks_root(cwd)
+        if root is not None:
+            project_file = root / HOOKS_REL
+            project_hooks = _load_file(project_file)
+            if project_hooks:
+                if is_trusted(root):
+                    for event, hooks in project_hooks.items():
+                        merged.setdefault(event, []).extend(hooks)
+                else:
+                    count = sum(len(h) for h in project_hooks.values())
+                    notices.append(
+                        f"ignored {count} project hook(s) in {project_file} (untrusted) — "
+                        f"review the file, then run `devorch trust` to enable"
+                    )
+        return cls(merged, cwd, notices)
 
     def has_hooks(self) -> bool:
         return any(self.hooks.values())

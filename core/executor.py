@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from core.modes import ModeManager
 
 console = get_console()
+_WARNED_NOTICES: set[str] = set()
 
 # Custom style for questionary prompts
 PROMPT_STYLE = QStyle(
@@ -54,6 +55,10 @@ class ToolExecutor(Executor):
         checkpoints: CheckpointManager | None = None,
     ):
         self.hooks = hooks or HookManager.load()
+        for notice in self.hooks.notices:
+            if notice not in _WARNED_NOTICES:
+                _WARNED_NOTICES.add(notice)
+                print_warning(notice)
         self.checkpoints = checkpoints or CheckpointManager()
         self.tools = {tool.name: tool for tool in tools}
         self.require_confirmation = require_confirmation
