@@ -2,6 +2,7 @@ import logging
 
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 
 # Global rich console instance
@@ -22,22 +23,22 @@ def setup_logger(name: str) -> logging.Logger:
 
 def print_error(msg: str):
     """Prints an error message in bold red."""
-    console.print(f"[bold red]  Error: {msg}[/bold red]")
+    console.print(f"[bold red]  Error: {escape(str(msg))}[/bold red]")
 
 
 def print_warning(msg: str):
     """Prints a warning message in bold yellow."""
-    console.print(f"[bold yellow]  Warning: {msg}[/bold yellow]")
+    console.print(f"[bold yellow]  Warning: {escape(str(msg))}[/bold yellow]")
 
 
 def print_success(msg: str):
     """Prints a success message in bold green."""
-    console.print(f"[bold green]  {msg}[/bold green]")
+    console.print(f"[bold green]  {escape(str(msg))}[/bold green]")
 
 
 def print_info(msg: str):
     """Prints an info message in blue."""
-    console.print(f"[blue]  {msg}[/blue]")
+    console.print(f"[blue]  {escape(str(msg))}[/blue]")
 
 
 _streamed_text: str | None = None
