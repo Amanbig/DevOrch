@@ -176,7 +176,11 @@ def test_ctrl_c_inside_sub_agent_cancels_parent_turn():
     class Interrupting(Scripted):
         """First call (parent) asks for the sub-agent; the sub-agent's call gets Ctrl+C."""
 
-    prov = Interrupting([tool_resp("agent"), KeyboardInterrupt])
+    delegate = LLMResponse(
+        message=Message(role="assistant", content="delegating"),
+        tool_calls=[ToolCall(name="agent", arguments={"task": "look around"}, id="d1")],
+    )
+    prov = Interrupting([delegate, KeyboardInterrupt])
     slow = Slow()
     parent_tools: list = [slow]
     agent_tool = AgentTool(provider=prov, tools=parent_tools)
@@ -187,4 +191,5 @@ def test_ctrl_c_inside_sub_agent_cancels_parent_turn():
     agent.run("delegate")
     assert agent.last_run_interrupted
     assert roles(agent)[-1] == "assistant" and agent.history[-1].content == INTERRUPTED_NOTE
-    assert prov.script == []  # no further model calls after the interrupt
+    assert prov.script == []  # the sub-agent consumed the interrupt; nothing was left over
+    assert len(prov.seen) == 2  # parent call + sub-agent call, and no third (parent) call
