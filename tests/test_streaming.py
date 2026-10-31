@@ -126,9 +126,8 @@ def test_anthropic_provider_streams():
 def test_streaming_flags():
     from providers import PROVIDERS
 
-    for name in ("openai", "anthropic", "kimi", "deepseek", "github_copilot", "custom", "local"):
-        assert PROVIDERS[name].supports_streaming, name
-    assert not PROVIDERS["groq"].supports_streaming  # httpx-based, not yet streamed
+    for name, cls in PROVIDERS.items():
+        assert cls.supports_streaming, name
 
 
 # ── renderer + print_response dedupe ────────────────────────────────────────
@@ -256,3 +255,168 @@ def _reset_streamed():
     logger._streamed_text = None
     yield
     logger._streamed_text = None
+
+
+# ── httpx / SSE providers ───────────────────────────────────────────────────
+
+from providers.base import post_chat  # noqa: E402
+from providers.groq import GroqProvider  # noqa: E402
+
+
+def sse(*events):
+    lines = []
+    for e in events:
+        lines.append("data: " + (e if isinstance(e, str) else json.dumps(e)))
+        lines.append("")
+    return lines
+
+
+def delta_event(content=None, tool_calls=None, finish=None, usage=None):
+    ev = {
+        "choices": [
+            {"delta": {"content": content, "tool_calls": tool_calls}, "finish_reason": finish}
+        ]
+    }
+    if usage:
+        ev["usage"] = usage
+    return ev
+
+
+class FakeStream:
+    def __init__(self, status, lines=()):
+        self.status_code = status
+        self._lines = lines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return b""
+
+    def iter_lines(self):
+        return iter(self._lines)
+
+
+def fake_http(streams, post_resp=None):
+    client = MagicMock()
+    client.stream.side_effect = list(streams)
+    client.post.return_value = post_resp
+    return client
+
+
+def test_sse_text_tool_calls_and_usage():
+    lines = sse(
+        delta_event("Hi "),
+        delta_event("there"),
+        delta_event(
+            tool_calls=[
+                {"index": 0, "id": "c1", "function": {"name": "shell", "arguments": '{"command"'}}
+            ]
+        ),
+        delta_event(
+            tool_calls=[{"index": 0, "function": {"arguments": ': "ls"}'}}], finish="tool_calls"
+        ),
+        {"choices": [], "usage": {"prompt_tokens": 5, "completion_tokens": 2}},
+        "[DONE]",
+    )
+    client = fake_http([FakeStream(200, lines)])
+    seen = []
+    resp = post_chat(client, "http://x", {}, {"model": "m"}, seen.append)
+    data = resp.json()
+    assert seen == ["Hi ", "there"] and resp.status_code == 200
+    msg = data["choices"][0]["message"]
+    assert msg["content"] == "Hi there"
+    assert msg["tool_calls"][0]["function"] == {"name": "shell", "arguments": '{"command": "ls"}'}
+    assert msg["tool_calls"][0]["id"] == "c1"
+    assert data["usage"] == {"prompt_tokens": 5, "completion_tokens": 2}
+    body = client.stream.call_args.kwargs["json"]
+    assert body["stream"] is True and body["stream_options"] == {"include_usage": True}
+
+
+def test_sse_ignores_comments_and_bad_json():
+    lines = [": keepalive", "data: {not json", *sse(delta_event("ok"), "[DONE]")]
+    resp = post_chat(fake_http([FakeStream(200, lines)]), "u", {}, {}, lambda t: None)
+    assert resp.json()["choices"][0]["message"]["content"] == "ok"
+
+
+def test_sse_retries_without_stream_options_on_400():
+    client = fake_http([FakeStream(400), FakeStream(200, sse(delta_event("ok"), "[DONE]"))])
+    resp = post_chat(client, "u", {}, {}, lambda t: None)
+    assert resp.json()["choices"][0]["message"]["content"] == "ok"
+    assert "stream_options" not in client.stream.call_args_list[1].kwargs["json"]
+
+
+def test_sse_falls_back_to_plain_post_on_error():
+    plain = MagicMock(status_code=401)
+    client = fake_http([FakeStream(401)], post_resp=plain)
+    assert post_chat(client, "u", {}, {"model": "m"}, lambda t: None) is plain
+    client.post.assert_called_once_with("u", headers={}, json={"model": "m"})
+
+
+def test_post_chat_without_callback_is_plain_post():
+    client = MagicMock()
+    post_chat(client, "u", {"h": "1"}, {"p": 1}, None)
+    client.post.assert_called_once_with("u", headers={"h": "1"}, json={"p": 1})
+    client.stream.assert_not_called()
+
+
+def test_groq_provider_streams_end_to_end():
+    prov = GroqProvider(api_key="x")
+    prov.client = fake_http(
+        [
+            FakeStream(
+                200,
+                sse(
+                    delta_event("Looking. "),
+                    delta_event(
+                        tool_calls=[
+                            {
+                                "index": 0,
+                                "id": "c9",
+                                "function": {"name": "grep", "arguments": "{}"},
+                            }
+                        ]
+                    ),
+                    "[DONE]",
+                ),
+            )
+        ]
+    )
+    seen = []
+    resp = prov.generate([Message(role="user", content="hi")], on_text=seen.append)
+    assert seen == ["Looking. "] and resp.message.content == "Looking. "
+    assert resp.tool_calls[0].name == "grep" and resp.tool_calls[0].id == "c9"
+
+
+def test_gemini_provider_streams_text_and_function_calls():
+    from providers.gemini import GeminiProvider
+
+    def part(text=None, fc=None):
+        return NS(text=text, function_call=fc)
+
+    def gchunk(parts, usage=None):
+        return NS(candidates=[NS(content=NS(parts=parts))], usage_metadata=usage)
+
+    usage = NS(
+        prompt_token_count=4,
+        candidates_token_count=2,
+        total_token_count=6,
+        cached_content_token_count=0,
+    )
+    prov = GeminiProvider(api_key="x")
+    prov.client = MagicMock()
+    prov.client.models.generate_content_stream.return_value = iter(
+        [
+            gchunk([part("Hello ")]),
+            gchunk([part("world"), part(fc=NS(name="shell", args={"command": "ls"}))], usage),
+        ]
+    )
+    seen = []
+    resp = prov.generate([Message(role="user", content="hi")], on_text=seen.append)
+    assert seen == ["Hello ", "world"] and resp.message.content == "Hello world"
+    assert resp.tool_calls[0].name == "shell" and resp.tool_calls[0].arguments == {"command": "ls"}
+    assert resp.usage.total_tokens == 6
+    prov.client.models.generate_content.assert_not_called()

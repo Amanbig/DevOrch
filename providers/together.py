@@ -4,10 +4,17 @@ https://together.ai/
 """
 
 import json
+from collections.abc import Callable
 
 import httpx
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
+from providers.base import (
+    LLMProvider,
+    ModelInfo,
+    extract_token_usage,
+    openai_user_content,
+    post_chat,
+)
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -19,6 +26,7 @@ class TogetherProvider(LLMProvider):
 
     name = "together"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = [
         "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo",
@@ -79,6 +87,7 @@ class TogetherProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Format messages for Together API
         formatted_messages = []
@@ -127,8 +136,8 @@ class TogetherProvider(LLMProvider):
         if formatted_tools:
             payload["tools"] = formatted_tools
 
-        response = self.client.post(
-            f"{self.BASE_URL}/chat/completions", headers=self._get_headers(), json=payload
+        response = post_chat(
+            self.client, f"{self.BASE_URL}/chat/completions", self._get_headers(), payload, on_text
         )
         response.raise_for_status()
         data = response.json()

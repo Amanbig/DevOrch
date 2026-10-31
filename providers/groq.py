@@ -4,10 +4,17 @@ https://groq.com/
 """
 
 import json
+from collections.abc import Callable
 
 import httpx
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
+from providers.base import (
+    LLMProvider,
+    ModelInfo,
+    extract_token_usage,
+    openai_user_content,
+    post_chat,
+)
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -19,6 +26,7 @@ class GroqProvider(LLMProvider):
 
     name = "groq"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = [
         "llama-3.1-70b-versatile",
@@ -77,6 +85,7 @@ class GroqProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Format messages for Groq API
         formatted_messages = []
@@ -126,8 +135,8 @@ class GroqProvider(LLMProvider):
             payload["tools"] = formatted_tools
             payload["tool_choice"] = "auto"
 
-        response = self.client.post(
-            f"{self.BASE_URL}/chat/completions", headers=self._get_headers(), json=payload
+        response = post_chat(
+            self.client, f"{self.BASE_URL}/chat/completions", self._get_headers(), payload, on_text
         )
         response.raise_for_status()
         data = response.json()

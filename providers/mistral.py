@@ -4,10 +4,17 @@ https://mistral.ai/
 """
 
 import json
+from collections.abc import Callable
 
 import httpx
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
+from providers.base import (
+    LLMProvider,
+    ModelInfo,
+    extract_token_usage,
+    openai_user_content,
+    post_chat,
+)
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -18,6 +25,7 @@ class MistralProvider(LLMProvider):
 
     name = "mistral"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = [
         "mistral-large-latest",
@@ -73,6 +81,7 @@ class MistralProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Format messages for Mistral API
         formatted_messages = []
@@ -129,8 +138,8 @@ class MistralProvider(LLMProvider):
             payload["tools"] = formatted_tools
             payload["tool_choice"] = "auto"
 
-        response = self.client.post(
-            f"{self.BASE_URL}/chat/completions", headers=self._get_headers(), json=payload
+        response = post_chat(
+            self.client, f"{self.BASE_URL}/chat/completions", self._get_headers(), payload, on_text
         )
         response.raise_for_status()
         data = response.json()

@@ -1,3 +1,4 @@
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -5,6 +6,38 @@ from types import SimpleNamespace
 from typing import Any
 
 from schemas.message import LLMResponse, Message, TokenUsage
+
+
+class _ChatAccumulator:
+    """Assembles streamed chat-completion deltas (text + fragmented tool calls) into one message."""
+
+    def __init__(self, on_text: Callable[[str], None]):
+        self.on_text = on_text
+        self.parts: list[str] = []
+        self.calls: dict[int, dict[str, str]] = {}
+        self.usage: Any = None
+        self.finish_reason: str | None = None
+
+    def text(self, text: str | None) -> None:
+        if text:
+            self.parts.append(text)
+            self.on_text(text)
+
+    def tool_call(self, index: int | None, id: str | None, name: str | None, args: str | None):
+        slot = self.calls.setdefault(index or 0, {"id": "", "name": "", "arguments": ""})
+        if id:
+            slot["id"] = id
+        if name:
+            slot["name"] += name
+        if args:
+            slot["arguments"] += args
+
+    @property
+    def content(self) -> str | None:
+        return "".join(self.parts) or None
+
+    def ordered_calls(self) -> list[dict[str, str]]:
+        return [c for _, c in sorted(self.calls.items())]
 
 
 def stream_chat_completion(client: Any, on_text: Callable[[str], None], **kwargs: Any) -> Any:
@@ -20,32 +53,24 @@ def stream_chat_completion(client: Any, on_text: Callable[[str], None], **kwargs
         # e.g. bad credentials, will simply be raised again).
         stream = client.chat.completions.create(stream=True, **kwargs)
 
-    parts: list[str] = []
-    calls: dict[int, dict[str, str]] = {}
-    usage = None
-    finish_reason = None
+    acc = _ChatAccumulator(on_text)
     for chunk in stream:
         if getattr(chunk, "usage", None):
-            usage = chunk.usage
+            acc.usage = chunk.usage
         if not chunk.choices:
             continue
         choice = chunk.choices[0]
-        finish_reason = getattr(choice, "finish_reason", None) or finish_reason
+        acc.finish_reason = getattr(choice, "finish_reason", None) or acc.finish_reason
         delta = choice.delta
-        text = getattr(delta, "content", None)
-        if text:
-            parts.append(text)
-            on_text(text)
+        acc.text(getattr(delta, "content", None))
         for tc in getattr(delta, "tool_calls", None) or []:
-            slot = calls.setdefault(tc.index or 0, {"id": "", "name": "", "arguments": ""})
-            if tc.id:
-                slot["id"] = tc.id
             fn = getattr(tc, "function", None)
-            if fn is not None:
-                if fn.name:
-                    slot["name"] += fn.name
-                if fn.arguments:
-                    slot["arguments"] += fn.arguments
+            acc.tool_call(
+                tc.index,
+                tc.id,
+                getattr(fn, "name", None),
+                getattr(fn, "arguments", None),
+            )
 
     tool_calls = [
         SimpleNamespace(
@@ -53,12 +78,100 @@ def stream_chat_completion(client: Any, on_text: Callable[[str], None], **kwargs
             type="function",
             function=SimpleNamespace(name=c["name"], arguments=c["arguments"]),
         )
-        for _, c in sorted(calls.items())
+        for c in acc.ordered_calls()
     ]
-    message = SimpleNamespace(content="".join(parts) or None, tool_calls=tool_calls or None)
+    message = SimpleNamespace(content=acc.content, tool_calls=tool_calls or None)
     return SimpleNamespace(
-        choices=[SimpleNamespace(message=message, finish_reason=finish_reason)], usage=usage
+        choices=[SimpleNamespace(message=message, finish_reason=acc.finish_reason)],
+        usage=acc.usage,
     )
+
+
+class _StreamedResponse:
+    """Minimal httpx.Response look-alike for an already-consumed successful stream."""
+
+    status_code = 200
+
+    def __init__(self, data: dict[str, Any]):
+        self._data = data
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, Any]:
+        return self._data
+
+
+def post_chat(
+    client: Any,
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    on_text: Callable[[str], None] | None = None,
+) -> Any:
+    """POST a chat completion over httpx, streaming (SSE) when ``on_text`` is given.
+
+    Returns an object with ``status_code``, ``raise_for_status()`` and ``json()`` just like an
+    httpx response, so callers' existing error handling and parsing are unchanged. If the server
+    rejects the streaming request, this falls back to a normal request so errors surface through
+    the usual path.
+    """
+    if on_text is None:
+        return client.post(url, headers=headers, json=payload)
+
+    for with_usage in (True, False):
+        body = {**payload, "stream": True}
+        if with_usage:
+            body["stream_options"] = {"include_usage": True}
+        with client.stream("POST", url, headers=headers, json=body) as resp:
+            if resp.status_code == 200:
+                return _StreamedResponse(_read_sse(resp, on_text))
+            resp.read()
+            if resp.status_code not in (400, 422):
+                break  # not a stream_options problem; let the plain request report it
+    return client.post(url, headers=headers, json=payload)
+
+
+def _read_sse(resp: Any, on_text: Callable[[str], None]) -> dict[str, Any]:
+    """Consume an OpenAI-style SSE stream into a non-streaming-shaped JSON dict."""
+    acc = _ChatAccumulator(on_text)
+    for line in resp.iter_lines():
+        if not line or not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            continue
+        if chunk.get("usage"):
+            acc.usage = chunk["usage"]
+        choices = chunk.get("choices") or []
+        if not choices:
+            continue
+        acc.finish_reason = choices[0].get("finish_reason") or acc.finish_reason
+        delta = choices[0].get("delta") or {}
+        acc.text(delta.get("content"))
+        for tc in delta.get("tool_calls") or []:
+            fn = tc.get("function") or {}
+            acc.tool_call(tc.get("index"), tc.get("id"), fn.get("name"), fn.get("arguments"))
+
+    message: dict[str, Any] = {"role": "assistant", "content": acc.content}
+    calls = acc.ordered_calls()
+    if calls:
+        message["tool_calls"] = [
+            {
+                "id": c["id"] or None,
+                "type": "function",
+                "function": {"name": c["name"], "arguments": c["arguments"]},
+            }
+            for c in calls
+        ]
+    result: dict[str, Any] = {"choices": [{"message": message, "finish_reason": acc.finish_reason}]}
+    if acc.usage:
+        result["usage"] = acc.usage
+    return result
 
 
 def chat_create(client: Any, on_text: Callable[[str], None] | None = None, **kwargs: Any) -> Any:
