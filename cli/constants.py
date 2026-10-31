@@ -6,6 +6,9 @@ styles, and the slash-command autocompleter so main.py stays focused on
 app wiring and REPL logic.
 """
 
+import os
+import re
+
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
@@ -115,13 +118,27 @@ def _xml_escape(text: str) -> str:
 
 
 class SlashCommandCompleter(Completer):
-    """Autocomplete for slash commands and skill shortcuts in the REPL."""
+    """Autocomplete for slash commands, skill shortcuts and @file mentions in the REPL."""
+
+    @staticmethod
+    def _path_completions(partial: str):
+        for comp, is_dir in _path_completions_for(partial):
+            yield Completion(
+                comp,
+                start_position=-len(partial),
+                display_meta="directory" if is_dir else "file",
+            )
 
     def __init__(self, skill_manager=None):
         self._skill_manager = skill_manager
 
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
+
+        at = re.search(r"(?<![\w@])@([^\s@]*)$", text)
+        if at:
+            yield from self._path_completions(at.group(1))
+            return
 
         if not text.startswith("/"):
             return
@@ -155,6 +172,27 @@ class SlashCommandCompleter(Completer):
                         ),
                         display_meta=f"skill: {skill['description']}",
                     )
+
+
+def _path_completions_for(partial: str, limit: int = 30):
+    """Yield (completion_text, is_dir) for paths matching a partial @mention."""
+    base = os.path.dirname(partial)
+    prefix = os.path.basename(partial)
+    directory = os.path.expanduser(base) if base else "."
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return
+    count = 0
+    for name in names:
+        if not name.startswith(prefix) or (name.startswith(".") and not prefix.startswith(".")):
+            continue
+        full = os.path.join(directory, name)
+        is_dir = os.path.isdir(full)
+        yield os.path.join(base, name) + ("/" if is_dir else ""), is_dir
+        count += 1
+        if count >= limit:
+            return
 
 
 def print_banner(small: bool = False) -> None:
