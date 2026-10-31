@@ -34,6 +34,7 @@ from config.permissions import (
     get_permissions,
     reset_permissions,
 )
+from config.project_settings import load_project_settings, trust_project, untrust_project
 from config.settings import (
     CONFIG_FILE,
     ProviderConfig,
@@ -755,7 +756,13 @@ def start_repl(
     project_memory_prompt = project_memory_manager.to_prompt_context()
 
     # Create mode manager (shared between agent and executor)
-    mode_manager = ModeManager(default_mode=AgentMode.ASK)
+    mode_manager = ModeManager(
+        default_mode=AgentMode(settings.project_default_mode)
+        if settings.project_default_mode
+        else AgentMode.ASK
+    )
+    for notice in settings.project_notices:
+        print_warning(notice)
 
     executor = ToolExecutor(tools=tools, require_confirmation=True, mode_manager=mode_manager)
     planner = SimplePlanner(
@@ -2424,6 +2431,40 @@ def permissions_reset(force: bool = typer.Option(False, "--force", "-f", help="S
 
     reset_permissions()
     print_success("Permissions reset to defaults.")
+
+
+@app.command("trust")
+def trust_command():
+    """
+    Trust this project's .devorch/settings.yaml (enables its MCP servers, allow rules, auto mode).
+    """
+    ps = load_project_settings()
+    if ps is None:
+        print_warning("No .devorch/settings.yaml found in this directory or its parents.")
+        raise typer.Exit(1)
+    console.print(f"[bold]{ps.path}[/bold]")
+    console.print(ps.path.read_text(encoding="utf-8"))
+    if not questionary.confirm(
+        "Trust these settings? (MCP servers launch programs; allow rules skip prompts)",
+        default=False,
+    ).ask():
+        print_info("Not trusted.")
+        raise typer.Exit(1)
+    trust_project(ps)
+    print_success(f"Trusted {ps.root}. Re-run `devorch trust` if the file changes.")
+
+
+@app.command("untrust")
+def untrust_command():
+    """
+    Revoke trust for this project's .devorch/settings.yaml.
+    """
+    ps = load_project_settings()
+    root = ps.root if ps else Path.cwd()
+    if untrust_project(root):
+        print_success(f"Revoked trust for {root}")
+    else:
+        print_info(f"{root} was not trusted.")
 
 
 @app.command(name="init")

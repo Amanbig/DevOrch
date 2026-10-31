@@ -268,6 +268,35 @@ devorch ask --mcp github --mcp filesystem "..."  # Use specific servers
 devorch run commit --no-mcp                  # Skip MCP entirely
 ```
 
+### Project Settings
+
+Commit shared defaults to your repo in `<project>/.devorch/settings.yaml`:
+
+```yaml
+default_mode: ask                 # ask | auto | plan
+default_provider: anthropic
+providers:
+  anthropic:
+    default_model: claude-sonnet-4-20250514
+mcp_servers:                      # merged over ~/.devorch/config.yaml
+  github:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+permissions:
+  shell:
+    allow: ["pytest*", "ruff *"]
+    deny: ["git push*"]
+```
+
+Precedence: CLI flags > project settings > `~/.devorch/config.yaml`. The file is found from the current
+directory upward. API keys are never read from it, and project values are never written back to your
+global config.
+
+**Trust:** a cloned repo must not be able to grant itself power. Without trust, `deny` rules, provider/model
+and `default_mode: ask|plan` apply, but `mcp_servers`, `allow` rules and `default_mode: auto` are ignored
+(you get a warning). Review the file and run `devorch trust` to enable them; trust is tied to the file's
+hash, so any change needs `devorch trust` again. `devorch untrust` revokes it.
+
 ### Modes
 
 | Mode | Behavior |

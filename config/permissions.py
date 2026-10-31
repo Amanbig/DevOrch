@@ -21,6 +21,8 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
+from config.project_settings import ProjectSettings, load_project_settings
+
 CONFIG_DIR = Path.home() / ".devorch"
 PERMISSIONS_FILE = CONFIG_DIR / "permissions.yaml"
 
@@ -123,9 +125,14 @@ class Permissions:
     session_allowed: list[str] = field(default_factory=list)
     session_denied: list[str] = field(default_factory=list)
 
+    # Patterns contributed by .devorch/settings.yaml; never written back to permissions.yaml
+    _project_allowed: dict[str, list[str]] = field(default_factory=dict, repr=False)
+    _project_denied: dict[str, list[str]] = field(default_factory=dict, repr=False)
+    project_notices: list[str] = field(default_factory=list)
+
     @classmethod
-    def load(cls) -> "Permissions":
-        """Load permissions from config file."""
+    def load(cls, include_project: bool = True) -> "Permissions":
+        """Load permissions from config file (+ project settings)."""
         permissions = cls()
 
         # Set defaults
@@ -168,7 +175,29 @@ class Permissions:
             except Exception:
                 pass  # Use defaults on error
 
+        if include_project:
+            permissions._apply_project(load_project_settings())
+
         return permissions
+
+    def _apply_project(self, ps: ProjectSettings | None) -> None:
+        if ps is None:
+            return
+        # Deny rules can only make things safer, so they always apply. Allow rules widen what
+        # runs without asking, so they require the project to be trusted.
+        for tool, patterns in ps.deny.items():
+            perm = self.tools.setdefault(tool, ToolPermission())
+            for pat in patterns:
+                if pat not in perm.denied_patterns:
+                    perm.denied_patterns.append(pat)
+                    self._project_denied.setdefault(tool, []).append(pat)
+        if ps.trusted:
+            for tool, patterns in ps.allow.items():
+                perm = self.tools.setdefault(tool, ToolPermission())
+                for pat in patterns:
+                    if pat not in perm.allowed_patterns:
+                        perm.allowed_patterns.append(pat)
+                        self._project_allowed.setdefault(tool, []).append(pat)
 
     def save(self):
         """Save permissions to config file."""
@@ -180,10 +209,12 @@ class Permissions:
         data = {"tools": {}}
 
         for tool_name, perm in self.tools.items():
+            proj_allowed = self._project_allowed.get(tool_name, [])
+            proj_denied = self._project_denied.get(tool_name, [])
             data["tools"][tool_name] = {
                 "level": perm.level.value,
-                "allowed_patterns": perm.allowed_patterns,
-                "denied_patterns": perm.denied_patterns,
+                "allowed_patterns": [p for p in perm.allowed_patterns if p not in proj_allowed],
+                "denied_patterns": [p for p in perm.denied_patterns if p not in proj_denied],
             }
 
         with open(PERMISSIONS_FILE, "w") as f:

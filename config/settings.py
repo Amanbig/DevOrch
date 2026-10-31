@@ -1,3 +1,4 @@
+import copy
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,8 @@ try:
     KEYRING_AVAILABLE = True
 except ImportError:
     KEYRING_AVAILABLE = False
+
+from config.project_settings import ProjectSettings, load_project_settings
 
 CONFIG_DIR = Path.home() / ".devorch"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
@@ -34,10 +37,16 @@ class Settings:
     default_provider: str = "openai"
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
     mcp_servers: dict[str, dict] = field(default_factory=dict)
+    # Set when per-project settings were applied (see config/project_settings.py)
+    project_notices: list[str] = field(default_factory=list)
+    project_default_mode: str | None = None
+    # key -> (global value, value applied from the project); used to keep project values
+    # out of ~/.devorch/config.yaml when settings are saved.
+    _project_applied: dict = field(default_factory=dict, repr=False)
 
     @classmethod
-    def load(cls) -> "Settings":
-        """Load settings from config file, keyring, and env vars."""
+    def load(cls, include_project: bool = True) -> "Settings":
+        """Load settings from config file, keyring, and env vars (+ project settings)."""
         settings = cls()
 
         # Load from YAML if exists and yaml is available
@@ -97,7 +106,47 @@ class Settings:
         if "local" in settings.providers and not settings.providers["local"].base_url:
             settings.providers["local"].base_url = "http://localhost:11434/v1"
 
+        if include_project:
+            settings._apply_project(load_project_settings())
+
         return settings
+
+    def _apply_project(self, ps: ProjectSettings | None) -> None:
+        if ps is None:
+            return
+        self.project_notices = list(ps.notices)
+        self.project_default_mode = ps.effective_mode()
+
+        if ps.default_provider:
+            self._project_applied["default_provider"] = (
+                self.default_provider,
+                ps.default_provider,
+            )
+            self.default_provider = ps.default_provider
+        for name, model in ps.models.items():
+            cfg = self.providers.setdefault(name, ProviderConfig())
+            self._project_applied[("model", name)] = (cfg.default_model, model)
+            cfg.default_model = model
+        if ps.trusted and ps.mcp_servers:
+            merged = {**self.mcp_servers, **ps.mcp_servers}
+            self._project_applied["mcp_servers"] = (self.mcp_servers, merged)
+            self.mcp_servers = merged
+
+    def global_view(self) -> "Settings":
+        """Copy with project-applied values reverted, unless the user changed them since."""
+        view = copy.deepcopy(self)
+        for key, (original, applied) in self._project_applied.items():
+            if key == "default_provider":
+                if view.default_provider == applied:
+                    view.default_provider = original
+            elif key == "mcp_servers":
+                if view.mcp_servers == applied:
+                    view.mcp_servers = original
+            else:
+                _, name = key
+                if name in view.providers and view.providers[name].default_model == applied:
+                    view.providers[name].default_model = original
+        return view
 
     def get_api_key(self, provider: str) -> str | None:
         """Get API key for a provider."""
@@ -158,6 +207,7 @@ def save_config(settings: Settings):
         raise RuntimeError("PyYAML is required to save config. Install with: pip install pyyaml")
 
     ensure_config_dir()
+    settings = settings.global_view()
 
     data = {"default_provider": settings.default_provider, "providers": {}}
 

@@ -9,6 +9,7 @@ import platform
 
 import typer
 
+from config.project_settings import load_project_settings
 from config.settings import Settings
 from core.agent import Agent
 from core.executor import ToolExecutor
@@ -28,7 +29,7 @@ from tools.shell import ShellTool
 from tools.task import TaskTool
 from tools.terminal_session import TerminalSessionTool
 from tools.websearch import WebFetchTool, WebSearchTool
-from utils.logger import get_console, print_error, print_success
+from utils.logger import get_console, print_error, print_success, print_warning
 
 console = get_console()
 
@@ -290,10 +291,22 @@ def build_tools(
     return tools
 
 
+def load_project_mode() -> str | None:
+    """Mode requested by .devorch/settings.yaml (untrusted ``auto`` is downgraded to ``ask``)."""
+    ps = load_project_settings()
+    return ps.effective_mode() if ps else None
+
+
+def print_project_notices(settings) -> None:
+    for notice in getattr(settings, "project_notices", []):
+        print_warning(notice)
+
+
 def resolve_mode(mode_str: str | None, default: AgentMode = AgentMode.AUTO) -> AgentMode:
     """Parse and validate a mode string, exit with error on bad input."""
     if not mode_str:
-        return default
+        project_mode = load_project_mode()
+        return AgentMode(project_mode) if project_mode else default
     try:
         return AgentMode(mode_str.lower())
     except ValueError as err:
