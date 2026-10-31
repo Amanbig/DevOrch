@@ -155,31 +155,35 @@ class SlashCommandCompleter(Completer):
 
         for cmd, desc in SLASH_COMMANDS.items():
             if cmd.startswith(partial):
-                padded_cmd = cmd[1:].ljust(16)
-                safe_desc = _xml_escape(desc)
-                yield Completion(
-                    cmd,
-                    start_position=-len(text),
-                    display=HTML(
-                        f"<command>{padded_cmd}</command><description>{safe_desc}</description>"
-                    ),
-                    display_meta=desc,
-                )
+                yield self._command_completion(cmd, cmd[1:], desc, desc, text)
 
         if self._skill_manager:
             for skill in self._skill_manager.list_skills():
                 skill_cmd = f"/{skill['name']}"
                 if skill_cmd.startswith(partial) and skill_cmd not in SLASH_COMMANDS:
-                    padded_cmd = skill["name"].ljust(16)
-                    safe_desc = _xml_escape(skill["description"])
-                    yield Completion(
+                    yield self._command_completion(
                         skill_cmd,
-                        start_position=-len(text),
-                        display=HTML(
-                            f"<command>{padded_cmd}</command><description>{safe_desc}</description>"
-                        ),
-                        display_meta=f"skill: {skill['description']}",
+                        skill["name"],
+                        skill["description"],
+                        f"skill: {skill['description']}",
+                        text,
                     )
+
+    @staticmethod
+    def _command_completion(cmd: str, label: str, desc: str, meta: str, typed: str) -> Completion:
+        # prompt_toolkit hides a completion that is identical to the text already typed, so the
+        # dropdown (and the command's description) vanished the moment you finished typing `/cost`.
+        # On an exact match offer "<cmd> " instead: it differs, so the entry stays visible, and a
+        # trailing space is where arguments start anyway.
+        insert = cmd + " " if cmd == typed.lower() else cmd
+        return Completion(
+            insert,
+            start_position=-len(typed),
+            display=HTML(
+                f"<command>{label.ljust(16)}</command><description>{_xml_escape(desc)}</description>"
+            ),
+            display_meta=meta,
+        )
 
 
 def _path_completions_for(partial: str, limit: int = 30):

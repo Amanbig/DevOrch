@@ -229,3 +229,59 @@ def test_clear_screen_only_on_a_real_terminal():
 def test_clear_screen_can_be_disabled_with_env():
     assert not should_clear_screen(True, env={"DEVORCH_NO_CLEAR": "1"})
     assert should_clear_screen(True, env={"DEVORCH_NO_CLEAR": ""})
+
+
+# ── slash dropdown stays visible on an exact match ──────────────────────────
+
+from prompt_toolkit.document import Document  # noqa: E402
+
+from cli.constants import SLASH_COMMANDS, SlashCommandCompleter  # noqa: E402
+
+
+def _complete(text):
+    return [c.text for c in SlashCommandCompleter().get_completions(Document(text), None)]
+
+
+@pytest.mark.parametrize("cmd", list(SLASH_COMMANDS))
+def test_every_command_keeps_a_dropdown_entry_as_you_finish_typing_it(cmd):
+    # prompt_toolkit hides a completion identical to the typed text; the entry must differ from it
+    for i in range(2, len(cmd) + 1):
+        typed = cmd[:i]
+        entries = _complete(typed)
+        assert entries, f"dropdown empty at {typed!r}"
+        assert all(e != typed for e in entries), (
+            f"identical completion at {typed!r} would be hidden"
+        )
+    assert cmd + " " in _complete(cmd)
+
+
+def test_exact_match_inserts_a_trailing_space_other_matches_do_not():
+    assert _complete("/cost") == ["/cost "]
+    assert "/mode " in _complete("/mode") and "/models" in _complete("/mode")
+
+
+def test_no_dropdown_once_arguments_start():
+    assert _complete("/cost ") == []
+    assert _complete("/model gpt") == []
+
+
+def test_exact_match_is_case_insensitive():
+    assert _complete("/COST") == ["/cost "]
+
+
+def test_enter_on_an_exact_match_submits_the_typed_text_unchanged():
+    assert (
+        run_prompt("/cost\r", completer=SlashCommandCompleter(), complete_while_typing=True)
+        == "/cost"
+    )
+
+
+def test_skills_also_keep_their_dropdown_entry():
+    class Skills:
+        def list_skills(self):
+            return [{"name": "deploy", "description": "Deploy it"}]
+
+    comps = [
+        c.text for c in SlashCommandCompleter(Skills()).get_completions(Document("/deploy"), None)
+    ]
+    assert comps == ["/deploy "]
