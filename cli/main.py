@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -6,8 +7,10 @@ import questionary
 import typer
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.history import FileHistory
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from cli.commands._shared import (  # noqa: E402
     SKIP_PERMISSIONS_HELP,
@@ -26,6 +29,7 @@ from cli.constants import (  # noqa: E402
     PROMPT_STYLE,
     QUESTIONARY_STYLE,
     SLASH_COMMANDS,
+    VERSION,
     SlashCommandCompleter,
     print_banner,
 )
@@ -42,13 +46,17 @@ from cli.prompt_ui import (
 )
 from cli.prompt_ui import prompt_message as build_prompt_message
 from cli.repl_commands import (  # noqa: E402
+    PICK_SESSION,
     handle_hooks,
     handle_permissions,
+    handle_resume,
     handle_sessions,
     handle_trust,
     handle_untrust,
+    last_exchange_preview,
     print_session_details,
     print_sessions_table,
+    resolve_startup_session,
 )
 from config.permissions import (
     PERMISSIONS_FILE,
@@ -683,6 +691,7 @@ def start_repl(
     show_banner: bool = True,
     mode: str | None = None,
     skip_permissions: bool = False,
+    continue_session: bool = False,
 ):
     """Start the interactive REPL session."""
     if show_banner:
@@ -698,7 +707,14 @@ def start_repl(
 
     context_summary = None
 
-    # Handle session resumption
+    # Handle session resumption: --resume <id>, a bare --resume (picker), or --continue
+    choice = resolve_startup_session(session_manager, resume, continue_session)
+    if choice.cancelled:
+        print_info("No session chosen.")
+        raise typer.Exit(0)
+    if choice.notice:
+        print_info(choice.notice)
+    resume = choice.session_id
     if resume:
         try:
             session_info, messages = session_manager.load_session(resume)
@@ -708,6 +724,8 @@ def start_repl(
 
             print_success(f"Resumed session: {resume}")
             print_info(f"Provider: {provider} | Model: {model} | Messages: {len(messages)}")
+            for line in last_exchange_preview(messages):
+                console.print(f"  [dim]{escape(line)}[/dim]")
 
             if context_summary:
                 print_info("Session has context from previous conversation")
@@ -960,6 +978,7 @@ def start_repl(
                             "/tokens",
                             "/cost",
                             "/sessions",
+                            "/resume",
                             "/copy",
                             "/paste",
                             "/undo",
@@ -976,6 +995,7 @@ def start_repl(
                             "/tasks",
                             "/config",
                             "/permissions",
+                            "/doctor",
                             "/hooks",
                             "/trust",
                             "/untrust",
@@ -1198,6 +1218,14 @@ def start_repl(
                         session_manager.current_session_id,
                         confirm=lambda msg: questionary.confirm(msg, default=False).ask(),
                     )
+                    continue
+
+                elif cmd == "resume":
+                    handle_resume(cmd_arg, session_manager, agent, executor)
+                    continue
+
+                elif cmd == "doctor":
+                    render_doctor()
                     continue
 
                 elif cmd == "hooks":
@@ -2021,15 +2049,87 @@ def start_repl(
                     console.print("[dim]  - Make sure Ollama is running: ollama serve[/dim]")
 
 
+def _version_callback(value: bool):
+    if value:
+        console.print(f"devorch {VERSION}", highlight=False)
+        raise typer.Exit()
+
+
+def normalize_resume_argv(argv: list[str]) -> list[str]:
+    """Turn a bare ``--resume`` / ``-r`` (no session id) into ``--resume __pick__``.
+
+    Typer cannot express an option with an optional value: a bare ``--resume`` errors, and
+    ``--resume -c`` would swallow ``-c`` as the id. A value-less ``--resume`` (at the end, or followed
+    by another option) therefore becomes the internal picker marker.
+    """
+    out: list[str] = []
+    for i, arg in enumerate(argv):
+        out.append(arg)
+        if arg in ("--resume", "-r") and (i + 1 == len(argv) or argv[i + 1].startswith("-")):
+            out.append(PICK_SESSION)
+    return out
+
+
+def render_doctor() -> int:
+    """Print the doctor report and return the process exit code (1 if any check failed)."""
+    from core.doctor import FAIL, INFO, OK, WARN, exit_code, run_checks
+
+    rows = run_checks()
+    icons = {OK: ("✓", "green"), WARN: ("!", "yellow"), FAIL: ("✗", "red"), INFO: ("·", "dim")}
+    table = Table(title="DevOrch doctor", show_header=False, box=None, pad_edge=False)
+    table.add_column(width=2)
+    table.add_column(style="bold", no_wrap=True)
+    table.add_column(overflow="fold")  # fold, don't cut: full paths matter in a bug report
+    for r in rows:
+        icon, color = icons[r.status]
+        table.add_row(Text(icon, style=color), Text(r.name), Text(r.detail))
+        if r.hint:
+            table.add_row("", "", Text(f"→ {r.hint}", style="dim"))
+    console.print(table)
+    summary = {s: sum(1 for r in rows if r.status == s) for s in (OK, WARN, FAIL)}
+    console.print(
+        f"\n[green]{summary[OK]} ok[/green], [yellow]{summary[WARN]} warnings[/yellow], "
+        f"[red]{summary[FAIL]} problems[/red]\n"
+    )
+    return exit_code(rows)
+
+
+@app.command("doctor")
+def doctor_command():
+    """
+    Check your setup (providers, keys, permissions, project trust, terminal) for problems.
+    """
+    raise typer.Exit(render_doctor())
+
+
 @app.callback()
 def main_callback(
     ctx: typer.Context,
     provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
     model: str = typer.Option(None, "--model", "-m", help="Model name"),
-    resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID"),
+    resume: str = typer.Option(
+        None,
+        "--resume",
+        "-r",
+        help="Resume a session by ID; use --resume on its own to pick from a list",
+    ),
+    continue_session: bool = typer.Option(
+        False,
+        "--continue",
+        "-c",
+        help="Continue the most recent conversation started in this directory",
+    ),
     mode: str = typer.Option(None, "--mode", help="Start in this mode: ask, auto, plan"),
     skip_permissions: bool = typer.Option(
         False, "--dangerously-skip-permissions", help=SKIP_PERMISSIONS_HELP
+    ),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the DevOrch version and exit",
     ),
 ):
     """
@@ -2060,6 +2160,7 @@ def main_callback(
         resume=resume,
         mode=mode,
         skip_permissions=skip_permissions,
+        continue_session=continue_session,
     )
 
 
@@ -2067,7 +2168,18 @@ def main_callback(
 def chat(
     provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
     model: str = typer.Option(None, "--model", "-m", help="Model name"),
-    resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID"),
+    resume: str = typer.Option(
+        None,
+        "--resume",
+        "-r",
+        help="Resume a session by ID; use --resume on its own to pick from a list",
+    ),
+    continue_session: bool = typer.Option(
+        False,
+        "--continue",
+        "-c",
+        help="Continue the most recent conversation started in this directory",
+    ),
     message_limit: int = typer.Option(
         DEFAULT_MESSAGE_LIMIT, "--limit", "-l", help="Messages before auto-summarization"
     ),
@@ -2095,6 +2207,7 @@ def chat(
         message_limit=message_limit,
         mode=mode,
         skip_permissions=skip_permissions,
+        continue_session=continue_session,
     )
 
 
@@ -2352,11 +2465,12 @@ def skills_list():
 @sessions_app.command("list")
 def sessions_list(
     limit: int = typer.Option(20, "--limit", "-n", help="Number of sessions to show"),
+    here: bool = typer.Option(False, "--here", help="Only sessions started in this directory"),
 ):
     """
     List recent chat sessions.
     """
-    print_sessions_table(SessionManager(), limit)
+    print_sessions_table(SessionManager(), limit, here=here)
     console.print("\n[dim]Resume a session: devorch --resume <id>[/dim]")
 
 
@@ -2552,7 +2666,7 @@ def init_project(
 
 
 def main():
-    app()
+    app(args=normalize_resume_argv(sys.argv[1:]))
 
 
 if __name__ == "__main__":

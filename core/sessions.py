@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import uuid
 from datetime import datetime
@@ -12,6 +13,15 @@ DB_PATH = DATA_DIR / "sessions.db"
 # Default limits
 DEFAULT_MESSAGE_LIMIT = 50  # Max messages before summarization
 DEFAULT_TOKEN_ESTIMATE_LIMIT = 100000  # Rough token estimate
+
+
+def normalize_dir(path: str | os.PathLike | None = None) -> str:
+    """Canonical form of a directory for matching sessions to where they were started.
+
+    Resolves symlinks and, on Windows, case, so ``/proj`` and a symlink to it (or ``C:\\Proj`` and
+    ``c:\\proj``) count as the same place.
+    """
+    return os.path.normcase(os.path.realpath(path if path is not None else os.getcwd()))
 
 
 class SessionManager:
@@ -69,6 +79,13 @@ class SessionManager:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Remember the directory a session was started in, so `--continue` can find the latest
+        # session for the current project. Older sessions have no directory (NULL).
+        try:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN cwd TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         conn.commit()
         conn.close()
 
@@ -79,8 +96,9 @@ class SessionManager:
         name: str | None = None,
         parent_session_id: str | None = None,
         summary: str | None = None,
+        cwd: str | os.PathLike | None = None,
     ) -> str:
-        """Create a new session and return its ID."""
+        """Create a new session (recording its directory) and return its ID."""
         session_id = str(uuid.uuid4())[:8]
         if not name:
             name = f"Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -89,9 +107,9 @@ class SessionManager:
         cursor = conn.cursor()
 
         cursor.execute(
-            """INSERT INTO sessions (id, name, provider, model, parent_session_id, summary)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (session_id, name, provider, model, parent_session_id, summary),
+            """INSERT INTO sessions (id, name, provider, model, parent_session_id, summary, cwd)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, name, provider, model, parent_session_id, summary, normalize_dir(cwd)),
         )
 
         conn.commit()
@@ -163,9 +181,7 @@ class SessionManager:
         session_info = dict(session_row)
 
         # Get messages
-        cursor.execute(
-            "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at", (session_id,)
-        )
+        cursor.execute("SELECT * FROM messages WHERE session_id = ? ORDER BY id", (session_id,))
         message_rows = cursor.fetchall()
 
         messages = []
@@ -221,26 +237,69 @@ class SessionManager:
         conn.close()
         return chain
 
-    def list_sessions(self, limit: int = 20) -> list[dict]:
-        """List recent sessions."""
+    def list_sessions(
+        self,
+        limit: int = 20,
+        cwd: str | os.PathLike | None = None,
+        include_empty: bool = True,
+    ) -> list[dict]:
+        """List recent sessions, newest first.
+
+        ``cwd`` limits the list to sessions started in that directory; ``include_empty=False``
+        hides sessions with no messages (DevOrch creates one at startup even if nothing is typed).
+        """
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
+        where, params = "", []
+        if cwd is not None:
+            where = "WHERE s.cwd = ?"
+            params.append(normalize_dir(cwd))
+        having = "" if include_empty else "HAVING COUNT(m.id) > 0"
+
         cursor.execute(
-            """SELECT s.*, COUNT(m.id) as message_count
+            f"""SELECT s.*, COUNT(m.id) as message_count
                FROM sessions s
                LEFT JOIN messages m ON s.id = m.session_id
+               {where}
                GROUP BY s.id
-               ORDER BY s.updated_at DESC
+               {having}
+               ORDER BY s.updated_at DESC, COALESCE(MAX(m.id), 0) DESC, s.rowid DESC
                LIMIT ?""",
-            (limit,),
+            (*params, limit),
         )
 
         sessions = [dict(row) for row in cursor.fetchall()]
         conn.close()
 
         return sessions
+
+    def count_sessions(
+        self, cwd: str | os.PathLike | None = None, include_empty: bool = False
+    ) -> int:
+        """How many sessions exist (optionally only those started in ``cwd``)."""
+        return len(self.list_sessions(limit=1_000_000, cwd=cwd, include_empty=include_empty))
+
+    def first_user_message(self, session_id: str, limit: int = 120) -> str:
+        """The first thing the user typed in a session, flattened to one line (a recognisable title)."""
+        conn = sqlite3.connect(DB_PATH)
+        row = conn.execute(
+            "SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY id LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        conn.close()
+        text = " ".join((row[0] if row else "").split())
+        # drop the "Attached context:" block that @mentions append to a prompt
+        text = text.split(" Attached context:")[0]
+        return text if len(text) <= limit else text[: limit - 1] + "…"
+
+    def latest_session_id(self, cwd: str | os.PathLike | None = None) -> str | None:
+        """The most recently used non-empty session started in ``cwd`` (default: this directory)."""
+        found = self.list_sessions(
+            limit=1, cwd=cwd if cwd is not None else os.getcwd(), include_empty=False
+        )
+        return found[0]["id"] if found else None
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a session and its messages."""

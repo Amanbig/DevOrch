@@ -12,6 +12,9 @@ time of this conftest rather than a fixture.
 import os
 import shutil
 import tempfile
+from pathlib import Path
+
+import pytest
 
 _TEST_HOME = tempfile.mkdtemp(prefix="devorch-test-home-")
 
@@ -41,3 +44,14 @@ for _var in (
 
 def pytest_sessionfinish(session, exitstatus):
     shutil.rmtree(_TEST_HOME, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_devorch_home():
+    """Every test starts with an empty ~/.devorch (inside the throwaway home).
+
+    The home is shared for the whole run, so without this, sessions, permissions and settings saved by
+    one test would be visible to the next and tests would depend on their order.
+    """
+    shutil.rmtree(Path(_TEST_HOME) / ".devorch", ignore_errors=True)
+    yield
