@@ -10,6 +10,7 @@ from collections.abc import Callable
 from prompt_toolkit.key_binding import KeyBindings
 
 from core.modes import AgentMode
+from core.pricing import format_cost
 
 PLACEHOLDER = "Ask anything · @file to attach · / for commands · Alt+Enter or Ctrl+J for a new line"
 
@@ -97,6 +98,7 @@ def toolbar_text(
     mode: str,
     tokens: int,
     context_pct: int | None = None,
+    cost: float | None = None,
     mcp_servers: int = 0,
 ) -> str:
     parts = [cwd]
@@ -107,6 +109,8 @@ def toolbar_text(
     parts.append(f"⚡ {tokens:,} tok")
     if context_pct is not None and tokens:
         parts.append(f"ctx {context_pct}%")
+    if cost is not None and tokens:
+        parts.append(f"~{format_cost(cost)}")
     if mcp_servers:
         parts.append(f"MCP: {mcp_servers}")
     parts.append("Shift+Tab: mode")

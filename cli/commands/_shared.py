@@ -17,6 +17,7 @@ from core.mcp import MCPManager
 from core.memory import MemoryTool
 from core.modes import AgentMode, ModeManager
 from core.planner import Planner
+from core.pricing import CostTracker, PriceBook, parse_overrides
 from providers import PROVIDERS, get_provider
 from schemas.message import Message
 from tools.agent import AgentTool
@@ -321,6 +322,7 @@ def build_agent(
     agent_mode: AgentMode,
     project_ctx: str = "",
     project_memory_ctx: str = "",
+    pricing: dict | None = None,
 ) -> "Agent":
     """Construct a configured Agent ready to run.
 
@@ -346,7 +348,8 @@ def build_agent(
     )
 
     # Inject AgentTool now that we have both the provider and the full tool list
-    agent_tool = AgentTool(provider=llm, tools=tools)
+    agent.costs = CostTracker(PriceBook(parse_overrides(pricing)))
+    agent_tool = AgentTool(provider=llm, tools=tools, costs=agent.costs)
     executor.tools[agent_tool.name] = agent_tool
     agent.tools.append(agent_tool)
     planner.update_tools(agent.tools)

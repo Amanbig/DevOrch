@@ -40,14 +40,20 @@ def _emit(obj: dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
-def _usage(agent) -> dict[str, int]:
+def _usage(agent) -> dict[str, Any]:
     stats = agent.context_manager.stats
-    return {
+    usage: dict[str, Any] = {
         "prompt_tokens": stats.prompt_tokens,
         "completion_tokens": stats.completion_tokens,
         "total_tokens": stats.total_tokens,
         "cached_tokens": stats.cached_tokens,
     }
+    costs = getattr(agent, "costs", None)
+    if costs is not None:
+        # Estimate from approximate list prices; null when no used model has a known price
+        usage["cost_usd"] = round(costs.total, 6) if costs.has_priced else None
+        usage["cost_complete"] = costs.has_priced and not costs.has_unpriced
+    return usage
 
 
 def build_result(

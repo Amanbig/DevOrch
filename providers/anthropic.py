@@ -202,6 +202,7 @@ class AnthropicProvider(LLMProvider):
                 completion_tokens=output_tokens,
                 total_tokens=input_tokens + output_tokens,
                 cached_tokens=cache_read,
+                cache_write_tokens=cache_write,
             )
 
         return LLMResponse(

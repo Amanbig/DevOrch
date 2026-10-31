@@ -63,6 +63,7 @@ from core.mcp import MCPManager
 from core.memory import MemoryManager, MemoryTool
 from core.mentions import expand_mentions
 from core.modes import AgentMode, ModeManager
+from core.pricing import CostTracker, PriceBook, format_cost, parse_overrides
 from core.project_context import ProjectContextLoader
 from core.project_memory import ProjectMemoryManager
 from core.sessions import DEFAULT_MESSAGE_LIMIT, SessionManager
@@ -790,7 +791,8 @@ def start_repl(
     agent.stream_output = True  # render replies live as they stream
 
     # Inject AgentTool (needs provider + full tool list, so injected after construction)
-    agent_tool = AgentTool(provider=llm, tools=tools)
+    agent.costs = CostTracker(PriceBook(parse_overrides(settings.pricing)))
+    agent_tool = AgentTool(provider=llm, tools=tools, costs=agent.costs)
     executor.tools[agent_tool.name] = agent_tool
     agent.tools.append(agent_tool)
     planner.update_tools(agent.tools)
@@ -881,6 +883,7 @@ def start_repl(
             mode=mode_manager.mode.value,
             tokens=agent.context_manager.stats.total_tokens,
             context_pct=context_gauge.percent(agent.history),
+            cost=agent.costs.total if agent.costs.has_priced else None,
             mcp_servers=len(mcp_manager.servers),
         )
 
@@ -1200,6 +1203,8 @@ def start_repl(
                     table.add_row("Cached Tokens", f"{stats.cached_tokens:,}")
                     table.add_row("Total Tokens", f"[bold]{stats.total_tokens:,}[/bold]")
                     table.add_row("History Compactions", f"{stats.history_compactions:,}")
+                    if agent.costs.has_priced:
+                        table.add_row("Est. Cost", f"~{format_cost(agent.costs.total)}")
 
                     if agent.last_turn_usage:
                         table.add_row(
@@ -1209,6 +1214,46 @@ def start_repl(
 
                     console.print(table)
                     console.print()
+                    continue
+
+                elif cmd == "cost":
+                    console.print()
+                    if not agent.costs.by_model:
+                        print_info("No model calls yet this session.")
+                        console.print()
+                        continue
+                    table = Table(
+                        title="Estimated Session Cost", border_style="cyan", show_footer=True
+                    )
+                    table.add_column("Model", style="bold white", footer="Total")
+                    table.add_column("Prompt", justify="right")
+                    table.add_column("Cached", justify="right")
+                    table.add_column("Completion", justify="right")
+                    table.add_column(
+                        "Est. cost",
+                        justify="right",
+                        style="cyan",
+                        footer=f"[bold]~{format_cost(agent.costs.total)}[/bold]",
+                    )
+                    for name, m in agent.costs.by_model.items():
+                        table.add_row(
+                            name,
+                            f"{m.prompt_tokens:,}",
+                            f"{m.cached_tokens:,}",
+                            f"{m.completion_tokens:,}",
+                            f"~{format_cost(m.cost)}" if m.priced else "[dim]no price[/dim]",
+                        )
+                    console.print(table)
+                    if agent.costs.has_unpriced:
+                        console.print(
+                            "[dim]  Models marked 'no price' are not in the built-in table, so they "
+                            "are not included in the total.\n  Add them under `pricing:` in "
+                            "~/.devorch/config.yaml (USD per 1M tokens: input, output, "
+                            "cache_read).[/dim]"
+                        )
+                    console.print(
+                        "[dim]  Estimates from approximate list prices; your bill may differ.[/dim]\n"
+                    )
                     continue
 
                 elif cmd == "init":
@@ -1867,6 +1912,7 @@ def start_repl(
                 console.print(f"  [dim]Attached: {', '.join(mentions.attached)}[/dim]")
 
             t0 = time.time()
+            cost_before = agent.costs.total
             executor.checkpoints.begin_turn(user_input)
             result = agent.run(mentions.prompt, max_iterations=15, images=mentions.images)
             elapsed = time.time() - t0
@@ -1882,8 +1928,14 @@ def start_repl(
                     if elapsed > 0.1 and u.completion_tokens
                     else f" | {elapsed:.1f}s"
                 )
+                cost_str = (
+                    f" | ~{format_cost(agent.costs.total - cost_before)}"
+                    f" (session ~{format_cost(agent.costs.total)})"
+                    if agent.costs.has_priced
+                    else ""
+                )
                 console.print(
-                    f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp){tok_sec} | "
+                    f"  [dim]⚡ {u.total_tokens:,} tokens ({u.prompt_tokens:,} prompt, {u.completion_tokens:,} comp){tok_sec}{cost_str} | "
                     f"Session: {agent.context_manager.stats.total_tokens:,} tok[/dim]\n"
                 )
 

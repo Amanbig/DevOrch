@@ -37,6 +37,9 @@ class Settings:
     default_provider: str = "openai"
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
     mcp_servers: dict[str, dict] = field(default_factory=dict)
+    pricing: dict[str, dict] = field(
+        default_factory=dict
+    )  # raw `pricing:` overrides (see core/pricing)
     # Set when per-project settings were applied (see config/project_settings.py)
     project_notices: list[str] = field(default_factory=list)
     project_default_mode: str | None = None
@@ -58,6 +61,8 @@ class Settings:
                 for name, config in data.get("providers", {}).items():
                     settings.providers[name] = ProviderConfig(**config)
                 settings.mcp_servers = data.get("mcp_servers", {})
+                if isinstance(data.get("pricing"), dict):
+                    settings.pricing = data["pricing"]
             except Exception:
                 pass  # Fall back to defaults if config is invalid
 
@@ -224,6 +229,10 @@ def save_config(settings: Settings):
     # Include MCP server config
     if settings.mcp_servers:
         data["mcp_servers"] = settings.mcp_servers
+
+    # Keep user-defined price overrides (otherwise saving would silently drop them)
+    if settings.pricing:
+        data["pricing"] = settings.pricing
 
     with open(CONFIG_FILE, "w") as f:
         yaml.safe_dump(data, f, default_flow_style=False)

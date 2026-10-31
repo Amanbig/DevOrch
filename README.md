@@ -257,6 +257,25 @@ few hundred KB, with no visible loss for the model.
 Tab completes paths after `@`. Mentions only expand when the path exists (emails and handles are left
 alone); binary files are skipped, and large files are truncated.
 
+### Cost Estimates
+
+`/cost` shows the estimated cost of the session per model; the per-turn line, `/tokens`, and the bottom bar show
+it too, and `--output json` adds `usage.cost_usd`. Each call is priced at the model that served it, so switching
+models mid-session stays correct, cached/cache-write tokens use their own rates, and sub-agent calls are included.
+
+Prices are **approximate list prices** and go stale. Models not in the built-in table are never guessed: they show
+`no price` and are left out of the total (local Ollama / LM Studio are free). Add or override prices in
+`~/.devorch/config.yaml` (USD per 1M tokens; the key is matched as a prefix of the model id):
+
+```yaml
+pricing:
+  claude-sonnet-4:
+    input: 3.0
+    output: 15.0
+    cache_read: 0.30     # optional, defaults to the input price
+    cache_write: 3.75    # optional, defaults to the input price
+```
+
 ### Prompt Shortcuts
 
 | Key | Action |
