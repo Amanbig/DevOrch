@@ -46,6 +46,7 @@ from core.agent import Agent
 from core.executor import ToolExecutor
 from core.mcp import MCPManager
 from core.memory import MemoryManager, MemoryTool
+from core.mentions import expand_mentions
 from core.modes import AgentMode, ModeManager
 from core.project_context import ProjectContextLoader
 from core.project_memory import ProjectMemoryManager
@@ -1836,9 +1837,15 @@ def start_repl(
                     print_info("Type /help to see available commands")
                     continue
 
+            mentions = expand_mentions(user_input)
+            for warning in mentions.warnings:
+                print_warning(warning)
+            if mentions.attached:
+                console.print(f"  [dim]Attached: {', '.join(mentions.attached)}[/dim]")
+
             t0 = time.time()
             executor.checkpoints.begin_turn(user_input)
-            result = agent.run(user_input, max_iterations=15)
+            result = agent.run(mentions.prompt, max_iterations=15)
             elapsed = time.time() - t0
             last_response_text = result
             print_response(result)

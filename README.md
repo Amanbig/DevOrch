@@ -211,6 +211,19 @@ The hook gets a JSON payload on stdin (`event`, `tool_name`, `tool_input`, `tool
 Exit `0` to continue; exit `2` to block a `PreToolUse` call (stderr is sent back to the model) or to feed
 stderr back after a `PostToolUse`; any other exit code is a non-blocking warning.
 
+### @file Mentions
+
+Reference files or folders inline and DevOrch attaches their contents to the prompt:
+
+```
+> explain @core/agent.py
+> why does @core/agent.py:100-140 loop?
+> summarize @tools/
+```
+
+Tab completes paths after `@`. Mentions only expand when the path exists (emails and handles are left
+alone); binary files are skipped, and large files are truncated.
+
 ### Checkpoints & Undo
 
 Before the agent modifies a file with `edit` or `filesystem write`, DevOrch snapshots the original.
