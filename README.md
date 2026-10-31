@@ -175,6 +175,13 @@ Background processes that persist across DevOrch restarts:
 > terminal_session stop session_id="swift-fox-a3f2"
 ```
 
+### Checkpoints & Undo
+
+Before the agent modifies a file with `edit` or `filesystem write`, DevOrch snapshots the original.
+`/undo` removes the last turn from the conversation **and restores those files** (files the agent
+created are deleted). `/checkpoints` lists what changed per turn. Changes made through `shell`
+commands are not tracked.
+
 ### MCP (Model Context Protocol)
 
 Extend DevOrch with external tool servers:
@@ -299,7 +306,8 @@ All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`,
 | `/clear` | Clear history (saves accomplishments to project memory) |
 | `/compact` | Summarize and compact conversation history to save tokens |
 | `/save` | Save conversation history to a file |
-| `/undo` | Undo last message and agent turn |
+| `/undo` | Undo last message and agent turn, restoring any files it edited |
+| `/checkpoints` | List files changed by the agent this session, per turn |
 | `/mcp` | Show MCP server status |
 | `/mcp add <name> <cmd> [args]` | Connect a new MCP server mid-session |
 | `/mcp start <name>` | Reconnect a server from config |

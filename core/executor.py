@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from config.permissions import PermissionChoice, PermissionLevel, Permissions, get_permissions
+from core.checkpoints import CheckpointManager
 from tools.base import Tool
 from utils.logger import get_console, print_success, print_warning
 
@@ -47,7 +48,9 @@ class ToolExecutor(Executor):
         require_confirmation: bool = True,
         permissions: Permissions | None = None,
         mode_manager: Optional["ModeManager"] = None,
+        checkpoints: CheckpointManager | None = None,
     ):
+        self.checkpoints = checkpoints or CheckpointManager()
         self.tools = {tool.name: tool for tool in tools}
         self.require_confirmation = require_confirmation
         self.permissions = permissions or get_permissions()
@@ -212,6 +215,9 @@ class ToolExecutor(Executor):
                 if perm_level == PermissionLevel.DENY:
                     print_warning(f"Command blocked (dangerous): {reason or 'denied by policy'}")
                     return f"Error: Command denied - {reason or 'blocked by permission policy'}"
+
+            # Snapshot files before they are modified so the turn can be undone
+            self.checkpoints.before_tool(tool_name, arguments)
 
             # Execute the tool
             result = tool.run(arguments)
