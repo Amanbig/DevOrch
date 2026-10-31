@@ -168,3 +168,23 @@ def test_json_mode_interrupt_reports_error_and_130(capsys):
     data = json.loads(capsys.readouterr().out)
     assert exc.value.exit_code == 130
     assert data["is_error"] is True and data["error"] == "interrupted"
+
+
+def test_ctrl_c_inside_sub_agent_cancels_parent_turn():
+    from tools.agent import AgentTool
+
+    class Interrupting(Scripted):
+        """First call (parent) asks for the sub-agent; the sub-agent's call gets Ctrl+C."""
+
+    prov = Interrupting([tool_resp("agent"), KeyboardInterrupt])
+    slow = Slow()
+    parent_tools: list = [slow]
+    agent_tool = AgentTool(provider=prov, tools=parent_tools)
+    parent_tools.append(agent_tool)
+    agent = make_agent(prov, agent_tool)
+    agent.tools = parent_tools
+    agent.executor.tools[agent_tool.name] = agent_tool
+    agent.run("delegate")
+    assert agent.last_run_interrupted
+    assert roles(agent)[-1] == "assistant" and agent.history[-1].content == INTERRUPTED_NOTE
+    assert prov.script == []  # no further model calls after the interrupt
