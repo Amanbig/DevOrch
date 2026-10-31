@@ -21,10 +21,17 @@ from tools.shell import ShellTool
 from utils import logger
 
 
+def clear(buf: io.StringIO) -> None:
+    """Empty a StringIO. truncate(0) alone keeps the write position, so the next write is padded
+    with NUL characters."""
+    buf.seek(0)
+    buf.truncate(0)
+
+
 @pytest.fixture
 def out(monkeypatch):
     buf = io.StringIO()
-    con = Console(file=buf, width=120, force_terminal=False, color_system=None)
+    con = Console(file=buf, width=2000, force_terminal=False, color_system=None)
     monkeypatch.setattr(rc, "console", con)
     monkeypatch.setattr(logger, "console", con)
     return buf
@@ -49,7 +56,7 @@ def home(tmp_path, monkeypatch):
 def test_permissions_list_is_default(home, out):
     rc.handle_permissions("", Permissions.load())
     assert "Tool Permissions" in out.getvalue() and "shell" in out.getvalue()
-    out.truncate(0)
+    clear(out)
     rc.handle_permissions("list", Permissions.load())
     assert "Tool Permissions" in out.getvalue()
 
@@ -85,7 +92,7 @@ def test_set_level_and_validation(home, out):
 def test_permissions_argument_errors(home, out):
     perms = Permissions.load()
     for arg in ("allow shell", "deny", "set shell", "bogus x", 'allow shell "unterminated'):
-        out.truncate(0)
+        clear(out)
         rc.handle_permissions(arg, perms)
         assert (
             "Usage" in out.getvalue() or "Unknown" in out.getvalue() or "parse" in out.getvalue()
@@ -129,7 +136,7 @@ def test_sessions_show(home, out):
     sm, a, _ = _sessions(home)
     rc.handle_sessions(f"show {a}", sm, None)
     assert "gpt-4o" in out.getvalue()
-    out.truncate(0)
+    clear(out)
     rc.handle_sessions("show nope", sm, None)
     assert "not found" in out.getvalue().lower() or "Error" in out.getvalue()
 
@@ -142,7 +149,7 @@ def test_sessions_delete_rules(home, out):
     assert sm.session_exists(a)
     rc.handle_sessions(f"delete {a}", sm, b, confirm=lambda m: True)
     assert not sm.session_exists(a)
-    out.truncate(0)
+    clear(out)
     rc.handle_sessions("delete nope", sm, b, confirm=lambda m: True)
     assert "not found" in out.getvalue()
 
@@ -150,7 +157,7 @@ def test_sessions_delete_rules(home, out):
 def test_sessions_bad_usage(home, out):
     sm, *_ = _sessions(home)
     for arg in ("show", "delete", "frobnicate"):
-        out.truncate(0)
+        clear(out)
         rc.handle_sessions(arg, sm, None)
         assert "Usage" in out.getvalue(), arg
 
@@ -188,7 +195,7 @@ def test_trust_declined_then_accepted_then_revoked(project, out):
     assert rc.handle_trust(lambda m: True, project) is True and is_trusted(project)
     rc.handle_untrust(project)
     assert not is_trusted(project)
-    out.truncate(0)
+    clear(out)
     rc.handle_untrust(project)
     assert "was not trusted" in out.getvalue()
 
@@ -291,7 +298,9 @@ def test_flag_is_a_boolean_switch_with_help_text():
 def test_every_slash_command_in_the_dropdown_has_a_handler():
     from cli.constants import SLASH_COMMANDS
 
-    source = Path(__file__).resolve().parents[1].joinpath("cli", "main.py").read_text()
+    source = (
+        Path(__file__).resolve().parents[1].joinpath("cli", "main.py").read_text(encoding="utf-8")
+    )
     for cmd in SLASH_COMMANDS:
         name = cmd[1:]
         pattern = rf'"{re.escape(name)}"|"{re.escape(cmd)}"'
