@@ -34,6 +34,7 @@ from cli.prompt_ui import (
     next_mode,
     placeholder_for,
     prompt_continuation,
+    should_clear_screen,
     terminal_columns,
     toolbar_text,
 )
@@ -680,6 +681,8 @@ def start_repl(
 ):
     """Start the interactive REPL session."""
     if show_banner:
+        if should_clear_screen(console.is_terminal):
+            console.clear()  # visible screen only; scrollback stays available
         print_banner()
 
     settings = Settings.load()

@@ -95,9 +95,10 @@ PROMPT_STYLE = Style.from_dict(
         "prompt-mode": "#55aaff bold",
         "prompt-arrow": "#55cc55 bold",
         "placeholder": "#555566 italic",
-        "border-ask": "#4f8fd6",
-        "border-auto": "#d98e3a",
-        "border-plan": "#c9b24a",
+        "border": "#4b5160",
+        "label-ask": "#6a9fd8",
+        "label-auto": "#d98e3a",
+        "label-plan": "#c9b24a",
         "": "#ffffff bold",
         "command": "#66ccff bold",
         "description": "#888888",
@@ -108,8 +109,10 @@ PROMPT_STYLE = Style.from_dict(
         "completion-menu.meta.current": "bg:#334466 #99bbdd",
         "scrollbar.background": "bg:#2a2a3a",
         "scrollbar.button": "bg:#5588bb",
-        "bottom-toolbar": "bg:#0e0e18 #556677",
-        "bottom-toolbar.text": "bg:#0e0e18 #556677",
+        # `noreverse` is needed: prompt_toolkit's default bottom-toolbar style is `reverse`, which
+        # swapped these colours into a bright blue-grey bar with dark text.
+        "bottom-toolbar": "bg:#14141c #7d8494 noreverse",
+        "bottom-toolbar.text": "bg:#14141c #7d8494 noreverse",
     }
 )
 

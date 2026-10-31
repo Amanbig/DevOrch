@@ -54,14 +54,33 @@ def test_top_rule_never_reaches_the_last_column():
         assert len(top) == cols - 1
 
 
-def test_each_mode_has_its_own_label_and_colour():
-    colours = {}
+def _rgb(hex6: str) -> tuple[int, int, int]:
+    return int(hex6[0:2], 16), int(hex6[2:4], 16), int(hex6[4:6], 16)
+
+
+def _is_greyish(hex6: str, tolerance: int = 24) -> bool:
+    r, g, b = _rgb(hex6)
+    return max(r, g, b) - min(r, g, b) <= tolerance
+
+
+def _brightness(hex6: str) -> int:
+    return sum(_rgb(hex6)) // 3
+
+
+def test_border_is_grey_and_only_the_label_carries_the_mode_colour():
+    borders, labels = set(), {}
     for mode in AgentMode:
         screen = render_screen("x", **common(Holder(mode)))
         assert screen.display[0].startswith(f"╭─ {mode.value.upper()} ─")
-        colours[mode] = screen.buffer[0][0].fg  # colour of the "╭"
-    assert len(set(colours.values())) == 3, colours  # visibly different per mode
-    assert all(c != "default" for c in colours.values())
+        borders.add(screen.buffer[0][0].fg)  # the "╭"
+        labels[mode] = screen.buffer[0][3].fg  # first letter of the label
+        rule = screen.buffer[0][20].fg  # a cell in the rule
+        assert rule == screen.buffer[0][0].fg, "rule and corner should share the border colour"
+    # (the virtual terminal is 256-colour, so exact hex values are mapped to the nearest palette entry)
+    assert len(borders) == 1, borders  # one border colour for every mode...
+    assert _is_greyish(borders.pop())  # ...and it is a quiet grey, not blue
+    assert len(set(labels.values())) == 3, labels  # the mode is still told apart by its label
+    assert not any(_is_greyish(c) for c in labels.values()), labels  # labels are coloured
 
 
 def test_multiline_input_keeps_the_gutter_and_alignment():
@@ -72,6 +91,17 @@ def test_multiline_input_keeps_the_gutter_and_alignment():
 def test_wrapped_long_line_keeps_the_gutter():
     lines = render_live("word " * 18, **common(Holder()))
     assert lines[1].startswith("│ > word") and lines[2].startswith("│   ")
+
+
+def test_toolbar_is_a_dark_bar_not_a_bright_reversed_one():
+    # regression: prompt_toolkit's default bottom-toolbar style is `reverse`, which turned the dark
+    # background/grey text into a bright blue-grey bar with dark text
+    screen = render_screen("hello", **common(Holder()))
+    cell = screen.buffer[13][5]
+    assert not cell.reverse
+    assert _brightness(cell.bg) < 60, cell.bg  # dark bar
+    assert 90 < _brightness(cell.fg) < 190, cell.fg  # legible muted text
+    assert _is_greyish(cell.bg, 30)
 
 
 def test_gutter_colour_matches_border_colour():
@@ -120,7 +150,7 @@ def test_tiny_terminal_does_not_crash():
 
 def test_prompt_message_is_plain_formatted_text():
     msg = prompt_message(AgentMode.AUTO, 40)
-    assert [style for style, _ in msg][0] == "class:border-auto"
+    assert [style for style, _ in msg][:2] == ["class:border", "class:label-auto bold"]
     assert "".join(t for _, t in msg).startswith("╭─ AUTO ─")
     assert "".join(t for _, t in msg).endswith("\n│ > ")
 

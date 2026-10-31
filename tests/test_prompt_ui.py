@@ -17,6 +17,7 @@ from cli.prompt_ui import (
     create_prompt_keybindings,
     next_mode,
     placeholder_for,
+    should_clear_screen,
     toolbar_text,
 )
 from core.modes import AgentMode
@@ -215,3 +216,16 @@ def test_toolbar_without_columns_is_unchanged():
 def test_toolbar_hard_clips_as_a_last_resort():
     text = toolbar_text(**LONG, columns=20)
     assert len(text) <= 19 and text.endswith("…")
+
+
+# ── clearing the screen on start ────────────────────────────────────────────
+
+
+def test_clear_screen_only_on_a_real_terminal():
+    assert should_clear_screen(True, env={})
+    assert not should_clear_screen(False, env={})  # piped output / CI must never get escape codes
+
+
+def test_clear_screen_can_be_disabled_with_env():
+    assert not should_clear_screen(True, env={"DEVORCH_NO_CLEAR": "1"})
+    assert should_clear_screen(True, env={"DEVORCH_NO_CLEAR": ""})

@@ -3,6 +3,7 @@
 Kept separate from ``cli/main.py`` so the behaviour can be unit-tested without a terminal.
 """
 
+import os
 import shutil
 import subprocess
 import time
@@ -46,12 +47,20 @@ def next_mode(current: AgentMode) -> AgentMode:
         return MODE_CYCLE[0]
 
 
-# Border/label colour per mode, so the mode is visible at a glance (AUTO runs tools unasked)
-MODE_BORDER_CLASS = {
-    AgentMode.ASK: "class:border-ask",
-    AgentMode.AUTO: "class:border-auto",
-    AgentMode.PLAN: "class:border-plan",
+# The border and gutter are a quiet grey; only the mode *label* is coloured, so the mode (AUTO runs
+# tools unasked) stays visible without a loud coloured frame around the input.
+BORDER_CLASS = "class:border"
+MODE_LABEL_CLASS = {
+    AgentMode.ASK: "class:label-ask",
+    AgentMode.AUTO: "class:label-auto",
+    AgentMode.PLAN: "class:label-plan",
 }
+
+
+def should_clear_screen(is_terminal: bool, env: dict | None = None) -> bool:
+    """Clear the visible screen on start only on a real terminal, unless opted out."""
+    env = os.environ if env is None else env
+    return is_terminal and not env.get("DEVORCH_NO_CLEAR")
 
 
 def terminal_columns(default: int = 80) -> int:
@@ -68,33 +77,32 @@ def terminal_columns(default: int = 80) -> int:
 
 
 def prompt_message(mode: AgentMode, columns: int | None = None) -> list[tuple[str, str]]:
-    """Two-line prompt: a mode-coloured top border with the mode name, then ``│ > ``.
+    """Two-line prompt: a grey top border carrying the coloured mode name, then ``│ > ``.
 
     A full four-sided box is not possible with a normal prompt (the toolbar is pinned to the bottom
     of the terminal, not under the input), so this is an open box with a left gutter that
     ``prompt_continuation`` extends over multi-line and wrapped input.
     """
     cols = columns if columns is not None else terminal_columns()
-    border = MODE_BORDER_CLASS.get(mode, "class:border-ask")
+    label_class = MODE_LABEL_CLASS.get(mode, "class:label-ask")
     label = f" {mode.value.upper()} "
     # one column short of the edge so the rule never wraps onto an extra line
     rule = "─" * max(0, cols - 1 - 2 - len(label))
     return [
-        (border, "╭─"),
-        (f"{border} bold", label),
-        (border, rule + "\n"),
-        (border, "│ "),
+        (BORDER_CLASS, "╭─"),
+        (f"{label_class} bold", label),
+        (BORDER_CLASS, rule + "\n"),
+        (BORDER_CLASS, "│ "),
         ("class:prompt-arrow", "> "),
     ]
 
 
 def prompt_continuation(mode: AgentMode):
     """Factory for prompt_toolkit's ``prompt_continuation``: keep the gutter on every extra line."""
-    border = MODE_BORDER_CLASS.get(mode, "class:border-ask")
 
     def continuation(width: int, line_number: int, wrap_count: int):
         # `width` is the prompt's width (4 for "│ > "); line up under the text after "> "
-        return [(border, "│ "), ("", " " * max(0, width - 2))]
+        return [(BORDER_CLASS, "│ "), ("", " " * max(0, width - 2))]
 
     return continuation
 

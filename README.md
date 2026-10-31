@@ -287,9 +287,13 @@ pricing:
 | `↑` / `Ctrl+R` | Previous prompts / search history |
 | `Ctrl+C` | Cancel the running turn (twice at an idle prompt to exit) |
 
-The input sits in an open box whose border and label are coloured by mode (blue ASK, amber AUTO, yellow PLAN),
-with a gutter that follows multi-line and wrapped input, so the mode that decides whether tools run unasked is always
-visible.
+The input sits in an open box with a quiet grey border and gutter; only the mode label is coloured (blue ASK,
+amber AUTO, yellow PLAN), so the mode that decides whether tools run unasked is always visible without a loud frame.
+The gutter follows multi-line and wrapped input, and the placeholder and bottom bar fit your terminal width (the
+mode, model and token count are never clipped; the path, branch and key hints are dropped first on narrow terminals).
+
+DevOrch clears the visible screen when the interactive REPL starts (your scrollback is kept). Set
+`DEVORCH_NO_CLEAR=1` to turn that off.
 
 The bottom bar shows the directory, git branch, model, mode, session tokens and how full the context window is
 (`ctx 42%` — compaction starts at 100%).
