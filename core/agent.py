@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 from core.context import ContextManager
 from core.executor import Executor
+from core.images import prune_old_images
 from core.loop_detector import LoopDetector, LoopSeverity
 from core.modes import AgentMode, ModeManager
 from core.planner import Planner
@@ -61,6 +62,8 @@ class Agent:
         self.context_manager = context_manager or ContextManager()
         self.loop_detector = loop_detector or LoopDetector()
         self.last_turn_usage: TokenUsage | None = None
+        # Image payloads older than this many image messages are replaced by a text note
+        self.keep_recent_images = 2
         self.history: list[Message] = []
         self._context_summary: str | None = None  # Summary from previous session
 
@@ -425,7 +428,10 @@ class Agent:
                 status_msg = "[bold blue]DevOrch is thinking..."
 
             with console.status(status_msg, spinner="dots"):
-                response = self.provider.generate(planned_messages, tools=tools_for_call)
+                response = self.provider.generate(
+                    prune_old_images(planned_messages, keep=self.keep_recent_images),
+                    tools=tools_for_call,
+                )
 
             # Record token usage
             usage = getattr(response, "usage", None) or extract_token_usage(
