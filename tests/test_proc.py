@@ -70,10 +70,14 @@ def test_keyboard_interrupt_kills_the_child_and_propagates(monkeypatch):
     spawned = []
 
     class InterruptedPopen(subprocess.Popen):
+        """Interrupts only the command under test. The patch is global, so it would otherwise also
+        hit the `taskkill` that run_shell uses for cleanup on Windows (a list, not a string)."""
+
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
-            spawned.append(self)
-            self._first = True
+            self._first = isinstance(a[0], str)
+            if self._first:
+                spawned.append(self)
 
         def communicate(self, *a, **k):
             if self._first:
