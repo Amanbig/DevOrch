@@ -82,11 +82,13 @@ def run_with_output(
     model: str,
     title: str = "DevOrch",
     max_iterations: int = 15,
+    images: list | None = None,
 ) -> None:
     """Run the agent and render the outcome in the requested format."""
+    run_kwargs = {"images": images} if images else {}
     if output == "text":
         try:
-            result = agent.run(prompt, max_iterations=max_iterations)
+            result = agent.run(prompt, max_iterations=max_iterations, **run_kwargs)
             print_panel(result, title=title, border_style="cyan")
         except Exception as e:
             print_error(str(e))
@@ -114,7 +116,7 @@ def run_with_output(
     started = time.time()
     result, error = None, None
     try:
-        result = agent.run(prompt, max_iterations=max_iterations)
+        result = agent.run(prompt, max_iterations=max_iterations, **run_kwargs)
     except Exception as e:
         error = str(e) or e.__class__.__name__
     finally:

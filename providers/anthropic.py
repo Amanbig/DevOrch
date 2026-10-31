@@ -8,6 +8,7 @@ class AnthropicProvider(LLMProvider):
     """Anthropic/Claude provider with tool use support."""
 
     name = "anthropic"
+    supports_images = True
 
     DEFAULT_MODELS = [
         "claude-sonnet-4-20250514",
@@ -64,8 +65,23 @@ class AnthropicProvider(LLMProvider):
                     content = msg.content
                 formatted_messages.append({"role": "assistant", "content": content})
             else:
-                # User messages
-                formatted_messages.append({"role": msg.role, "content": msg.content})
+                # User messages (with optional images)
+                if msg.images:
+                    blocks = [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": img.media_type,
+                                "data": img.data,
+                            },
+                        }
+                        for img in msg.images
+                    ]
+                    blocks.append({"type": "text", "text": msg.content})
+                    formatted_messages.append({"role": msg.role, "content": blocks})
+                else:
+                    formatted_messages.append({"role": msg.role, "content": msg.content})
 
         # Format tools for Anthropic (uses input_schema instead of parameters)
         formatted_tools = None

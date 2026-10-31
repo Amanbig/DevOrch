@@ -13,10 +13,11 @@ from cli.commands._shared import (
 )
 from config.settings import Settings
 from core.memory import MemoryManager
+from core.mentions import expand_mentions
 from core.modes import AgentMode
 from core.project_context import ProjectContextLoader
 from core.skills import SkillManager, render_prompt
-from utils.logger import print_error
+from utils.logger import print_error, print_warning
 
 
 def ask(
@@ -77,6 +78,15 @@ def ask(
         final_prompt = prompt
         console.print(f"[dim]Using {llm.name}/{llm.model}[/dim]")
 
+    mentions = expand_mentions(final_prompt)
+    for warning in mentions.warnings:
+        print_warning(warning)
     run_with_output(
-        agent, final_prompt, output=output, provider=llm.name, model=llm.model, title="DevOrch"
+        agent,
+        mentions.prompt,
+        output=output,
+        provider=llm.name,
+        model=llm.model,
+        title="DevOrch",
+        images=mentions.images,
     )

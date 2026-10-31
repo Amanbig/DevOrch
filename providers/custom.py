@@ -10,7 +10,7 @@ import os
 
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage
+from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -27,6 +27,7 @@ class CustomProvider(LLMProvider):
     """
 
     name = "custom"
+    supports_images = True
 
     DEFAULT_MODELS = []  # User must specify model
 
@@ -112,7 +113,7 @@ class CustomProvider(LLMProvider):
                     "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
-                formatted_msg = {"role": msg.role, "content": msg.content}
+                formatted_msg = {"role": msg.role, "content": openai_user_content(msg)}
             formatted_messages.append(formatted_msg)
 
         # Format tools for OpenAI-compatible API
