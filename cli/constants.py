@@ -93,6 +93,7 @@ PROMPT_STYLE = Style.from_dict(
         "prompt": "#55cc55 bold",
         "prompt-mode": "#55aaff bold",
         "prompt-arrow": "#55cc55 bold",
+        "placeholder": "#555566 italic",
         "": "#ffffff bold",
         "command": "#66ccff bold",
         "description": "#888888",

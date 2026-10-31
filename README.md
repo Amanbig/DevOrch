@@ -257,6 +257,20 @@ few hundred KB, with no visible loss for the model.
 Tab completes paths after `@`. Mentions only expand when the path exists (emails and handles are left
 alone); binary files are skipped, and large files are truncated.
 
+### Prompt Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Send |
+| `Alt+Enter` / `Ctrl+J` | New line (Ctrl+J works in every terminal) |
+| `Shift+Tab` | Cycle mode: ASK → AUTO → PLAN |
+| `Tab` / `/` / `@` | Complete commands, skills and file paths |
+| `↑` / `Ctrl+R` | Previous prompts / search history |
+| `Ctrl+C` | Cancel the running turn (twice at an idle prompt to exit) |
+
+The bottom bar shows the directory, git branch, model, mode, session tokens and how full the context window is
+(`ctx 42%` — compaction starts at 100%).
+
 ### Cancelling a turn
 
 **Ctrl+C** while DevOrch is working cancels just that turn (a running shell command is killed) and keeps
