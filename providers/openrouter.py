@@ -4,10 +4,17 @@ https://openrouter.ai/
 """
 
 import json
+from collections.abc import Callable
 
 import httpx
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
+from providers.base import (
+    LLMProvider,
+    ModelInfo,
+    extract_token_usage,
+    openai_user_content,
+    post_chat,
+)
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -19,6 +26,7 @@ class OpenRouterProvider(LLMProvider):
 
     name = "openrouter"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = [
         "anthropic/claude-sonnet-4",
@@ -104,6 +112,7 @@ class OpenRouterProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Format messages for OpenRouter API
         formatted_messages = []
@@ -152,8 +161,8 @@ class OpenRouterProvider(LLMProvider):
         if formatted_tools:
             payload["tools"] = formatted_tools
 
-        response = self.client.post(
-            f"{self.BASE_URL}/chat/completions", headers=self._get_headers(), json=payload
+        response = post_chat(
+            self.client, f"{self.BASE_URL}/chat/completions", self._get_headers(), payload, on_text
         )
 
         # Handle errors with better messages

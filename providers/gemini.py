@@ -1,4 +1,6 @@
 import base64
+from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
 
 from google import genai
@@ -13,6 +15,7 @@ class GeminiProvider(LLMProvider):
 
     name = "gemini"
     supports_images = True
+    supports_streaming = True
 
     DEFAULT_MODELS = [
         "gemini-2.0-flash",
@@ -53,6 +56,7 @@ class GeminiProvider(LLMProvider):
         messages: list[Message],
         tools: list | None = None,
         stream: bool = False,
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         # Build contents list for the API
         contents = []
@@ -127,9 +131,7 @@ class GeminiProvider(LLMProvider):
 
         # Generate response
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name, contents=contents, config=config
-            )
+            response = self._generate(contents, config, on_text)
         except Exception as e:
             # If tools fail, try without them
             if gemini_tools and "tool" in str(e).lower():
@@ -138,9 +140,7 @@ class GeminiProvider(LLMProvider):
                     if system_instruction
                     else None
                 )
-                response = self.client.models.generate_content(
-                    model=self.model_name, contents=contents, config=config_no_tools
-                )
+                response = self._generate(contents, config_no_tools, on_text)
             else:
                 raise
 
@@ -188,6 +188,29 @@ class GeminiProvider(LLMProvider):
             tool_calls=tool_calls if tool_calls else None,
             raw=response,
             usage=usage,
+        )
+
+    def _generate(self, contents, config, on_text):
+        """generate_content, or its streaming variant merged into one response-shaped object."""
+        if on_text is None:
+            return self.client.models.generate_content(
+                model=self.model_name, contents=contents, config=config
+            )
+        parts: list[Any] = []
+        usage = None
+        for chunk in self.client.models.generate_content_stream(
+            model=self.model_name, contents=contents, config=config
+        ):
+            if getattr(chunk, "usage_metadata", None):
+                usage = chunk.usage_metadata
+            if chunk.candidates and chunk.candidates[0].content:
+                for part in chunk.candidates[0].content.parts or []:
+                    parts.append(part)
+                    if getattr(part, "text", None):
+                        on_text(part.text)
+        return SimpleNamespace(
+            candidates=[SimpleNamespace(content=SimpleNamespace(parts=parts))],
+            usage_metadata=usage,
         )
 
     def _convert_params(self, params: dict[str, Any]) -> dict[str, Any]:
