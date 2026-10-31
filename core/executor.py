@@ -8,6 +8,7 @@ from rich.text import Text
 
 from config.permissions import PermissionChoice, PermissionLevel, Permissions, get_permissions
 from core.checkpoints import CheckpointManager
+from core.hooks import POST_TOOL_USE, PRE_TOOL_USE, HookManager
 from tools.base import Tool
 from utils.logger import get_console, print_success, print_warning
 
@@ -48,8 +49,10 @@ class ToolExecutor(Executor):
         require_confirmation: bool = True,
         permissions: Permissions | None = None,
         mode_manager: Optional["ModeManager"] = None,
+        hooks: HookManager | None = None,
         checkpoints: CheckpointManager | None = None,
     ):
+        self.hooks = hooks or HookManager.load()
         self.checkpoints = checkpoints or CheckpointManager()
         self.tools = {tool.name: tool for tool in tools}
         self.require_confirmation = require_confirmation
@@ -216,12 +219,24 @@ class ToolExecutor(Executor):
                     print_warning(f"Command blocked (dangerous): {reason or 'denied by policy'}")
                     return f"Error: Command denied - {reason or 'blocked by permission policy'}"
 
+            # PreToolUse hooks may veto the call
+            if self.hooks.has_hooks():
+                pre = self.hooks.run(PRE_TOOL_USE, tool_name, arguments)
+                if pre.blocked:
+                    print_warning(f"Blocked by hook: {pre.feedback}")
+                    return f"Error: Blocked by PreToolUse hook - {pre.feedback}"
+
             # Snapshot files before they are modified so the turn can be undone
             self.checkpoints.before_tool(tool_name, arguments)
 
             # Execute the tool
-            result = tool.run(arguments)
-            return str(result)
+            output = str(tool.run(arguments))
+
+            if self.hooks.has_hooks():
+                post = self.hooks.run(POST_TOOL_USE, tool_name, arguments, tool_output=output)
+                if post.feedback:
+                    output += f"\n\n[PostToolUse hook feedback]\n{post.feedback}"
+            return output
 
         except Exception as e:
             return f"Error executing {tool_name}: {str(e)}"

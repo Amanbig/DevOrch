@@ -175,6 +175,26 @@ Background processes that persist across DevOrch restarts:
 > terminal_session stop session_id="swift-fox-a3f2"
 ```
 
+### Hooks
+
+Run your own shell commands before and after any tool call — block risky actions, auto-format, run linters.
+Configure in `~/.devorch/hooks.yaml` (global) or `<project>/.devorch/hooks.yaml`:
+
+```yaml
+hooks:
+  PreToolUse:
+    - matcher: "shell"            # regex on tool name; omit to match all tools
+      command: "./scripts/guard.sh"
+  PostToolUse:
+    - matcher: "edit|filesystem"
+      command: "ruff format ."
+      timeout: 20                 # seconds, default 30
+```
+
+The hook gets a JSON payload on stdin (`event`, `tool_name`, `tool_input`, `tool_output` for post hooks, `cwd`).
+Exit `0` to continue; exit `2` to block a `PreToolUse` call (stderr is sent back to the model) or to feed
+stderr back after a `PostToolUse`; any other exit code is a non-blocking warning.
+
 ### Checkpoints & Undo
 
 Before the agent modifies a file with `edit` or `filesystem write`, DevOrch snapshots the original.
