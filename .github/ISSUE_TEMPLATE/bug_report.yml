@@ -1,0 +1,60 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Remove API keys and other secrets** from anything you paste.
+        For security problems, do not open an issue: see SECURITY.md.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `devorch -p openai`
+        2. Type ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DevOrch version
+      description: Output of `devorch --version` (or `pip show devorch`)
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      placeholder: openai / gpt-4o
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Linux, macOS, Windows, Other]
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12"
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      description: For display or input problems (e.g. iTerm2, Windows Terminal, GNOME Terminal, tmux)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output / logs
+      render: shell
