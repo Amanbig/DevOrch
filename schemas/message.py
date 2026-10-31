@@ -10,12 +10,26 @@ class ToolCall:
 
 
 @dataclass
+class ImageData:
+    """An image attached to a user message (base64-encoded, not persisted to sessions)."""
+
+    media_type: str  # e.g. "image/png"
+    data: str  # base64 without the data: prefix
+    name: str = ""
+
+    @property
+    def data_url(self) -> str:
+        return f"data:{self.media_type};base64,{self.data}"
+
+
+@dataclass
 class Message:
     role: str  # "system" | "user" | "tool" | "assistant"
     content: str
     name: str | None = None
     tool_call_id: str | None = None
     metadata: dict[str, Any] | None = None
+    images: list[ImageData] | None = None
 
 
 @dataclass

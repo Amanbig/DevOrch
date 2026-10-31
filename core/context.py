@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 
 from schemas.message import Message, TokenUsage
 
+# Rough flat cost per attached image (providers bill by size; ~1-1.5k is typical)
+IMAGE_TOKEN_ESTIMATE = 1200
+
 
 def estimate_tokens(text: str) -> int:
     """Heuristic token estimation (~3.8 - 4 characters per token).
@@ -30,6 +33,8 @@ def count_message_tokens(message: Message) -> int:
     tokens = 4  # message envelope framing overhead (role, markers)
     if message.content:
         tokens += estimate_tokens(message.content)
+    if message.images:
+        tokens += IMAGE_TOKEN_ESTIMATE * len(message.images)
     if message.name:
         tokens += estimate_tokens(message.name)
     if message.tool_call_id:

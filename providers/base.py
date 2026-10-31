@@ -5,6 +5,16 @@ from typing import Any
 from schemas.message import LLMResponse, Message, TokenUsage
 
 
+def openai_user_content(msg: Message):
+    """Message content in OpenAI chat format: a plain string, or text + image_url parts."""
+    if not msg.images:
+        return msg.content
+    parts: list[dict[str, Any]] = [{"type": "text", "text": msg.content}]
+    for img in msg.images:
+        parts.append({"type": "image_url", "image_url": {"url": img.data_url}})
+    return parts
+
+
 def extract_token_usage(raw: Any) -> TokenUsage | None:
     """Extract standard TokenUsage from various provider response formats."""
     if not raw:
@@ -111,6 +121,10 @@ class LLMProvider(ABC):
 
     name: str
     model: str
+
+    # True if this provider can send images to the model. Whether a *particular* model
+    # accepts them still depends on the model; unsupported ones return an API error.
+    supports_images: bool = False
 
     # Default models for this provider (can be overridden)
     DEFAULT_MODELS: list[str] = []

@@ -67,3 +67,39 @@ def test_completer_suggests_paths(tmp_path, monkeypatch):
     c = SlashCommandCompleter()
     texts = [x.text for x in c.get_completions(Document("look at @a"), None)]
     assert "alpha.py" in texts and "adir/" in texts
+
+
+# ── image mentions ──────────────────────────────────────────────────────────
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+def test_image_mention_attaches_image_not_text(tmp_path):
+    (tmp_path / "shot.png").write_bytes(PNG)
+    r = expand_mentions("what is wrong in @shot.png ?", tmp_path)
+    assert len(r.images) == 1 and r.images[0].media_type == "image/png"
+    assert r.images[0].name == "shot.png"
+    assert r.attached == ["shot.png (image)"]
+    assert "<file" not in r.prompt and r.prompt == "what is wrong in @shot.png ?"
+
+
+def test_image_type_sniffed_from_bytes(tmp_path):
+    (tmp_path / "actually.png").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 8)  # JPEG bytes
+    r = expand_mentions("@actually.png", tmp_path)
+    assert r.images[0].media_type == "image/jpeg"
+
+
+def test_oversized_image_skipped(tmp_path, monkeypatch):
+    import core.images as images
+
+    monkeypatch.setattr(images, "MAX_IMAGE_BYTES", 10)
+    (tmp_path / "big.png").write_bytes(PNG)
+    r = expand_mentions("@big.png", tmp_path)
+    assert r.images == [] and r.warnings
+
+
+def test_image_and_text_file_together(tmp_path):
+    (tmp_path / "shot.png").write_bytes(PNG)
+    (tmp_path / "a.py").write_text("x = 1")
+    r = expand_mentions("@shot.png and @a.py", tmp_path)
+    assert len(r.images) == 1 and '<file path="a.py">' in r.prompt

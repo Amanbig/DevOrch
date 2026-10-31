@@ -7,7 +7,7 @@ import json
 
 import httpx
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage
+from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -17,6 +17,7 @@ class MistralProvider(LLMProvider):
     """
 
     name = "mistral"
+    supports_images = True
 
     DEFAULT_MODELS = [
         "mistral-large-latest",
@@ -97,7 +98,7 @@ class MistralProvider(LLMProvider):
                     "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
-                formatted_msg = {"role": msg.role, "content": msg.content}
+                formatted_msg = {"role": msg.role, "content": openai_user_content(msg)}
             formatted_messages.append(formatted_msg)
 
         # Format tools

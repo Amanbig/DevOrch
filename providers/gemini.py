@@ -1,3 +1,4 @@
+import base64
 from typing import Any
 
 from google import genai
@@ -11,6 +12,7 @@ class GeminiProvider(LLMProvider):
     """Google Gemini provider with function calling support using the new google.genai SDK."""
 
     name = "gemini"
+    supports_images = True
 
     DEFAULT_MODELS = [
         "gemini-2.0-flash",
@@ -60,9 +62,14 @@ class GeminiProvider(LLMProvider):
             if msg.role == "system":
                 system_instruction = msg.content
             elif msg.role == "user":
-                contents.append(
-                    types.Content(role="user", parts=[types.Part.from_text(text=msg.content)])
-                )
+                parts = [types.Part.from_text(text=msg.content)]
+                for img in msg.images or []:
+                    parts.append(
+                        types.Part.from_bytes(
+                            data=base64.b64decode(img.data), mime_type=img.media_type
+                        )
+                    )
+                contents.append(types.Content(role="user", parts=parts))
             elif msg.role == "assistant":
                 # Check for function call metadata
                 if msg.metadata and msg.metadata.get("function_calls"):

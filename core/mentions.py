@@ -13,6 +13,9 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core.images import is_image_path, load_image
+from schemas.message import ImageData
+
 MAX_CHARS_PER_FILE = 20_000
 MAX_TOTAL_CHARS = 60_000
 MAX_DIR_ENTRIES = 100
@@ -26,6 +29,7 @@ class MentionResult:
     prompt: str
     attached: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    images: list[ImageData] = field(default_factory=list)
 
 
 def _is_binary(data: bytes) -> bool:
@@ -80,6 +84,15 @@ def expand_mentions(text: str, cwd: Path | None = None) -> MentionResult:
         if key in seen:
             continue
         seen.add(key)
+
+        if path.is_file() and is_image_path(path):
+            image, warn = load_image(path)
+            if warn:
+                result.warnings.append(warn)
+            elif image:
+                result.images.append(image)
+                result.attached.append(f"{raw} (image)")
+            continue
 
         label = raw + (f":{start}" + (f"-{end}" if end else "") if start else "")
         if path.is_dir():

@@ -10,12 +10,13 @@ import os
 
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage
+from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
 from schemas.message import LLMResponse, Message, ToolCall
 
 
 class GitHubCopilotProvider(LLMProvider):
     name = "github_copilot"
+    supports_images = True
 
     DEFAULT_MODELS = [
         "gpt-4o",
@@ -127,7 +128,7 @@ class GitHubCopilotProvider(LLMProvider):
                     "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
-                formatted_msg = {"role": msg.role, "content": msg.content}
+                formatted_msg = {"role": msg.role, "content": openai_user_content(msg)}
             formatted_messages.append(formatted_msg)
 
         # Format tools for OpenAI-compatible API

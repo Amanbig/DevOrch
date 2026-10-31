@@ -2,12 +2,13 @@ import json
 
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo
+from providers.base import LLMProvider, ModelInfo, openai_user_content
 from schemas.message import LLMResponse, Message, TokenUsage, ToolCall
 
 
 class OpenAIProvider(LLMProvider):
     name = "openai"
+    supports_images = True
 
     DEFAULT_MODELS = [
         "gpt-4o",
@@ -67,7 +68,7 @@ class OpenAIProvider(LLMProvider):
                     "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
-                formatted_msg = {"role": msg.role, "content": msg.content}
+                formatted_msg = {"role": msg.role, "content": openai_user_content(msg)}
             formatted_messages.append(formatted_msg)
 
         # Format tools for OpenAI

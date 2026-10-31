@@ -3,7 +3,7 @@ import json
 import httpx
 from openai import OpenAI
 
-from providers.base import LLMProvider, ModelInfo, extract_token_usage
+from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_user_content
 from schemas.message import LLMResponse, Message, ToolCall
 
 
@@ -11,6 +11,7 @@ class LocalProvider(LLMProvider):
     """Local LLM provider using Ollama's OpenAI-compatible API."""
 
     name = "local"
+    supports_images = True
 
     # Models known to support function calling well
     TOOL_CAPABLE_MODELS = [
@@ -141,7 +142,7 @@ class LocalProvider(LLMProvider):
                     "tool_calls": msg.metadata["tool_calls"],
                 }
             else:
-                formatted_msg = {"role": msg.role, "content": msg.content}
+                formatted_msg = {"role": msg.role, "content": openai_user_content(msg)}
             formatted_messages.append(formatted_msg)
 
         # Format tools (same as OpenAI)

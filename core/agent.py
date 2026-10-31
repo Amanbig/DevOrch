@@ -8,7 +8,7 @@ from core.modes import AgentMode, ModeManager
 from core.planner import Planner
 from core.sessions import SessionManager
 from providers.base import LLMProvider, extract_token_usage
-from schemas.message import Message, TokenUsage, ToolCall
+from schemas.message import ImageData, Message, TokenUsage, ToolCall
 from utils.logger import get_console, print_info, print_success, print_warning
 
 console = get_console()
@@ -349,7 +349,19 @@ class Agent:
         self.mode_manager.clear_plan()
         return self.run(user_input, max_iterations=15)
 
-    def run(self, user_input: str, max_iterations: int = 15):
+    def run(
+        self,
+        user_input: str,
+        max_iterations: int = 15,
+        images: list[ImageData] | None = None,
+    ):
+        if images and not getattr(self.provider, "supports_images", False):
+            print_warning(
+                f"{self.provider.name} does not support image input here; "
+                f"sending text only ({len(images)} image(s) dropped)."
+            )
+            images = None
+
         is_plan_mode = self.mode_manager.mode == AgentMode.PLAN
 
         # If a plan was shown but not yet approved, handle the user's response first
@@ -362,7 +374,7 @@ class Agent:
         # Check session limit before processing
         self._check_and_handle_session_limit()
 
-        user_message = Message(role="user", content=user_input)
+        user_message = Message(role="user", content=user_input, images=images or None)
         self._save_message(user_message)
 
         # Reset loop detector for this user request

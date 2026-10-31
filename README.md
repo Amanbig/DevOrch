@@ -222,6 +222,18 @@ Reference files or folders inline and DevOrch attaches their contents to the pro
 > summarize @tools/
 ```
 
+Mention an image (`.png`, `.jpg`, `.gif`, `.webp`; up to 5 MB) to send it to the model:
+
+```
+> why does the layout in @screenshots/bug.png look broken?
+> devorch ask "describe @diagram.png"
+```
+
+Images work with OpenAI, Anthropic, Gemini, OpenRouter, Mistral, Groq, Together, GitHub Copilot, Kimi, and
+local/LM Studio/custom endpoints — provided the *model* is vision-capable (otherwise the provider returns an
+error). DeepSeek has no image support here, so images are dropped with a warning. Images stay in the
+current session's context but are not saved to the session database.
+
 Tab completes paths after `@`. Mentions only expand when the path exists (emails and handles are left
 alone); binary files are skipped, and large files are truncated.
 

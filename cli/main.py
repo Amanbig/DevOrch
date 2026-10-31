@@ -1860,7 +1860,7 @@ def start_repl(
 
             t0 = time.time()
             executor.checkpoints.begin_turn(user_input)
-            result = agent.run(mentions.prompt, max_iterations=15)
+            result = agent.run(mentions.prompt, max_iterations=15, images=mentions.images)
             elapsed = time.time() - t0
             last_response_text = result
             print_response(result)
