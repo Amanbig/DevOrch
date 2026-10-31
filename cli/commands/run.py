@@ -4,6 +4,7 @@ import typer
 
 from cli.commands._output import configure_output, run_with_output, validate_format
 from cli.commands._shared import (
+    SKIP_PERMISSIONS_HELP,
     build_agent,
     build_tools,
     console,
@@ -28,6 +29,9 @@ def run(
     ),
     no_mcp: bool = typer.Option(False, "--no-mcp", help="Disable all MCP servers for this run"),
     mcp: list[str] = typer.Option(None, "--mcp", help="Use only these MCP servers (repeatable)"),
+    skip_permissions: bool = typer.Option(
+        False, "--dangerously-skip-permissions", help=SKIP_PERMISSIONS_HELP
+    ),
     output: str = typer.Option(
         "text", "--output", "-o", help="Output format: text, json, stream-json"
     ),
@@ -62,7 +66,7 @@ def run(
     final_prompt = render_prompt(skill_data, extra)
 
     tools = build_tools(settings, no_mcp=no_mcp, mcp_only=mcp or None)
-    agent_mode = resolve_mode(mode)
+    agent_mode = resolve_mode(mode, skip_permissions=skip_permissions)
     memory_ctx = MemoryManager().get_context_prompt()
     project_ctx = ProjectContextLoader().load()
     project_prompt = project_ctx.to_system_prompt_block() if project_ctx else ""

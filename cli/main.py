@@ -10,10 +10,12 @@ from rich.panel import Panel
 from rich.table import Table
 
 from cli.commands._shared import (  # noqa: E402
+    SKIP_PERMISSIONS_HELP,
     SYSTEM_PROMPT,  # noqa: E402, F401 (used by start_repl via SimplePlanner)
     SimplePlanner,
     console,
     create_provider,
+    resolve_mode,
 )
 from cli.commands.ask import ask  # noqa: E402
 from cli.commands.edit import edit  # noqa: E402
@@ -39,18 +41,20 @@ from cli.prompt_ui import (
     toolbar_text,
 )
 from cli.prompt_ui import prompt_message as build_prompt_message
+from cli.repl_commands import (  # noqa: E402
+    handle_hooks,
+    handle_permissions,
+    handle_sessions,
+    handle_trust,
+    handle_untrust,
+    print_session_details,
+    print_sessions_table,
+)
 from config.permissions import (
     PERMISSIONS_FILE,
     PermissionLevel,
     get_permissions,
     reset_permissions,
-)
-from config.project_settings import (
-    HOOKS_REL,
-    find_hooks_root,
-    load_project_settings,
-    trust_root,
-    untrust_project,
 )
 from config.settings import (
     CONFIG_FILE,
@@ -88,7 +92,6 @@ from tools.websearch import WebFetchTool, WebSearchTool
 from utils.logger import (
     print_error,
     print_info,
-    print_panel,
     print_response,
     print_success,
     print_warning,
@@ -678,6 +681,8 @@ def start_repl(
     resume: str | None = None,
     message_limit: int = DEFAULT_MESSAGE_LIMIT,
     show_banner: bool = True,
+    mode: str | None = None,
+    skip_permissions: bool = False,
 ):
     """Start the interactive REPL session."""
     if show_banner:
@@ -767,10 +772,13 @@ def start_repl(
 
     # Create mode manager (shared between agent and executor)
     mode_manager = ModeManager(
-        default_mode=AgentMode(settings.project_default_mode)
-        if settings.project_default_mode
-        else AgentMode.ASK
+        default_mode=resolve_mode(mode, default=AgentMode.ASK, skip_permissions=skip_permissions)
     )
+    if skip_permissions:
+        print_warning(
+            "Permission prompts are skipped (AUTO mode). Dangerous-command blocks and your deny "
+            "rules still apply."
+        )
     for notice in settings.project_notices:
         print_warning(notice)
 
@@ -921,7 +929,7 @@ def start_repl(
                 key_bindings=prompt_kb,
             )
 
-            if user_input.lower() in ("exit", "quit", "q"):
+            if user_input.lower() in ("exit", "quit", "q", "/exit", "/quit"):
                 mcp_manager.stop_all()
                 if agent.history and session_manager.current_session_id:
                     project_memory_manager.update_from_session(
@@ -950,6 +958,8 @@ def start_repl(
                             "/session",
                             "/history",
                             "/tokens",
+                            "/cost",
+                            "/sessions",
                             "/copy",
                             "/paste",
                             "/undo",
@@ -957,6 +967,7 @@ def start_repl(
                             "/clear",
                             "/compact",
                             "/save",
+                            "/exit",
                         ],
                         "Memory": ["/memory", "/remember", "/forget"],
                         "Skills": ["/skills", "/skill"],
@@ -965,6 +976,9 @@ def start_repl(
                             "/tasks",
                             "/config",
                             "/permissions",
+                            "/hooks",
+                            "/trust",
+                            "/untrust",
                             "/mcp",
                             "/status",
                             "/auth",
@@ -977,8 +991,6 @@ def start_repl(
                             desc = SLASH_COMMANDS.get(slash_cmd, "")
                             console.print(f"    [cyan]{slash_cmd:<16}[/cyan] {desc}")
                         console.print()
-
-                    console.print(f"    [cyan]{'exit':<16}[/cyan] Exit DevOrch")
 
                     # Show available skills as shortcuts
                     skill_names = [s["name"] for s in skill_manager.list_skills()]
@@ -1172,20 +1184,36 @@ def start_repl(
                     continue
 
                 elif cmd == "permissions":
-                    perms = get_permissions()
-                    console.print("\n[bold]Tool Permissions:[/bold]")
-                    for tool_name, perm in perms.tools.items():
-                        level_color = {"allow": "green", "deny": "red", "ask": "yellow"}.get(
-                            perm.level.value, "white"
+                    handle_permissions(
+                        cmd_arg,
+                        get_permissions(),
+                        confirm=lambda msg: questionary.confirm(msg, default=False).ask(),
+                    )
+                    continue
+
+                elif cmd == "sessions":
+                    handle_sessions(
+                        cmd_arg,
+                        session_manager,
+                        session_manager.current_session_id,
+                        confirm=lambda msg: questionary.confirm(msg, default=False).ask(),
+                    )
+                    continue
+
+                elif cmd == "hooks":
+                    handle_hooks()
+                    continue
+
+                elif cmd == "trust":
+                    if handle_trust(lambda msg: questionary.confirm(msg, default=False).ask()):
+                        print_info(
+                            "Restart DevOrch for MCP servers, allow rules and hooks to take effect."
                         )
-                        console.print(
-                            f"  {tool_name}: [{level_color}]{perm.level.value}[/{level_color}]"
-                        )
-                    if perms.session_allowed:
-                        console.print(
-                            f"\n[green]Session allowed:[/green] {len(perms.session_allowed)} patterns"
-                        )
-                    console.print()
+                    continue
+
+                elif cmd == "untrust":
+                    handle_untrust()
+                    print_info("Restart DevOrch for this to take effect.")
                     continue
 
                 elif cmd == "compact":
@@ -1999,6 +2027,10 @@ def main_callback(
     provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
     model: str = typer.Option(None, "--model", "-m", help="Model name"),
     resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID"),
+    mode: str = typer.Option(None, "--mode", help="Start in this mode: ask, auto, plan"),
+    skip_permissions: bool = typer.Option(
+        False, "--dangerously-skip-permissions", help=SKIP_PERMISSIONS_HELP
+    ),
 ):
     """
     DevOrch - Your AI Coding Assistant
@@ -2022,7 +2054,13 @@ def main_callback(
         provider = configured_provider
 
     # Start REPL
-    start_repl(provider=provider, model=model, resume=resume)
+    start_repl(
+        provider=provider,
+        model=model,
+        resume=resume,
+        mode=mode,
+        skip_permissions=skip_permissions,
+    )
 
 
 @app.command()
@@ -2032,6 +2070,10 @@ def chat(
     resume: str = typer.Option(None, "--resume", "-r", help="Resume session by ID"),
     message_limit: int = typer.Option(
         DEFAULT_MESSAGE_LIMIT, "--limit", "-l", help="Messages before auto-summarization"
+    ),
+    mode: str = typer.Option(None, "--mode", help="Start in this mode: ask, auto, plan"),
+    skip_permissions: bool = typer.Option(
+        False, "--dangerously-skip-permissions", help=SKIP_PERMISSIONS_HELP
     ),
 ):
     """
@@ -2046,7 +2088,14 @@ def chat(
         settings = Settings.load()
         provider = configured_provider
 
-    start_repl(provider=provider, model=model, resume=resume, message_limit=message_limit)
+    start_repl(
+        provider=provider,
+        model=model,
+        resume=resume,
+        message_limit=message_limit,
+        mode=mode,
+        skip_permissions=skip_permissions,
+    )
 
 
 @app.command()
@@ -2307,35 +2356,8 @@ def sessions_list(
     """
     List recent chat sessions.
     """
-    session_manager = SessionManager()
-    sessions = session_manager.list_sessions(limit=limit)
-
-    if not sessions:
-        print_info("No sessions found.")
-        return
-
-    table = Table(title="Chat Sessions")
-    table.add_column("ID", style="cyan")
-    table.add_column("Name", style="white")
-    table.add_column("Provider", style="green")
-    table.add_column("Model", style="blue")
-    table.add_column("Msgs", justify="right")
-    table.add_column("Parent", style="dim")
-    table.add_column("Updated", style="dim")
-
-    for session in sessions:
-        parent = session.get("parent_session_id") or "-"
-        table.add_row(
-            session["id"],
-            (session["name"] or "-")[:20],
-            session["provider"],
-            session["model"][:15],
-            str(session["message_count"]),
-            parent[:8] if parent != "-" else "-",
-            session["updated_at"][:16],
-        )
-
-    console.print(table)
+    print_sessions_table(SessionManager(), limit)
+    console.print("\n[dim]Resume a session: devorch --resume <id>[/dim]")
 
 
 @sessions_app.command("show")
@@ -2343,27 +2365,8 @@ def sessions_show(session_id: str = typer.Argument(..., help="Session ID to show
     """
     Show details of a specific session.
     """
-    session_manager = SessionManager()
-
-    try:
-        session_info, messages = session_manager.load_session(session_id)
-    except ValueError as e:
-        print_error(str(e))
-        raise typer.Exit(1) from e
-
-    console.print(f"\n[bold]Session: {session_id}[/bold]")
-    console.print(f"Name: {session_info.get('name', '-')}")
-    console.print(f"Provider: {session_info['provider']}")
-    console.print(f"Model: {session_info['model']}")
-    console.print(f"Messages: {len(messages)}")
-
-    if session_info.get("parent_session_id"):
-        console.print(f"Parent: {session_info['parent_session_id']}")
-
-    if session_info.get("summary"):
-        console.print("\n[bold]Context Summary:[/bold]")
-        summary = session_info["summary"]
-        print_panel(summary[:500] + "..." if len(summary) > 500 else summary, border_style="dim")
+    if not print_session_details(SessionManager(), session_id):
+        raise typer.Exit(1)
 
 
 @sessions_app.command("delete")
@@ -2514,39 +2517,13 @@ def permissions_reset(force: bool = typer.Option(False, "--force", "-f", help="S
     print_success("Permissions reset to defaults.")
 
 
-def _project_trust_files() -> list[tuple[Path, Path]]:
-    """(root, file) pairs needing trust for the current project: settings and hooks."""
-    pairs: list[tuple[Path, Path]] = []
-    ps = load_project_settings()
-    if ps is not None:
-        pairs.append((ps.root, ps.path))
-    hooks_root = find_hooks_root()
-    if hooks_root is not None:
-        pairs.append((hooks_root, hooks_root / HOOKS_REL))
-    return pairs
-
-
 @app.command("trust")
 def trust_command():
     """
     Trust this project's .devorch settings and hooks (MCP servers, allow rules, auto mode, hooks).
     """
-    pairs = _project_trust_files()
-    if not pairs:
-        print_warning("No .devorch/settings.yaml or hooks.yaml found here or in a parent folder.")
+    if not handle_trust(lambda msg: questionary.confirm(msg, default=False).ask()):
         raise typer.Exit(1)
-    for _root, path in pairs:
-        console.print(f"[bold]{path}[/bold]")
-        console.print(path.read_text(encoding="utf-8"), markup=False, highlight=False)
-    if not questionary.confirm(
-        "Trust these files? (MCP servers and hooks run programs; allow rules skip prompts)",
-        default=False,
-    ).ask():
-        print_info("Not trusted.")
-        raise typer.Exit(1)
-    for root in dict.fromkeys(root for root, _ in pairs):
-        trust_root(root)
-        print_success(f"Trusted {root}. Re-run `devorch trust` if these files change.")
 
 
 @app.command("untrust")
@@ -2554,12 +2531,7 @@ def untrust_command():
     """
     Revoke trust for this project's .devorch settings and hooks.
     """
-    roots = list(dict.fromkeys(root for root, _ in _project_trust_files())) or [Path.cwd()]
-    for root in roots:
-        if untrust_project(root):
-            print_success(f"Revoked trust for {root}")
-        else:
-            print_info(f"{root} was not trusted.")
+    handle_untrust()
 
 
 @app.command(name="init")

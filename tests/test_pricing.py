@@ -169,14 +169,28 @@ def test_sub_agent_cost_is_shared_with_parent():
     assert agent.costs.total == pytest.approx(12.5)
 
 
-def test_json_output_includes_cost(capsys):
+@pytest.fixture
+def json_mode_console(monkeypatch):
+    """What `ask --output json` does before running: UI output goes elsewhere, keeping stdout pure.
+
+    A StringIO sink (not sys.stderr): pytest's per-phase capture streams are closed by the time the
+    test body runs.
+    """
+    import io
+
+    from utils.logger import get_console
+
+    monkeypatch.setattr(get_console(), "_file", io.StringIO())
+
+
+def test_json_output_includes_cost(capsys, json_mode_console):
     agent = make_agent()
     run_with_output(agent, "hi", output="json", provider="openai", model="gpt-4o")
     usage = json.loads(capsys.readouterr().out)["usage"]
     assert usage["cost_usd"] == pytest.approx(12.5) and usage["cost_complete"] is True
 
 
-def test_json_output_cost_null_for_unpriced_model(capsys):
+def test_json_output_cost_null_for_unpriced_model(capsys, json_mode_console):
     prov = UsageProvider()
     prov.model = "mystery-model"
     agent = make_agent(prov)

@@ -30,6 +30,10 @@ cost estimates, and a much more robust terminal UI.
   OpenAI/DeepSeek/Kimi/Gemini automatic caches keep hitting.
 - **`/cost`** and cost estimates in the per-turn line, `/tokens`, the bottom bar and JSON output; prices are
   approximate and overridable under `pricing:` in `config.yaml`.
+- **More slash commands**, matching the CLI: `/permissions allow|deny|set|reset`, `/sessions`, `/hooks`, `/trust`,
+  `/untrust`, `/exit`.
+- **`--mode` for `devorch` / `devorch chat`, and `--dangerously-skip-permissions`** on every entry point (same as
+  `--mode auto`: no prompts; dangerous-command blocks and deny rules still apply).
 - **Input surface**: open input box with a coloured mode label, `Shift+Tab` mode cycling, `Ctrl+J` newline, a
   width-aware placeholder and bottom bar, context-usage gauge.
 
@@ -42,6 +46,7 @@ cost estimates, and a much more robust terminal UI.
 - The bottom toolbar re-ran `git` on every keystroke; it is now cached.
 - The bottom toolbar rendered as a bright reversed bar, and was clipped on narrow terminals, hiding the mode.
 - Saving config no longer drops a `pricing:` section.
+- The slash-command dropdown vanished when a command was fully typed (`/cost`, `/models`).
 
 ### Changed
 - CI runs on pull requests only.
