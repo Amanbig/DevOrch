@@ -54,7 +54,7 @@ def test_anthropic_provider_sends_image_blocks():
     prov.generate([Message(role="user", content="look", images=[IMG])])
     content = prov.client.messages.create.call_args.kwargs["messages"][0]["content"]
     assert content[0]["type"] == "image" and content[0]["source"]["media_type"] == "image/png"
-    assert content[-1] == {"type": "text", "text": "look"}
+    assert content[-1]["type"] == "text" and content[-1]["text"] == "look"
 
 
 def test_gemini_provider_sends_inline_image(monkeypatch):

@@ -46,6 +46,8 @@ def extract_token_usage(raw: Any) -> TokenUsage | None:
                 input_tokens = input_tokens or 0
                 output_tokens = output_tokens or 0
                 cached = getattr(raw.usage, "cache_read_input_tokens", 0) or 0
+                written = getattr(raw.usage, "cache_creation_input_tokens", 0) or 0
+                input_tokens += cached + written  # Anthropic's input_tokens excludes cache
                 return TokenUsage(
                     prompt_tokens=input_tokens,
                     completion_tokens=output_tokens,
