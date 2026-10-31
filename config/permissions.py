@@ -135,6 +135,17 @@ class Permissions:
                 allowed_patterns=SAFE_COMMANDS.copy(),
                 denied_patterns=DANGEROUS_PATTERNS.copy(),
             ),
+            # Read-only git actions run without prompting; add/commit/branch/switch ask.
+            "git": ToolPermission(
+                level=PermissionLevel.ASK,
+                allowed_patterns=[
+                    "git status*",
+                    "git diff*",
+                    "git log*",
+                    "git show*",
+                    "git branch list*",
+                ],
+            ),
             "filesystem": ToolPermission(level=PermissionLevel.ASK),
             "search": ToolPermission(level=PermissionLevel.ALLOW),  # Search is safe
         }

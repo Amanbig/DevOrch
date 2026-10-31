@@ -21,6 +21,7 @@ from schemas.message import Message
 from tools.agent import AgentTool
 from tools.edit import EditTool
 from tools.filesystem import FilesystemTool
+from tools.git import GitTool
 from tools.grep import GrepTool
 from tools.search import SearchTool
 from tools.shell import ShellTool
@@ -39,6 +40,7 @@ IMPORTANT: You have the following tools available and MUST use them to help the 
    - Run CLI tools: `npm`, `pip`, `uv`, `pytest`, `cargo`, `git`
    - Run project test suites, linters, and compilation scripts
    - Do NOT use shell to inspect directory contents or read files — use `filesystem` instead!
+   - For git, prefer the `git` tool (status, diff, log, show, branch, switch, add, commit).
 
 2. **terminal_session** — The PRIMARY tool for all terminal/process needs:
    - `start` — launch a command in a managed session. Defaults to 'bash' if no command.
@@ -250,6 +252,7 @@ def build_tools(
     """
     tools = [
         ShellTool(),
+        GitTool(),
         FilesystemTool(),
         SearchTool(),
         GrepTool(),
