@@ -28,13 +28,17 @@ from cli.constants import (  # noqa: E402
     print_banner,
 )
 from cli.prompt_ui import (
-    PLACEHOLDER,
     ContextGauge,
     GitBranchCache,
     create_prompt_keybindings,
     next_mode,
+    placeholder_for,
+    prompt_continuation,
+    should_clear_screen,
+    terminal_columns,
     toolbar_text,
 )
+from cli.prompt_ui import prompt_message as build_prompt_message
 from config.permissions import (
     PERMISSIONS_FILE,
     PermissionLevel,
@@ -677,6 +681,8 @@ def start_repl(
 ):
     """Start the interactive REPL session."""
     if show_banner:
+        if should_clear_screen(console.is_terminal):
+            console.clear()  # visible screen only; scrollback stays available
         print_banner()
 
     settings = Settings.load()
@@ -883,15 +889,17 @@ def start_repl(
             mode=mode_manager.mode.value,
             tokens=agent.context_manager.stats.total_tokens,
             context_pct=context_gauge.percent(agent.history),
+            columns=terminal_columns(),
             cost=agent.costs.total if agent.costs.has_priced else None,
             mcp_servers=len(mcp_manager.servers),
         )
 
     def prompt_message():
-        return [
-            ("class:prompt-mode", f"[{mode_manager.mode.value.upper()}] "),
-            ("class:prompt-arrow", "> "),
-        ]
+        return build_prompt_message(mode_manager.mode)
+
+    def prompt_gutter(width, line_number, wrap_count):
+        # looked up per render so the gutter colour follows Shift+Tab mode changes
+        return prompt_continuation(mode_manager.mode)(width, line_number, wrap_count)
 
     history_file = Path.home() / ".devorch" / "history"
     history_file.parent.mkdir(parents=True, exist_ok=True)
@@ -899,14 +907,12 @@ def start_repl(
 
     while True:
         try:
-            # Print a clean separator line above the prompt
-            rule_width = max(console.width - 1, 10)
-            console.print("[dim]─[/dim]" * rule_width, highlight=False)
-
+            console.print()  # breathing room above the input box
             # Use prompt_toolkit with autocomplete, mode badge, and bottom toolbar
             user_input = pt_prompt(
                 prompt_message,
-                placeholder=[("class:placeholder", PLACEHOLDER)],
+                prompt_continuation=prompt_gutter,
+                placeholder=lambda: [("class:placeholder", placeholder_for(terminal_columns()))],
                 completer=completer,
                 complete_while_typing=True,
                 style=PROMPT_STYLE,
