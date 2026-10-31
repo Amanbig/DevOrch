@@ -191,3 +191,19 @@ def test_empty_prompt_is_one_line_and_toolbar_shows_the_mode(cols):
     assert "[ASK]" in lines[-1], "mode clipped off the toolbar"  # the reported bug
     if cols >= 60:
         assert "tok" in lines[-1]
+
+
+def test_dropdown_stays_open_when_the_command_is_fully_typed():
+    # regression: typing `/cos` showed the dropdown but `/cost` hid it
+    for text in ("/cos", "/cost", "/models"):
+        lines = render_live(
+            text,
+            rows=12,
+            wait=0.5,
+            completer=SlashCommandCompleter(),
+            complete_while_typing=True,
+            **common(Holder()),
+        )
+        menu = [line for line in lines[2:] if line.strip()]
+        assert menu, f"dropdown vanished at {text!r}"
+        assert menu[0].strip().startswith(text[1:]), menu
