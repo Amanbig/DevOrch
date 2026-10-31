@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from tools.base import Tool
+from utils.proc import run_shell
 
 
 def normalize_windows_command(command: str) -> str:
@@ -78,16 +79,7 @@ CRITICAL RULES:
             if is_win:
                 exec_cmd = normalize_windows_command(command)
 
-            result = subprocess.run(
-                exec_cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=120,
-                encoding="utf-8",
-                errors="replace",
-            )
+            result = run_shell(exec_cmd, timeout=120, encoding="utf-8", errors="replace")
 
             output = ""
             if result.stdout:
