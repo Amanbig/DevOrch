@@ -195,6 +195,13 @@ The hook gets a JSON payload on stdin (`event`, `tool_name`, `tool_input`, `tool
 Exit `0` to continue; exit `2` to block a `PreToolUse` call (stderr is sent back to the model) or to feed
 stderr back after a `PostToolUse`; any other exit code is a non-blocking warning.
 
+### Checkpoints & Undo
+
+Before the agent modifies a file with `edit` or `filesystem write`, DevOrch snapshots the original.
+`/undo` removes the last turn from the conversation **and restores those files** (files the agent
+created are deleted). `/checkpoints` lists what changed per turn. Changes made through `shell`
+commands are not tracked.
+
 ### MCP (Model Context Protocol)
 
 Extend DevOrch with external tool servers:
@@ -319,7 +326,8 @@ All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`,
 | `/clear` | Clear history (saves accomplishments to project memory) |
 | `/compact` | Summarize and compact conversation history to save tokens |
 | `/save` | Save conversation history to a file |
-| `/undo` | Undo last message and agent turn |
+| `/undo` | Undo last message and agent turn, restoring any files it edited |
+| `/checkpoints` | List files changed by the agent this session, per turn |
 | `/mcp` | Show MCP server status |
 | `/mcp add <name> <cmd> [args]` | Connect a new MCP server mid-session |
 | `/mcp start <name>` | Reconnect a server from config |

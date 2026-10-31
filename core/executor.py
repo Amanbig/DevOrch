@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from config.permissions import PermissionChoice, PermissionLevel, Permissions, get_permissions
+from core.checkpoints import CheckpointManager
 from core.hooks import POST_TOOL_USE, PRE_TOOL_USE, HookManager
 from tools.base import Tool
 from utils.logger import get_console, print_success, print_warning
@@ -49,8 +50,10 @@ class ToolExecutor(Executor):
         permissions: Permissions | None = None,
         mode_manager: Optional["ModeManager"] = None,
         hooks: HookManager | None = None,
+        checkpoints: CheckpointManager | None = None,
     ):
         self.hooks = hooks or HookManager.load()
+        self.checkpoints = checkpoints or CheckpointManager()
         self.tools = {tool.name: tool for tool in tools}
         self.require_confirmation = require_confirmation
         self.permissions = permissions or get_permissions()
@@ -222,6 +225,9 @@ class ToolExecutor(Executor):
                 if pre.blocked:
                     print_warning(f"Blocked by hook: {pre.feedback}")
                     return f"Error: Blocked by PreToolUse hook - {pre.feedback}"
+
+            # Snapshot files before they are modified so the turn can be undone
+            self.checkpoints.before_tool(tool_name, arguments)
 
             # Execute the tool
             output = str(tool.run(arguments))
