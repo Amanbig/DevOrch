@@ -115,8 +115,10 @@ used in the interactive REPL; `ask`, `run` and `--output json` are unchanged.
 With the Anthropic provider, DevOrch marks the tool definitions + system prompt and the conversation so far
 as cacheable. Within a multi-step task each model call re-reads that prefix from Anthropic's cache at roughly
 a tenth of the normal input price instead of paying for it again, and `/tokens` shows the cached portion.
-Prompts below the model's minimum cacheable size (1024–2048 tokens) are simply not cached. OpenAI and
-others cache automatically on their side.
+Prompts below the model's minimum cacheable size (1024–2048 tokens) are simply not cached. The same markers
+are sent for `anthropic/*` models via OpenRouter. OpenAI, DeepSeek, Kimi and Gemini 2.5 cache repeated
+prefixes automatically on their side; DevOrch keeps the start of every request byte-identical (stable system
+prompt, no timestamps, volatile notes last) so those caches hit, and a test guards that.
 
 ### Memory & Project Context
  

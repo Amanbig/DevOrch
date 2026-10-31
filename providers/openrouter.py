@@ -11,6 +11,39 @@ from providers.base import LLMProvider, ModelInfo, extract_token_usage, openai_u
 from schemas.message import LLMResponse, Message, ToolCall
 
 
+def _as_parts(content) -> list | None:
+    """Content as OpenAI-style parts (so a cache marker can be attached), or None if empty."""
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}] if content else None
+    return list(content) if content else None
+
+
+def add_cache_control(formatted_messages: list[dict]) -> None:
+    """Mark cache breakpoints for Anthropic models served through OpenRouter.
+
+    OpenRouter forwards ``cache_control`` on content parts to Anthropic. Two breakpoints, like the
+    native Anthropic provider: the first system message (stable prompt) and the last user/assistant
+    message with real text (the conversation so far). Tool messages and empty text are skipped so
+    the request stays valid. Mutates ``formatted_messages`` in place.
+    """
+
+    def mark(msg: dict) -> bool:
+        parts = _as_parts(msg.get("content"))
+        if not parts or not isinstance(parts[-1], dict) or parts[-1].get("type") != "text":
+            return False
+        parts[-1] = {**parts[-1], "cache_control": {"type": "ephemeral"}}
+        msg["content"] = parts
+        return True
+
+    for msg in formatted_messages:
+        if msg["role"] == "system":
+            mark(msg)
+            break
+    for msg in reversed(formatted_messages):
+        if msg["role"] in ("user", "assistant") and mark(msg):
+            break
+
+
 class OpenRouterProvider(LLMProvider):
     """
     OpenRouter provides access to many models through a single API.
@@ -142,6 +175,9 @@ class OpenRouterProvider(LLMProvider):
                         },
                     }
                 )
+
+        if self.model.startswith("anthropic/"):
+            add_cache_control(formatted_messages)
 
         payload = {
             "model": self.model,
