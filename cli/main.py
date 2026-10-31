@@ -863,6 +863,7 @@ def start_repl(
     current_llm = llm
     current_settings = settings
     last_response_text: str = ""
+    last_ctrl_c = 0.0  # time of the last Ctrl+C at the prompt (press twice to exit)
     prompt_kb = _create_prompt_keybindings()
 
     def get_bottom_toolbar():
@@ -1863,6 +1864,9 @@ def start_repl(
             executor.checkpoints.begin_turn(user_input)
             result = agent.run(mentions.prompt, max_iterations=15, images=mentions.images)
             elapsed = time.time() - t0
+            if agent.last_run_interrupted:
+                console.print(f"\n  [yellow]⏹ {result}[/yellow]\n")
+                continue
             last_response_text = result
             print_response(result)
             if agent.last_turn_usage and agent.last_turn_usage.total_tokens:
@@ -1886,6 +1890,12 @@ def start_repl(
             print_info(f"\nSession saved: {session_manager.current_session_id}")
             break
         except KeyboardInterrupt:
+            # First Ctrl+C at the prompt only warns; a second one within 2s exits.
+            now = time.time()
+            if now - last_ctrl_c > 2.0:
+                last_ctrl_c = now
+                console.print("\n[dim]  Press Ctrl+C again to exit (or type exit).[/dim]")
+                continue
             mcp_manager.stop_all()
             if agent.history and session_manager.current_session_id:
                 project_memory_manager.update_from_session(

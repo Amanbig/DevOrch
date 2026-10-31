@@ -40,6 +40,10 @@ After presenting the plan, ask: "Should I proceed with this plan? (yes/no/modify
 Do NOT execute any tools until the user approves the plan."""
 
 
+INTERRUPTED_MESSAGE = "Interrupted. You can keep going; /undo reverts this turn's file changes."
+INTERRUPTED_NOTE = "[The user interrupted this turn before it finished.]"
+
+
 class Agent:
     def __init__(
         self,
@@ -67,6 +71,7 @@ class Agent:
         self.keep_recent_images = 2
         # Render model text live as it streams (interactive use); off for ask/run/json output
         self.stream_output = False
+        self.last_run_interrupted = False
         self.history: list[Message] = []
         self._context_summary: str | None = None  # Summary from previous session
 
@@ -356,6 +361,54 @@ class Agent:
         return self.run(user_input, max_iterations=15)
 
     def run(
+        self,
+        user_input: str,
+        max_iterations: int = 15,
+        images: list[ImageData] | None = None,
+    ):
+        """Run one user turn. Ctrl+C cancels just this turn: history is repaired so the
+        conversation stays valid, ``last_run_interrupted`` is set, and the session continues."""
+        self.last_run_interrupted = False
+        try:
+            return self._run(user_input, max_iterations, images)
+        except KeyboardInterrupt:
+            self._repair_after_interrupt()
+            self.last_run_interrupted = True
+            return INTERRUPTED_MESSAGE
+
+    def _repair_after_interrupt(self) -> None:
+        """Leave history in a state every provider accepts after a mid-turn cancel.
+
+        Providers require each assistant tool call to be followed by a tool result. If the turn
+        was cancelled part-way through a batch of tool calls, answer the missing ones with an
+        error result, then close the turn with a short assistant note so the next user message
+        starts cleanly. Nothing is deleted, so stored sessions stay consistent with memory.
+        """
+        last_assistant = next(
+            (
+                i
+                for i in range(len(self.history) - 1, -1, -1)
+                if self.history[i].role == "assistant"
+            ),
+            None,
+        )
+        if last_assistant is not None:
+            calls = (self.history[last_assistant].metadata or {}).get("tool_calls") or []
+            answered = sum(1 for m in self.history[last_assistant + 1 :] if m.role == "tool")
+            for call in calls[answered:]:
+                fn = call.get("function", {})
+                self._save_message(
+                    Message(
+                        role="tool",
+                        content="Error: cancelled by the user before this tool finished.",
+                        name=fn.get("name"),
+                        tool_call_id=call.get("id"),
+                    )
+                )
+        if self.history and self.history[-1].role in ("user", "tool"):
+            self._save_message(Message(role="assistant", content=INTERRUPTED_NOTE))
+
+    def _run(
         self,
         user_input: str,
         max_iterations: int = 15,
