@@ -2,7 +2,14 @@
 
 import typer
 
-from cli.commands._shared import build_agent, build_tools, console, create_provider, resolve_mode
+from cli.commands._shared import (
+    build_agent,
+    build_tools,
+    console,
+    create_provider,
+    print_project_notices,
+    resolve_mode,
+)
 from config.settings import Settings
 from core.memory import MemoryManager
 from utils.logger import print_error, print_panel
@@ -27,6 +34,7 @@ def edit(
       devorch edit src/db.py "add indexes" --mcp sqlite
     """
     settings = Settings.load()
+    print_project_notices(settings)
 
     if not provider:
         provider = settings.default_provider

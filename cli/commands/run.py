@@ -3,7 +3,14 @@
 import typer
 
 from cli.commands._output import configure_output, run_with_output, validate_format
-from cli.commands._shared import build_agent, build_tools, console, create_provider, resolve_mode
+from cli.commands._shared import (
+    build_agent,
+    build_tools,
+    console,
+    create_provider,
+    print_project_notices,
+    resolve_mode,
+)
 from config.settings import Settings
 from core.memory import MemoryManager
 from core.project_context import ProjectContextLoader
@@ -16,7 +23,9 @@ def run(
     extra: str = typer.Argument(None, help="Optional extra context appended to the skill prompt"),
     provider: str = typer.Option(None, "--provider", "-p", help="LLM Provider"),
     model: str = typer.Option(None, "--model", "-m", help="Model name"),
-    mode: str = typer.Option("auto", "--mode", help="Execution mode: ask, auto, plan"),
+    mode: str = typer.Option(
+        None, "--mode", help="Execution mode: ask, auto, plan (default: project setting, else auto)"
+    ),
     no_mcp: bool = typer.Option(False, "--no-mcp", help="Disable all MCP servers for this run"),
     mcp: list[str] = typer.Option(None, "--mcp", help="Use only these MCP servers (repeatable)"),
     output: str = typer.Option(
@@ -36,6 +45,7 @@ def run(
     output = validate_format(output)
     configure_output(output)
     settings = Settings.load()
+    print_project_notices(settings)
 
     if not provider:
         provider = settings.default_provider

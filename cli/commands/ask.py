@@ -3,7 +3,14 @@
 import typer
 
 from cli.commands._output import configure_output, run_with_output, validate_format
-from cli.commands._shared import build_agent, build_tools, console, create_provider, resolve_mode
+from cli.commands._shared import (
+    build_agent,
+    build_tools,
+    console,
+    create_provider,
+    print_project_notices,
+    resolve_mode,
+)
 from config.settings import Settings
 from core.memory import MemoryManager
 from core.modes import AgentMode
@@ -41,6 +48,7 @@ def ask(
     output = validate_format(output)
     configure_output(output)
     settings = Settings.load()
+    print_project_notices(settings)
 
     if not provider:
         provider = settings.default_provider
