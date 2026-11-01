@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1
 
 ### Added
 - **`devorch --continue` / `-c`**: continue the latest conversation started in this directory. Sessions now record
