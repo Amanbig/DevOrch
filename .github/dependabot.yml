@@ -9,3 +9,9 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    # one PR for all action bumps: the release workflow's upload/download-artifact versions should
+    # move together, and one PR is one CI run instead of five
+    groups:
+      github-actions:
+        patterns:
+          - "*"
