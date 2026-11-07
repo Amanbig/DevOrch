@@ -7,11 +7,15 @@ from core.context import ContextManager
 from core.executor import Executor
 from core.images import prune_old_images
 from core.loop_detector import LoopDetector, LoopSeverity
+from core.model_limits import ModelLimits
+from core.model_limits import parse_overrides as parse_window_overrides
 from core.modes import AgentMode, ModeManager
 from core.planner import Planner
 from core.pricing import CostTracker
+from core.retry import call_with_retry
+from core.retry import describe as describe_error
 from core.sessions import SessionManager
-from providers.base import LLMProvider, extract_token_usage
+from providers.base import LLMProvider, extract_token_usage, response_was_truncated
 from schemas.message import ImageData, Message, TokenUsage, ToolCall
 from utils.logger import get_console, print_info, print_success, print_warning
 from utils.streaming import StreamRenderer
@@ -63,14 +67,17 @@ class Agent:
         context_manager: ContextManager | None = None,
         loop_detector: LoopDetector | None = None,
     ):
-        self.provider = provider
         self.planner = planner
         self.executor = executor
         self.tools = tools
         self.session_manager = session_manager
         self.on_session_continue = on_session_continue  # Callback when session continues
         self.mode_manager = mode_manager or ModeManager()
+        # A context manager we create ourselves follows the model's context window; one the caller
+        # passed in keeps the budgets it was given.
+        self._auto_budget = context_manager is None
         self.context_manager = context_manager or ContextManager()
+        self.provider = provider
         self.loop_detector = loop_detector or LoopDetector()
         self.last_turn_usage: TokenUsage | None = None
         # Image payloads older than this many image messages are replaced by a text note
@@ -78,10 +85,29 @@ class Agent:
         # Render model text live as it streams (interactive use); off for ask/run/json output
         self.stream_output = False
         self.last_run_interrupted = False
+        self.retry_attempts = 3  # retries after a transient API error (so up to 4 calls)
+        self.retry_base_delay = 1.0
         self.costs = CostTracker()
         self.last_turn_cost: float | None = None
         self.history: list[Message] = []
         self._context_summary: str | None = None  # Summary from previous session
+
+    @property
+    def provider(self) -> LLMProvider:
+        return self._provider
+
+    @provider.setter
+    def provider(self, value: LLMProvider) -> None:
+        """Switching provider or model (``/model``, ``/provider``) also retunes the history budget."""
+        self._provider = value
+        if getattr(self, "_auto_budget", False):
+            self.context_manager.configure_for(value.name, value.model)
+
+    def set_context_overrides(self, raw_windows) -> None:
+        """Apply ``context_windows:`` overrides from config, then retune the budget for this model."""
+        self.context_manager.limits = ModelLimits(parse_window_overrides(raw_windows))
+        if self._auto_budget:
+            self.context_manager.configure_for(self.provider.name, self.provider.model)
 
     def set_history(self, messages: list[Message]):
         """Set the conversation history (used when resuming a session)."""
@@ -101,6 +127,53 @@ class Agent:
         """Display a tool result compactly. The full result always goes to the LLM."""
         for line in result_lines(tool_name, result, elapsed):
             console.print(line)
+
+    def _call_model(self, messages: list[Message], tools: list | None, status_msg: str):
+        """One model call: streamed or not, retried on transient API errors, and checked for truncation."""
+        if self.stream_output and getattr(self.provider, "supports_streaming", False):
+            shown: dict = {"text": "", "renderer": None}
+
+            def attempt():
+                with StreamRenderer(console, status_msg) as renderer:
+                    try:
+                        return self.provider.generate(messages, tools=tools, on_text=renderer.write)
+                    finally:
+                        shown["text"], shown["renderer"] = renderer.text, renderer
+
+            # once text has been shown, a retry would repeat it, so only retry before that
+            response = self._generate_with_retry(attempt, can_retry=lambda: not shown["text"])
+            shown["renderer"].finish(is_final_answer=not response.tool_calls)
+        else:
+
+            def attempt():
+                with console.status(status_msg, spinner="dots"):
+                    return self.provider.generate(messages, tools=tools)
+
+            response = self._generate_with_retry(attempt)
+        self._warn_if_truncated(response)
+        return response
+
+    def _generate_with_retry(self, attempt, can_retry=lambda: True):
+        """Run one model call, retrying rate limits, overloads and dropped connections with backoff."""
+
+        def announce(n, total, delay, exc):
+            print_warning(f"{describe_error(exc)}. Retrying in {delay:.0f}s ({n}/{total})...")
+
+        return call_with_retry(
+            attempt,
+            max_retries=self.retry_attempts,
+            base_delay=self.retry_base_delay,
+            on_retry=announce,
+            can_retry=can_retry,
+        )
+
+    @staticmethod
+    def _warn_if_truncated(response) -> None:
+        if response_was_truncated(getattr(response, "raw", None)):
+            print_warning(
+                "The reply was cut off by the model's output limit. Ask it to continue, or to do "
+                "this in smaller steps."
+            )
 
     @staticmethod
     def _normalize_response_text(response) -> None:
@@ -351,15 +424,7 @@ class Agent:
                 status_msg = "[bold blue]DevOrch is thinking..."
 
             send_messages = prune_old_images(planned_messages, keep=self.keep_recent_images)
-            if self.stream_output and getattr(self.provider, "supports_streaming", False):
-                with StreamRenderer(console, status_msg) as renderer:
-                    response = self.provider.generate(
-                        send_messages, tools=tools_for_call, on_text=renderer.write
-                    )
-                renderer.finish(is_final_answer=not response.tool_calls)
-            else:
-                with console.status(status_msg, spinner="dots"):
-                    response = self.provider.generate(send_messages, tools=tools_for_call)
+            response = self._call_model(send_messages, tools_for_call, status_msg)
 
             self._normalize_response_text(response)
 
@@ -431,6 +496,6 @@ class Agent:
             iteration += 1
 
         return (
-            "Reached maximum turn limit (15 iterations). "
+            f"Reached maximum turn limit ({max_iterations} iterations). "
             "Please review progress so far or provide additional instructions."
         )

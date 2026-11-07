@@ -266,6 +266,26 @@ pricing:
     cache_write: 3.75    # optional, defaults to the input price
 ```
 
+### Model limits, retries and turn limits
+
+- **History budget follows the model.** Older tool output is compacted at 60% of the model's context window (never
+  later than 64k tokens, since every call re-sends the history); a 128k-1M model is no longer squeezed to 16k. Models
+  DevOrch doesn't know keep the conservative 16k, and local servers (Ollama, LM Studio) enforce their own context
+  size, so they are treated as unknown too. The `ctx` gauge in the bottom bar follows the active model. Add or
+  override windows in `~/.devorch/config.yaml` (tokens, matched as a prefix of the model id):
+
+  ```yaml
+  context_windows:
+    my-fine-tune: 32000
+    llama3: 4096          # your Ollama server's num_ctx
+  ```
+- **Output limit.** Anthropic requests use the model's own output limit (up to 64k when streaming, 16k otherwise)
+  instead of a fixed 4096, and you get a warning if a reply was cut off by the limit.
+- **Retries.** Rate limits (429), server errors (5xx), overloads and dropped connections are retried up to 3 times with
+  backoff (honouring `Retry-After`). Nothing is retried once part of the answer has streamed, and auth or bad-request
+  errors fail immediately.
+- **`--max-turns N`** on `ask`, `run` and `edit` sets how many model/tool steps the agent may take (default 15, 15, 10).
+
 ### Continuing and resuming sessions
 
 Every session remembers the directory it was started in. `devorch --continue` (`-c`) reopens the most recent

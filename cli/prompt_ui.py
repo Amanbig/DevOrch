@@ -155,18 +155,25 @@ class GitBranchCache:
 
 
 class ContextGauge:
-    """Context usage as a percentage, recomputed only when the history actually changed."""
+    """Context usage as a percentage, recomputed only when the history or the limit changed.
 
-    def __init__(self, count: Callable[[list], int], limit: int):
+    ``limit`` may be a number or a callable, so the percentage follows a model switch.
+    """
+
+    def __init__(self, count: Callable[[list], int], limit: int | Callable[[], int]):
         self._count = count
-        self._limit = max(1, limit)
+        self._limit = limit
         self._key: tuple | None = None
         self._pct = 0
 
+    def _current_limit(self) -> int:
+        return max(1, self._limit() if callable(self._limit) else self._limit)
+
     def percent(self, history: list) -> int:
-        key = (len(history), id(history[-1]) if history else None)
+        limit = self._current_limit()
+        key = (len(history), id(history[-1]) if history else None, limit)
         if key != self._key:
-            self._pct = min(999, round(100 * self._count(history) / self._limit))
+            self._pct = min(999, round(100 * self._count(history) / limit))
             self._key = key
         return self._pct
 

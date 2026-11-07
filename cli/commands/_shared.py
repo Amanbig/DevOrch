@@ -277,6 +277,7 @@ def build_agent(
     project_ctx: str = "",
     project_memory_ctx: str = "",
     pricing: dict | None = None,
+    context_windows: dict | None = None,
 ) -> "Agent":
     """Construct a configured Agent ready to run.
 
@@ -303,6 +304,7 @@ def build_agent(
 
     # Inject AgentTool now that we have both the provider and the full tool list
     agent.costs = CostTracker(PriceBook(parse_overrides(pricing)))
+    agent.set_context_overrides(context_windows)
     agent_tool = AgentTool(provider=llm, tools=tools, costs=agent.costs)
     executor.tools[agent_tool.name] = agent_tool
     agent.tools.append(agent_tool)

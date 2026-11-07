@@ -32,6 +32,13 @@ def run(
     skip_permissions: bool = typer.Option(
         False, "--dangerously-skip-permissions", help=SKIP_PERMISSIONS_HELP
     ),
+    max_turns: int = typer.Option(
+        None,
+        "--max-turns",
+        min=1,
+        max=200,
+        help="Most model/tool steps before stopping (default 15)",
+    ),
     output: str = typer.Option(
         "text", "--output", "-o", help="Output format: text, json, stream-json"
     ),
@@ -71,7 +78,13 @@ def run(
     project_ctx = ProjectContextLoader().load()
     project_prompt = project_ctx.to_system_prompt_block() if project_ctx else ""
     agent = build_agent(
-        llm, tools, memory_ctx, agent_mode, project_ctx=project_prompt, pricing=settings.pricing
+        llm,
+        tools,
+        memory_ctx,
+        agent_mode,
+        project_ctx=project_prompt,
+        pricing=settings.pricing,
+        context_windows=settings.context_windows,
     )
 
     console.print(f"[dim]Skill: {skill_name} | {llm.name}/{llm.model}[/dim]")
@@ -82,4 +95,5 @@ def run(
         provider=llm.name,
         model=llm.model,
         title=f"DevOrch — {skill_name}",
+        max_iterations=max_turns or 15,
     )
