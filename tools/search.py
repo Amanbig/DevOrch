@@ -15,6 +15,27 @@ class SearchToolSchema(BaseModel):
     include_hidden: bool = Field(default=False, description="Include hidden files/directories.")
 
 
+def strip_directory_prefix(pattern: str, directory: str) -> str | None:
+    """Remove the searched directory's own name from the front of a pattern, or None if absent.
+
+    Patterns are relative to ``directory``, but models often include it anyway, e.g. pattern
+    ``**/cli/commands/*.py`` with directory ``cli``, which can never match. ``**/cli/commands/*.py``
+    becomes ``**/commands/*.py``.
+    """
+    pat = pattern.replace("\\", "/").split("/")
+    dir_parts = [
+        p for p in os.path.normpath(directory).replace("\\", "/").split("/") if p and p != "."
+    ]
+    i = 0
+    while i < len(pat) and pat[i] == "**":
+        i += 1
+    for k in range(min(len(dir_parts), len(pat) - i), 0, -1):
+        if pat[i : i + k] == dir_parts[-k:]:
+            rest = pat[:i] + pat[i + k :]
+            return "/".join(rest) if rest else None
+    return None
+
+
 class SearchTool(Tool):
     name = "search"
     description = """Search for files and directories matching a glob pattern.
@@ -88,6 +109,51 @@ Common patterns:
 
         return filtered
 
+    def _find(
+        self,
+        pattern: str,
+        directory: str,
+        type_filter: str,
+        include_hidden: bool,
+        max_results: int,
+    ) -> tuple[list[str], int]:
+        """Glob ``pattern`` under ``directory``. Returns (filtered matches, total before the cap)."""
+        if pattern.startswith("**/") or "**" in pattern:
+            search_path = os.path.join(directory, pattern)
+        else:
+            search_path = os.path.join(directory, "**", pattern)  # recursive by default
+        matches = glob.glob(search_path, recursive=True)
+        return self._filter_results(matches, type_filter, include_hidden, max_results), len(matches)
+
+    def _nothing_found(self, pattern: str, directory: str) -> str:
+        """An empty result that explains itself, so a model does not decide the folder is empty."""
+        lines = [f"No files found matching: {pattern}"]
+        try:
+            entries = sorted(
+                (
+                    e
+                    for e in os.listdir(directory)
+                    if not e.startswith(".") and e not in self.SKIP_DIRS
+                ),
+                key=lambda e: (not os.path.isdir(os.path.join(directory, e)), e.lower()),
+            )
+        except OSError:
+            entries = []
+        lines.append(
+            f"Patterns are relative to '{directory}' and searched recursively (don't repeat the "
+            f"directory name in the pattern)."
+        )
+        if entries:
+            shown = [
+                e + ("/" if os.path.isdir(os.path.join(directory, e)) else "") for e in entries[:10]
+            ]
+            more = f" ... and {len(entries) - 10} more" if len(entries) > 10 else ""
+            lines.append(f"'{directory}' contains: {', '.join(shown)}{more}")
+            lines.append("Try a broader pattern such as '**/*.py', or list the directory first.")
+        else:
+            lines.append(f"'{directory}' is empty (or only has hidden files).")
+        return "\n".join(lines)
+
     def run(self, arguments: dict[str, Any]) -> Any:
         pattern = arguments.get("pattern")
         directory = arguments.get("directory", ".")
@@ -102,25 +168,28 @@ Common patterns:
             return f"Error: Directory '{directory}' not found."
 
         try:
-            # Handle different pattern formats
-            if pattern.startswith("**/"):
-                search_path = os.path.join(directory, pattern)
-            elif "**" in pattern:
-                search_path = os.path.join(directory, pattern)
-            else:
-                # Search recursively by default
-                search_path = os.path.join(directory, "**", pattern)
-
-            matches = glob.glob(search_path, recursive=True)
-
-            # Filter results
-            filtered = self._filter_results(matches, type_filter, include_hidden, max_results)
+            note = ""
+            filtered, total = self._find(
+                pattern, directory, type_filter, include_hidden, max_results
+            )
 
             if not filtered:
-                return f"No files found matching: {pattern}"
+                stripped = strip_directory_prefix(pattern, directory)
+                if stripped:
+                    filtered, total = self._find(
+                        stripped, directory, type_filter, include_hidden, max_results
+                    )
+                    if filtered:
+                        note = (
+                            f"(Patterns are relative to '{directory}', so I searched for "
+                            f"'{stripped}' instead of '{pattern}'.)\n\n"
+                        )
+
+            if not filtered:
+                return self._nothing_found(pattern, directory)
 
             # Format output with file info
-            output_lines = [f"Found {len(filtered)} result(s):\n"]
+            output_lines = [f"{note}Found {len(filtered)} result(s):\n"]
 
             for match in filtered:
                 # Normalize path
@@ -141,8 +210,8 @@ Common patterns:
                     except Exception:
                         output_lines.append(f"  {'?':>6}  {rel_path}")
 
-            if len(matches) > max_results:
-                output_lines.append(f"\n(Showing {max_results} of {len(matches)} results)")
+            if total > max_results:
+                output_lines.append(f"\n(Showing {max_results} of {total} results)")
 
             return "\n".join(output_lines)
 

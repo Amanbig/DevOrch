@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Every tool result no longer ends with a false "You have already executed this exact command" notice.** The agent
+  recorded each call twice in the loop safeguard, which also blocked the *second* repeat instead of the third and reset
+  the error streak so "3 failures in a row" could never fire. Warnings now reach the model only when they are true.
+- The safeguard's error detection looks at how a result *starts*, so reading a file that mentions `error:` no longer
+  counts as a failure; a command that only printed to stderr does.
+- `search` tolerates the directory name inside the pattern (`**/cli/commands/*.py` in `cli`), and a search that finds
+  nothing now says what the directory contains instead of a bare "No files found", which small models read as
+  "the folder is empty".
+- The placeholder text some providers invent for a reply with no text ("Calling tool...") is no longer saved as the
+  assistant's words (models imitated it), and an empty final answer is reported as such.
+- A blocked-call message containing text like `[/x]` could crash the turn.
+
 ## 0.5.1
 
 ### Added
