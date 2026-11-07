@@ -1,6 +1,34 @@
 # Changelog
 
-## Unreleased
+## 0.5.2
+
+DevOrch behaves better out of the box: a rewritten system prompt, a long-standing loop-safeguard bug fixed, and limits
+that follow the model instead of being fixed for everyone.
+
+### Upgrade notes
+- **Long sessions send larger requests.** History is now compacted at 60% of the model's context window (capped at
+  64k tokens) instead of a fixed 16k, so models with big windows keep more of the conversation. Models DevOrch does
+  not know, and local servers (Ollama, LM Studio, custom), keep the old 16k. Lower it per model with `context_windows:`
+  in `~/.devorch/config.yaml`.
+
+### Changed
+- **System prompt rewritten** (about 870 tokens instead of 1,500). It now separates questions from requests (a
+  question is answered with read-only tools, not acted on), asks before installing packages, creating environments or
+  deleting files, tells the model to verify instead of guessing and to stop repeating failed calls, and asks for short
+  reports. `shell` is for commands that finish and `terminal_session` only for long-running or interactive processes
+  (it no longer opens a GUI terminal to run a test suite). The `terminal_session` tool description and the sub-agent
+  prompt were corrected the same way.
+- **History compaction follows the model's context window** (see upgrade notes); the `ctx` gauge follows `/model`.
+- **Anthropic requests use the model's own output limit** instead of a fixed 4096 tokens, and a reply cut off by the
+  output limit now produces a warning (also for OpenAI-style and Gemini providers).
+
+### Added
+- **Retries with backoff** for rate limits, server errors, overloads and dropped connections (up to 3, honouring
+  `Retry-After`). Nothing is retried once streamed text has been shown, and auth or bad-request errors fail at once.
+- **`--max-turns N`** on `ask`, `run` and `edit`; the stop message now names the real limit.
+- `context_windows:` overrides in `config.yaml`.
+- `scripts/prompt_eval.py` and `docs/PROMPT_EVALUATION.md`: behavioural scenarios for judging a prompt change on a real
+  model.
 
 ### Fixed
 - **Every tool result no longer ends with a false "You have already executed this exact command" notice.** The agent
