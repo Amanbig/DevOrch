@@ -1,12 +1,39 @@
 {
   "name": "devorch-code",
-  "displayName": "Devorch-Code",
-  "description": "This extension connectes the python devorch cli directly to extension",
-  "version": "0.0.1",
+  "displayName": "DevOrch",
+  "description": "Chat with the DevOrch AI coding assistant from VS Code: any model provider, runs in your project, asks before it changes things.",
+  "version": "0.1.0",
+  "publisher": "amanbig",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Amanbig/DevOrch.git",
+    "directory": "vscode-extension"
+  },
+  "homepage": "https://github.com/Amanbig/DevOrch#readme",
+  "bugs": {
+    "url": "https://github.com/Amanbig/DevOrch/issues"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "agent",
+    "llm",
+    "devorch",
+    "cli",
+    "coding"
+  ],
+  "galleryBanner": {
+    "color": "#12121c",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
   "categories": [
+    "AI",
+    "Chat",
     "Other"
   ],
   "activationEvents": [],
