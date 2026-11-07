@@ -29,16 +29,46 @@ DevOrch gives you a coding assistant in your terminal that can execute shell com
 
 ### Install
 
+**Linux and macOS** (no Python needed; the installer sets up an isolated environment and can fetch Python itself):
+
 ```bash
-# Recommended
-pipx install devorch
+curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh
+```
 
-# Or with pip
-pip install devorch
+**Windows** (PowerShell):
 
-# Or from source
+```powershell
+irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1 | iex
+```
+
+The installers use [uv](https://docs.astral.sh/uv/) if you have it, otherwise [pipx](https://pipx.pypa.io), otherwise a
+private virtual environment (needs Python 3.10+), and as a last resort offer to install uv for you. They never use
+`sudo` / administrator rights, print every command they run, and leave your `~/.devorch` config and sessions alone,
+including on uninstall. Run it again any time to upgrade. Read them first if you like:
+[`install.sh`](install.sh), [`install.ps1`](install.ps1).
+
+```bash
+# options (pass them after `sh -s --`)
+curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --version 0.5.2
+curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --dry-run     # show, change nothing
+curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --uninstall
+```
+
+```powershell
+# options (a script block, because `| iex` cannot take parameters)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Version 0.5.2
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Uninstall
+```
+
+Prefer a package manager, or want to install from source?
+
+```bash
+pipx install devorch                       # recommended if you already use pipx
+uv tool install devorch                    # or uv
+pip install devorch                        # into the current environment
+
 git clone https://github.com/Amanbig/DevOrch.git
-cd DevOrch && pip install -e .
+cd DevOrch && pip install -e .             # from source
 ```
 
 ### Run

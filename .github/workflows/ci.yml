@@ -123,3 +123,76 @@ jobs:
           out="$(/tmp/smoke/bin/devorch --version)"
           echo "$out"
           echo "$out" | grep -Eq '^devorch [0-9]+\.[0-9]+\.[0-9]+'
+
+  # Run the real install scripts end to end on the OS they target, against the wheel built above
+  # (--from), so a change that breaks `curl ... | sh` or `irm ... | iex` is caught on the pull request.
+  install-script:
+    name: Install script (${{ matrix.os }})
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the built wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: python-package-smoke
+          path: dist/
+
+      # No uv, pipx or required Python is assumed: the script bootstraps uv, which fetches Python.
+      - name: Install with install.sh, piped into sh like curl | sh
+        run: cat install.sh | sh -s -- --yes --from "$(ls dist/*.whl)"
+
+      - name: Run the installed command
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          out="$(devorch --version)"
+          echo "$out"
+          echo "$out" | grep -Eq '^devorch [0-9]+\.[0-9]+\.[0-9]+'
+
+      - name: Run it again (upgrade) and then uninstall
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          sh install.sh --yes --from "$(ls dist/*.whl)"
+          sh install.sh --uninstall
+          if command -v devorch; then echo "devorch is still installed after --uninstall"; exit 1; fi
+
+  install-script-windows:
+    name: Install script (windows)
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the built wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: python-package-smoke
+          path: dist/
+
+      - name: Install with install.ps1
+        shell: pwsh
+        run: |
+          $wheel = (Get-ChildItem dist/*.whl).FullName
+          ./install.ps1 -Yes -From $wheel
+
+      - name: Run the installed command
+        shell: pwsh
+        run: |
+          $env:PATH = "$HOME\.local\bin;" + $env:PATH
+          $out = devorch --version
+          Write-Host $out
+          if ($out -notmatch '^devorch \d+\.\d+\.\d+') { throw "unexpected version output: $out" }
+
+      - name: Run it again (upgrade) and then uninstall
+        shell: pwsh
+        run: |
+          $env:PATH = "$HOME\.local\bin;" + $env:PATH
+          $wheel = (Get-ChildItem dist/*.whl).FullName
+          ./install.ps1 -Yes -From $wheel
+          ./install.ps1 -Uninstall
+          if (Get-Command devorch -ErrorAction SilentlyContinue) { throw "devorch is still installed after -Uninstall" }
