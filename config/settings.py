@@ -37,6 +37,9 @@ class Settings:
     default_provider: str = "openai"
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
     mcp_servers: dict[str, dict] = field(default_factory=dict)
+    context_windows: dict[str, int] = field(
+        default_factory=dict
+    )  # raw `context_windows:` overrides
     pricing: dict[str, dict] = field(
         default_factory=dict
     )  # raw `pricing:` overrides (see core/pricing)
@@ -63,6 +66,8 @@ class Settings:
                 settings.mcp_servers = data.get("mcp_servers", {})
                 if isinstance(data.get("pricing"), dict):
                     settings.pricing = data["pricing"]
+                if isinstance(data.get("context_windows"), dict):
+                    settings.context_windows = data["context_windows"]
             except Exception:
                 pass  # Fall back to defaults if config is invalid
 
@@ -230,9 +235,11 @@ def save_config(settings: Settings):
     if settings.mcp_servers:
         data["mcp_servers"] = settings.mcp_servers
 
-    # Keep user-defined price overrides (otherwise saving would silently drop them)
+    # Keep user-defined price and context-window overrides (otherwise saving would silently drop them)
     if settings.pricing:
         data["pricing"] = settings.pricing
+    if settings.context_windows:
+        data["context_windows"] = settings.context_windows
 
     with open(CONFIG_FILE, "w") as f:
         yaml.safe_dump(data, f, default_flow_style=False)

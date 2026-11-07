@@ -191,6 +191,37 @@ def openai_user_content(msg: Message):
     return parts
 
 
+def response_was_truncated(raw: Any) -> bool:
+    """Whether the model stopped because it hit the output token limit, not because it was done.
+
+    Handles each provider family's raw response: Anthropic (``stop_reason == "max_tokens"``),
+    OpenAI-style objects and dicts (``finish_reason == "length"``) and Gemini (``MAX_TOKENS``).
+    """
+    if raw is None:
+        return False
+    try:
+        if isinstance(raw, dict):
+            reason = ((raw.get("choices") or [{}])[0] or {}).get("finish_reason")
+            return reason == "length"
+        if getattr(raw, "stop_reason", None) == "max_tokens":
+            return True
+        choices = getattr(raw, "choices", None)
+        if choices:
+            first = choices[0]
+            reason = getattr(first, "finish_reason", None)
+            if reason is None and isinstance(first, dict):
+                reason = first.get("finish_reason")
+            if reason == "length":
+                return True
+        candidates = getattr(raw, "candidates", None)
+        if candidates:
+            reason = getattr(candidates[0], "finish_reason", None)
+            return "MAX_TOKENS" in str(reason).upper()
+    except (IndexError, TypeError, AttributeError):
+        return False
+    return False
+
+
 def extract_token_usage(raw: Any) -> TokenUsage | None:
     """Extract standard TokenUsage from various provider response formats."""
     if not raw:

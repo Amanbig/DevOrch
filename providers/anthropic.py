@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 from anthropic import Anthropic
 
+from core.model_limits import anthropic_max_output
 from providers.base import LLMProvider, ModelInfo
 from schemas.message import LLMResponse, Message, TokenUsage, ToolCall
 
@@ -28,12 +29,15 @@ class AnthropicProvider(LLMProvider):
         model: str = "claude-sonnet-4-20250514",
         api_key: str | None = None,
         prompt_caching: bool = True,
+        max_tokens: int | None = None,
     ):
         self.client = Anthropic(api_key=api_key)
         self.model = model
         # Cache tools + system prompt + conversation prefix. Prompts under the model's minimum
         # (1024-2048 tokens) are simply not cached, so this is safe to leave on.
         self.prompt_caching = prompt_caching
+        # None = the model's own output limit (a hard-coded 4096 cut long file writes short)
+        self.max_tokens = max_tokens
 
     def _system_blocks(self, texts: list[str]) -> list[dict] | str:
         """System prompt as blocks. The first (stable) block is the cache breakpoint.
@@ -144,7 +148,7 @@ class AnthropicProvider(LLMProvider):
         # Build request kwargs
         kwargs = {
             "model": self.model,
-            "max_tokens": 4096,
+            "max_tokens": self.max_tokens or anthropic_max_output(self.model, on_text is not None),
             "messages": formatted_messages,
         }
         if system_texts:

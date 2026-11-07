@@ -27,6 +27,13 @@ def edit(
     skip_permissions: bool = typer.Option(
         False, "--dangerously-skip-permissions", help=SKIP_PERMISSIONS_HELP
     ),
+    max_turns: int = typer.Option(
+        None,
+        "--max-turns",
+        min=1,
+        max=200,
+        help="Most model/tool steps before stopping (default 10)",
+    ),
 ):
     """
     Edit a specific file using an AI instruction.
@@ -48,7 +55,14 @@ def edit(
     tools = build_tools(settings, include_terminal=False, no_mcp=no_mcp, mcp_only=mcp or None)
     agent_mode = resolve_mode(mode, skip_permissions=skip_permissions)
     memory_ctx = MemoryManager().get_context_prompt()
-    agent = build_agent(llm, tools, memory_ctx, agent_mode, pricing=settings.pricing)
+    agent = build_agent(
+        llm,
+        tools,
+        memory_ctx,
+        agent_mode,
+        pricing=settings.pricing,
+        context_windows=settings.context_windows,
+    )
 
     prompt = (
         f"Edit the file `{file}` with the following instruction:\n\n"
@@ -58,7 +72,7 @@ def edit(
 
     console.print(f"[dim]Editing {file} | {llm.name}/{llm.model}[/dim]")
     try:
-        result = agent.run(prompt, max_iterations=10)
+        result = agent.run(prompt, max_iterations=max_turns or 10)
         print_panel(result, title=f"DevOrch — edit {file}", border_style="cyan")
     except Exception as e:
         print_error(str(e))

@@ -824,6 +824,7 @@ def start_repl(
 
     # Inject AgentTool (needs provider + full tool list, so injected after construction)
     agent.costs = CostTracker(PriceBook(parse_overrides(settings.pricing)))
+    agent.set_context_overrides(settings.context_windows)
     agent_tool = AgentTool(provider=llm, tools=tools, costs=agent.costs)
     executor.tools[agent_tool.name] = agent_tool
     agent.tools.append(agent_tool)
@@ -902,8 +903,9 @@ def start_repl(
 
     prompt_kb = create_prompt_keybindings(on_cycle_mode=cycle_mode)
     git_branch = GitBranchCache(_get_git_branch)
+    # the limit is read live: switching model changes the compaction threshold
     context_gauge = ContextGauge(
-        count_history_tokens, agent.context_manager.compact_threshold_tokens
+        count_history_tokens, lambda: agent.context_manager.compact_threshold_tokens
     )
 
     def get_bottom_toolbar():

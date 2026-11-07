@@ -7,6 +7,7 @@ and session-wide token usage tracking.
 import json
 from dataclasses import dataclass, field
 
+from core.model_limits import ModelLimits
 from schemas.message import Message, TokenUsage
 
 # Rough flat cost per attached image (providers bill by size; ~1-1.5k is typical)
@@ -129,6 +130,12 @@ class ContextManager:
         self.compact_threshold_tokens = compact_threshold_tokens
         self.preserve_recent_turns = preserve_recent_turns
         self.stats = SessionTokenStats()
+        self.limits = ModelLimits()
+
+    def configure_for(self, provider: str, model: str) -> int:
+        """Set the compaction threshold from the model's context window. Returns the new threshold."""
+        self.compact_threshold_tokens = self.limits.compact_threshold(provider, model)
+        return self.compact_threshold_tokens
 
     def record_usage(self, usage: TokenUsage | None):
         """Record turn usage in stats."""
