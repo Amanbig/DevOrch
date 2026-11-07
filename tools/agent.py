@@ -28,8 +28,10 @@ from tools.base import Tool
 
 SUB_AGENT_SYSTEM_PROMPT = """You are a focused sub-agent inside DevOrch.
 Your job is to complete ONE specific task using the tools available to you.
-Be direct and efficient. Return a clear, concise result when done.
-Do not ask clarifying questions — infer what you can and proceed."""
+Do only what the task says: do not modify files or run state-changing commands unless the task asks you to.
+Look before you answer and never guess file contents or command output.
+Be direct and efficient. Return a clear, concise result when done: what you found or did, with file paths.
+Do not ask clarifying questions; infer what you can and proceed."""
 
 
 class SubAgentPlanner(Planner):
