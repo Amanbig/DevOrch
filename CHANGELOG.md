@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+- `devorch ask --save-session`, `--resume <id>` and `--continue` keep a conversation going across `ask` runs; the `--output json` / `stream-json` result now includes `session_id`.
+- `devorch sessions list --output json` and `devorch sessions messages <id>` (JSON), for editors and scripts.
+
 ### Changed
 - **DevOrch now installs as a single `devorch` package.** Before, the wheel put seven generic top-level packages
   (`cli`, `config`, `core`, `providers`, `schemas`, `tools`, `utils`) into `site-packages`, where they could clash

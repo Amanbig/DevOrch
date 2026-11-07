@@ -17,6 +17,7 @@ from devorch.core.memory import MemoryManager
 from devorch.core.mentions import expand_mentions
 from devorch.core.modes import AgentMode
 from devorch.core.project_context import ProjectContextLoader
+from devorch.core.sessions import SessionManager
 from devorch.core.skills import SkillManager, render_prompt
 from devorch.utils.logger import print_error, print_warning
 
@@ -33,6 +34,15 @@ def ask(
     mcp: list[str] = typer.Option(None, "--mcp", help="Use only these MCP servers (repeatable)"),
     skip_permissions: bool = typer.Option(
         False, "--dangerously-skip-permissions", help=SKIP_PERMISSIONS_HELP
+    ),
+    resume: str = typer.Option(None, "--resume", "-r", help="Continue this saved session by ID"),
+    continue_session: bool = typer.Option(
+        False, "--continue", "-c", help="Continue the latest session in this directory"
+    ),
+    save_session: bool = typer.Option(
+        False,
+        "--save-session",
+        help="Save this run as a session you can continue (always on with --resume/--continue)",
     ),
     max_turns: int = typer.Option(
         None,
@@ -56,16 +66,39 @@ def ask(
       devorch ask --no-mcp "quick question"
       devorch ask --mcp github --mcp filesystem "..."
       devorch ask --output json "list the TODOs" | jq .result
+      devorch ask --save-session -o json "start here"      (result has a session_id)
+      devorch ask --resume <session_id> "and then?"
+      devorch ask --continue "keep going"
     """
     output = validate_format(output)
     configure_output(output)
     settings = Settings.load()
     print_project_notices(settings)
 
+    sessions = None
+    history, summary = [], None
+    if resume or continue_session or save_session:
+        sessions = SessionManager()
+        sid = resume or (sessions.latest_session_id() if continue_session else None)
+        if continue_session and not resume and sid is None:
+            print_warning("No earlier conversation in this directory; starting a new session.")
+        if sid:
+            try:
+                info, history = sessions.load_session(sid)
+            except ValueError as e:
+                print_error(str(e))
+                raise typer.Exit(1) from e
+            # the saved session's provider and model apply unless this run names its own
+            provider = provider or info["provider"]
+            model = model or info["model"]
+            summary = info.get("summary")
+
     if not provider:
         provider = settings.default_provider
 
     llm = create_provider(provider, model, settings)
+    if sessions is not None and not sessions.current_session_id:
+        sessions.create_session(llm.name, llm.model)
     tools = build_tools(settings, no_mcp=no_mcp, mcp_only=mcp or None)
     agent_mode = resolve_mode(mode, default=AgentMode.AUTO, skip_permissions=skip_permissions)
     memory_ctx = MemoryManager().get_context_prompt()
@@ -80,6 +113,13 @@ def ask(
         pricing=settings.pricing,
         context_windows=settings.context_windows,
     )
+
+    if sessions is not None:
+        agent.session_manager = sessions
+        if history:
+            agent.set_history(history)
+        if summary:
+            agent.set_context_summary(summary)
 
     skill_manager = SkillManager()
     if skill:
