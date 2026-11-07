@@ -2,15 +2,15 @@
 
 import pytest
 
-from cli.constants import PROMPT_STYLE, SlashCommandCompleter
-from cli.prompt_ui import (
+from devorch.cli.constants import PROMPT_STYLE, SlashCommandCompleter
+from devorch.cli.prompt_ui import (
     create_prompt_keybindings,
     placeholder_for,
     prompt_continuation,
     prompt_message,
     toolbar_text,
 )
-from core.modes import AgentMode
+from devorch.core.modes import AgentMode
 from tests._screen import render_live, render_screen
 
 COLS = 50
@@ -135,7 +135,7 @@ def test_toolbar_stays_at_the_bottom():
 
 
 def test_placeholder_shown_when_empty():
-    from cli.prompt_ui import PLACEHOLDER
+    from devorch.cli.prompt_ui import PLACEHOLDER
 
     lines = render_live("", **common(Holder(), placeholder=PLACEHOLDER))
     assert lines[1].startswith("│ > Ask anything")

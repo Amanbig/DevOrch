@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from cli import repl_commands as rc
-from cli.repl_commands import (
+from devorch.cli import repl_commands as rc
+from devorch.cli.repl_commands import (
     ALL_DIRECTORIES,
     PICK_SESSION,
     handle_resume,
@@ -16,9 +16,9 @@ from cli.repl_commands import (
     pick_session,
     resolve_startup_session,
 )
-from core import sessions as sessions_mod
-from core.sessions import SessionManager, normalize_dir
-from schemas.message import Message
+from devorch.core import sessions as sessions_mod
+from devorch.core.sessions import SessionManager, normalize_dir
+from devorch.schemas.message import Message
 
 
 @pytest.fixture
@@ -301,7 +301,7 @@ class FakeAgent:
 @pytest.fixture
 def repl(sm, dirs):
     a, _ = dirs
-    from core.checkpoints import CheckpointManager
+    from devorch.core.checkpoints import CheckpointManager
 
     agent = FakeAgent()
     executor = SimpleNamespace(checkpoints=CheckpointManager())

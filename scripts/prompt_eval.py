@@ -205,8 +205,8 @@ def parse_result(stdout: str) -> dict | None:
 def command_for(prompt: str, provider: str | None, model: str | None) -> list[str]:
     cmd = [
         sys.executable,
-        "-c",
-        "from cli.main import main; main()",
+        "-m",
+        "devorch",
         "ask",
         "--output",
         "json",

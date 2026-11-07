@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.modes import AgentMode, ExecutionPlan, ModeManager, PlanStep
-from core.tasks import TaskManager, reset_task_manager
-from schemas.message import Message
-from schemas.task import TaskStatus
+from devorch.core.modes import AgentMode, ExecutionPlan, ModeManager, PlanStep
+from devorch.core.tasks import TaskManager, reset_task_manager
+from devorch.schemas.message import Message
+from devorch.schemas.task import TaskStatus
 
 
 class TestAgentMode:
@@ -336,7 +336,7 @@ class TestSessionManager:
     @pytest.fixture
     def temp_db(self):
         """Create a temporary database."""
-        from core.sessions import DB_PATH
+        from devorch.core.sessions import DB_PATH
 
         # Save original path (used for reference)
         _ = DB_PATH
@@ -346,17 +346,17 @@ class TestSessionManager:
             temp_path = Path(tmpdir) / "test_sessions.db"
 
             # Patch the DB_PATH
-            with patch("core.sessions.DB_PATH", temp_path):
-                with patch("core.sessions.DATA_DIR", Path(tmpdir)):
+            with patch("devorch.core.sessions.DB_PATH", temp_path):
+                with patch("devorch.core.sessions.DATA_DIR", Path(tmpdir)):
                     yield temp_path
 
     @pytest.fixture
     def manager(self, temp_db):
         """Create a session manager with temp database."""
-        from core.sessions import SessionManager
+        from devorch.core.sessions import SessionManager
 
-        with patch("core.sessions.DB_PATH", temp_db):
-            with patch("core.sessions.DATA_DIR", temp_db.parent):
+        with patch("devorch.core.sessions.DB_PATH", temp_db):
+            with patch("devorch.core.sessions.DATA_DIR", temp_db.parent):
                 manager = SessionManager()
                 yield manager
 
@@ -498,7 +498,7 @@ class TestSimplePlanner:
     """Tests for SimplePlanner prompt construction and environment context."""
 
     def test_planner_injects_environment_context(self):
-        from cli.commands._shared import SimplePlanner
+        from devorch.cli.commands._shared import SimplePlanner
 
         planner = SimplePlanner()
         messages = planner.plan([])

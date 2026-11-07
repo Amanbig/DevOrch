@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from core.project_context import ProjectContextLoader
+from devorch.core.project_context import ProjectContextLoader
 
 
 class TestProjectContextLoader:

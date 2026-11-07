@@ -5,13 +5,13 @@ import json
 import pytest
 import typer
 
-from cli.commands._output import run_with_output
-from core.agent import INTERRUPTED_MESSAGE, INTERRUPTED_NOTE, Agent
-from core.executor import ToolExecutor
-from core.modes import AgentMode, ModeManager
-from core.planner import Planner
-from schemas.message import LLMResponse, Message, ToolCall
-from tools.base import Tool
+from devorch.cli.commands._output import run_with_output
+from devorch.core.agent import INTERRUPTED_MESSAGE, INTERRUPTED_NOTE, Agent
+from devorch.core.executor import ToolExecutor
+from devorch.core.modes import AgentMode, ModeManager
+from devorch.core.planner import Planner
+from devorch.schemas.message import LLMResponse, Message, ToolCall
+from devorch.tools.base import Tool
 
 
 class Slow(Tool):
@@ -143,7 +143,7 @@ class FakeAgent:
         self.executor = ToolExecutor([], require_confirmation=False)
         self.interrupted = interrupted
         self.last_run_interrupted = False
-        from core.context import ContextManager
+        from devorch.core.context import ContextManager
 
         self.context_manager = ContextManager()
 
@@ -171,7 +171,7 @@ def test_json_mode_interrupt_reports_error_and_130(capsys):
 
 
 def test_ctrl_c_inside_sub_agent_cancels_parent_turn():
-    from tools.agent import AgentTool
+    from devorch.tools.agent import AgentTool
 
     class Interrupting(Scripted):
         """First call (parent) asks for the sub-agent; the sub-agent's call gets Ctrl+C."""

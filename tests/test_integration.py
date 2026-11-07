@@ -7,15 +7,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from config.permissions import PermissionLevel, Permissions
-from core.executor import ToolExecutor
-from core.modes import AgentMode, ModeManager
-from core.tasks import reset_task_manager
-from tools.edit import EditTool
-from tools.filesystem import FilesystemTool
-from tools.grep import GrepTool
-from tools.search import SearchTool
-from tools.task import TaskTool
+from devorch.config.permissions import PermissionLevel, Permissions
+from devorch.core.executor import ToolExecutor
+from devorch.core.modes import AgentMode, ModeManager
+from devorch.core.tasks import reset_task_manager
+from devorch.tools.edit import EditTool
+from devorch.tools.filesystem import FilesystemTool
+from devorch.tools.grep import GrepTool
+from devorch.tools.search import SearchTool
+from devorch.tools.task import TaskTool
 
 
 class TestToolExecutorIntegration:

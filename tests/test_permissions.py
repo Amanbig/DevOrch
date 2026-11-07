@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from config.permissions import (
+from devorch.config.permissions import (
     DANGEROUS_PATTERNS,
     SAFE_COMMANDS,
     PermissionChoice,
@@ -75,8 +75,8 @@ class TestPermissions:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_dir = Path(tmpdir)
             permissions_file = config_dir / "permissions.yaml"
-            with patch("config.permissions.CONFIG_DIR", config_dir):
-                with patch("config.permissions.PERMISSIONS_FILE", permissions_file):
+            with patch("devorch.config.permissions.CONFIG_DIR", config_dir):
+                with patch("devorch.config.permissions.PERMISSIONS_FILE", permissions_file):
                     yield config_dir
 
     def test_default_permissions(self, permissions):
@@ -162,8 +162,10 @@ class TestPermissions:
 
     def test_add_allowed_pattern_persistent(self, permissions, temp_config_dir):
         """Test adding persistent allowed pattern."""
-        with patch("config.permissions.CONFIG_DIR", temp_config_dir):
-            with patch("config.permissions.PERMISSIONS_FILE", temp_config_dir / "permissions.yaml"):
+        with patch("devorch.config.permissions.CONFIG_DIR", temp_config_dir):
+            with patch(
+                "devorch.config.permissions.PERMISSIONS_FILE", temp_config_dir / "permissions.yaml"
+            ):
                 permissions.add_allowed_pattern("shell", "my_safe_cmd*", session_only=False)
 
         assert "my_safe_cmd*" in permissions.tools["shell"].allowed_patterns
@@ -176,16 +178,20 @@ class TestPermissions:
 
     def test_add_denied_pattern_persistent(self, permissions, temp_config_dir):
         """Test adding persistent denied pattern."""
-        with patch("config.permissions.CONFIG_DIR", temp_config_dir):
-            with patch("config.permissions.PERMISSIONS_FILE", temp_config_dir / "permissions.yaml"):
+        with patch("devorch.config.permissions.CONFIG_DIR", temp_config_dir):
+            with patch(
+                "devorch.config.permissions.PERMISSIONS_FILE", temp_config_dir / "permissions.yaml"
+            ):
                 permissions.add_denied_pattern("shell", "dangerous_cmd*", session_only=False)
 
         assert "dangerous_cmd*" in permissions.tools["shell"].denied_patterns
 
     def test_set_tool_permission(self, permissions, temp_config_dir):
         """Test setting tool permission level."""
-        with patch("config.permissions.CONFIG_DIR", temp_config_dir):
-            with patch("config.permissions.PERMISSIONS_FILE", temp_config_dir / "permissions.yaml"):
+        with patch("devorch.config.permissions.CONFIG_DIR", temp_config_dir):
+            with patch(
+                "devorch.config.permissions.PERMISSIONS_FILE", temp_config_dir / "permissions.yaml"
+            ):
                 permissions.set_tool_permission("filesystem", PermissionLevel.ALLOW)
 
         assert permissions.tools["filesystem"].level == PermissionLevel.ALLOW
@@ -202,8 +208,10 @@ class TestPermissions:
 
     def test_load_saves_roundtrip(self, temp_config_dir):
         """Test loading and saving permissions."""
-        with patch("config.permissions.CONFIG_DIR", temp_config_dir):
-            with patch("config.permissions.PERMISSIONS_FILE", temp_config_dir / "permissions.yaml"):
+        with patch("devorch.config.permissions.CONFIG_DIR", temp_config_dir):
+            with patch(
+                "devorch.config.permissions.PERMISSIONS_FILE", temp_config_dir / "permissions.yaml"
+            ):
                 # Create and save
                 perms = Permissions.load()
                 perms.add_allowed_pattern("shell", "custom_pattern*", session_only=False)

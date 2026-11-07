@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from config.permissions import PermissionLevel, Permissions
-from tools.git import GitTool, describe
+from devorch.config.permissions import PermissionLevel, Permissions
+from devorch.tools.git import GitTool, describe
 
 
 @pytest.fixture

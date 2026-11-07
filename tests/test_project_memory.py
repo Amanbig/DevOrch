@@ -3,11 +3,11 @@
 import tempfile
 from pathlib import Path
 
-from core.project_memory import (
+from devorch.core.project_memory import (
     ProjectMemoryManager,
     get_project_id,
 )
-from schemas.message import Message
+from devorch.schemas.message import Message
 
 
 class TestProjectMemoryId:

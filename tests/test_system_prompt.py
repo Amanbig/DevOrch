@@ -7,18 +7,18 @@ questions, references to tools that do not exist, and bloat.
 
 import re
 
-from cli.commands._shared import SYSTEM_PROMPT, SimplePlanner
-from core.memory import MemoryTool
-from tools.agent import SUB_AGENT_SYSTEM_PROMPT, AgentTool
-from tools.edit import EditTool
-from tools.filesystem import FilesystemTool
-from tools.git import GitTool
-from tools.grep import GrepTool
-from tools.search import SearchTool
-from tools.shell import ShellTool
-from tools.task import TaskTool
-from tools.terminal_session import TerminalSessionTool
-from tools.websearch import WebFetchTool, WebSearchTool
+from devorch.cli.commands._shared import SYSTEM_PROMPT, SimplePlanner
+from devorch.core.memory import MemoryTool
+from devorch.tools.agent import SUB_AGENT_SYSTEM_PROMPT, AgentTool
+from devorch.tools.edit import EditTool
+from devorch.tools.filesystem import FilesystemTool
+from devorch.tools.git import GitTool
+from devorch.tools.grep import GrepTool
+from devorch.tools.search import SearchTool
+from devorch.tools.shell import ShellTool
+from devorch.tools.task import TaskTool
+from devorch.tools.terminal_session import TerminalSessionTool
+from devorch.tools.websearch import WebFetchTool, WebSearchTool
 
 TOOLS = [
     ShellTool,

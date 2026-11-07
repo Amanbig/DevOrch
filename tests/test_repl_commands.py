@@ -8,17 +8,17 @@ import pytest
 import typer
 from rich.console import Console
 
-from cli import repl_commands as rc
-from cli.commands._shared import resolve_mode
-from config import permissions as perm_mod
-from config.permissions import PermissionLevel, Permissions
-from config.project_settings import is_trusted
-from core import sessions as sessions_mod
-from core.executor import ToolExecutor
-from core.modes import AgentMode, ModeManager
-from core.sessions import SessionManager
-from tools.shell import ShellTool
-from utils import logger
+from devorch.cli import repl_commands as rc
+from devorch.cli.commands._shared import resolve_mode
+from devorch.config import permissions as perm_mod
+from devorch.config.permissions import PermissionLevel, Permissions
+from devorch.config.project_settings import is_trusted
+from devorch.core import sessions as sessions_mod
+from devorch.core.executor import ToolExecutor
+from devorch.core.modes import AgentMode, ModeManager
+from devorch.core.sessions import SessionManager
+from devorch.tools.shell import ShellTool
+from devorch.utils import logger
 
 
 def clear(buf: io.StringIO) -> None:
@@ -268,7 +268,7 @@ def test_flag_is_available_on_every_entry_point():
     # terminal width and truncated, so substring checks on it break between environments (CI).
     import typer.main
 
-    from cli.main import app
+    from devorch.cli.main import app
 
     root = typer.main.get_command(app)
     entry_points = {
@@ -284,7 +284,7 @@ def test_flag_is_available_on_every_entry_point():
 def test_flag_is_a_boolean_switch_with_help_text():
     import typer.main
 
-    from cli.main import app
+    from devorch.cli.main import app
 
     ask = typer.main.get_command(app).commands["ask"]
     flag = next(p for p in ask.params if "--dangerously-skip-permissions" in p.opts)
@@ -296,10 +296,14 @@ def test_flag_is_a_boolean_switch_with_help_text():
 
 
 def test_every_slash_command_in_the_dropdown_has_a_handler():
-    from cli.constants import SLASH_COMMANDS
+    from devorch.cli.constants import SLASH_COMMANDS
 
     source = (
-        Path(__file__).resolve().parents[1].joinpath("cli", "main.py").read_text(encoding="utf-8")
+        Path(__file__)
+        .resolve()
+        .parents[1]
+        .joinpath("devorch", "cli", "main.py")
+        .read_text(encoding="utf-8")
     )
     for cmd in SLASH_COMMANDS:
         name = cmd[1:]

@@ -2,12 +2,12 @@
 
 import pytest
 
-from core.agent import EMPTY_RESPONSE_TEXT, TOOL_PLACEHOLDER, Agent
-from core.executor import ToolExecutor
-from core.modes import AgentMode, ModeManager
-from core.planner import Planner
-from schemas.message import LLMResponse, Message, ToolCall
-from tools.base import Tool
+from devorch.core.agent import EMPTY_RESPONSE_TEXT, TOOL_PLACEHOLDER, Agent
+from devorch.core.executor import ToolExecutor
+from devorch.core.modes import AgentMode, ModeManager
+from devorch.core.planner import Planner
+from devorch.schemas.message import LLMResponse, Message, ToolCall
+from devorch.tools.base import Tool
 
 NOTICE = "Safeguard Notice"
 
@@ -96,7 +96,7 @@ def test_blocked_message_with_markup_like_arguments_does_not_crash(monkeypatch):
 
     from rich.console import Console
 
-    import core.agent as agent_mod
+    import devorch.core.agent as agent_mod
 
     monkeypatch.setattr(agent_mod, "console", Console(file=io.StringIO(), width=200))
     # arguments end up inside the safeguard message
@@ -143,7 +143,7 @@ def test_the_placeholder_constant_matches_what_the_providers_emit():
     import re
     from pathlib import Path
 
-    providers = Path(__file__).resolve().parents[1] / "providers"
+    providers = Path(__file__).resolve().parents[1] / "devorch" / "providers"
     found = set()
     for path in providers.glob("*.py"):
         found |= set(re.findall(r'"(Calling tool[^"]*)"', path.read_text(encoding="utf-8")))

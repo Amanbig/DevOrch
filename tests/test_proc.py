@@ -6,9 +6,9 @@ import time
 
 import pytest
 
-from tools.shell import ShellTool
-from utils import proc as proc_mod
-from utils.proc import run_shell
+from devorch.tools.shell import ShellTool
+from devorch.utils import proc as proc_mod
+from devorch.utils.proc import run_shell
 
 
 def py(code: str) -> str:
@@ -92,7 +92,7 @@ def test_keyboard_interrupt_kills_the_child_and_propagates(monkeypatch):
 
 
 def test_shell_tool_reports_a_timeout_and_returns(monkeypatch):
-    import tools.shell as shell_mod
+    import devorch.tools.shell as shell_mod
 
     real = shell_mod.run_shell
     monkeypatch.setattr(shell_mod, "run_shell", lambda cmd, **kw: real(cmd, **{**kw, "timeout": 1}))

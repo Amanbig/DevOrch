@@ -7,10 +7,10 @@ fail if something volatile (timestamps, counters, random ids) leaks into the sys
 
 import json
 
-from cli.commands._shared import SimplePlanner
-from schemas.message import Message
-from tools.filesystem import FilesystemTool
-from tools.shell import ShellTool
+from devorch.cli.commands._shared import SimplePlanner
+from devorch.schemas.message import Message
+from devorch.tools.filesystem import FilesystemTool
+from devorch.tools.shell import ShellTool
 
 
 def _planner():

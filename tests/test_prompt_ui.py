@@ -8,7 +8,7 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from prompt_toolkit.shortcuts import prompt as pt_prompt
 
-from cli.prompt_ui import (
+from devorch.cli.prompt_ui import (
     PLACEHOLDER,
     PLACEHOLDER_VARIANTS,
     PROMPT_PREFIX_WIDTH,
@@ -20,7 +20,7 @@ from cli.prompt_ui import (
     should_clear_screen,
     toolbar_text,
 )
-from core.modes import AgentMode
+from devorch.core.modes import AgentMode
 
 
 def run_prompt(keys: str, on_cycle=None, **kwargs) -> str:
@@ -235,7 +235,7 @@ def test_clear_screen_can_be_disabled_with_env():
 
 from prompt_toolkit.document import Document  # noqa: E402
 
-from cli.constants import SLASH_COMMANDS, SlashCommandCompleter  # noqa: E402
+from devorch.cli.constants import SLASH_COMMANDS, SlashCommandCompleter  # noqa: E402
 
 
 def _complete(text):

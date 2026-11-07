@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from config import permissions as perm_mod
-from config import settings as settings_mod
-from config.permissions import PermissionLevel, Permissions
-from config.project_settings import (
+from devorch.config import permissions as perm_mod
+from devorch.config import settings as settings_mod
+from devorch.config.permissions import PermissionLevel, Permissions
+from devorch.config.project_settings import (
     load_project_settings,
     trust_project,
     untrust_project,
 )
-from config.settings import Settings, save_config
+from devorch.config.settings import Settings, save_config
 
 
 @pytest.fixture
@@ -146,8 +146,8 @@ def test_invalid_mode_and_garbage(env):
 
 
 def test_cli_flag_beats_project_mode(env):
-    from cli.commands._shared import resolve_mode
-    from core.modes import AgentMode
+    from devorch.cli.commands._shared import resolve_mode
+    from devorch.core.modes import AgentMode
 
     write(env, "default_mode: plan\n")
     assert resolve_mode(None) == AgentMode.PLAN

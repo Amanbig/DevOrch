@@ -4,10 +4,10 @@ import json
 import sys
 from pathlib import Path
 
-from config.project_settings import trust_root
-from core.executor import ToolExecutor
-from core.hooks import POST_TOOL_USE, PRE_TOOL_USE, Hook, HookManager, _load_file
-from tools.base import Tool
+from devorch.config.project_settings import trust_root
+from devorch.core.executor import ToolExecutor
+from devorch.core.hooks import POST_TOOL_USE, PRE_TOOL_USE, Hook, HookManager, _load_file
+from devorch.tools.base import Tool
 
 
 class EchoTool(Tool):

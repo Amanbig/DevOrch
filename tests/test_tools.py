@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from tools.edit import EditTool
-from tools.filesystem import FilesystemTool
-from tools.grep import GrepTool
-from tools.search import SearchTool
-from tools.shell import ShellTool, normalize_windows_command
-from tools.task import TaskTool
+from devorch.tools.edit import EditTool
+from devorch.tools.filesystem import FilesystemTool
+from devorch.tools.grep import GrepTool
+from devorch.tools.search import SearchTool
+from devorch.tools.shell import ShellTool, normalize_windows_command
+from devorch.tools.task import TaskTool
 
 
 class TestToolBase:
@@ -629,7 +629,7 @@ class TestSearchHints:
         assert "Showing 1 of 2 results" in out
 
     def test_strip_directory_prefix_cases(self):
-        from tools.search import strip_directory_prefix as strip
+        from devorch.tools.search import strip_directory_prefix as strip
 
         assert strip("**/cli/commands/*.py", "cli") == "**/commands/*.py"
         assert strip("cli/commands/*.py", "cli") == "commands/*.py"

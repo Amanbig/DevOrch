@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from core.skills import SkillManager, parse_markdown_command, render_prompt
+from devorch.core.skills import SkillManager, parse_markdown_command, render_prompt
 
 
 def _mgr(tmp_path: Path, *dirs: Path) -> SkillManager:

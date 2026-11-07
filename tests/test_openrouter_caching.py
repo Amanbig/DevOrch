@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from providers.openrouter import OpenRouterProvider, add_cache_control
-from schemas.message import Message
+from devorch.providers.openrouter import OpenRouterProvider, add_cache_control
+from devorch.schemas.message import Message
 
 EPH = {"type": "ephemeral"}
 

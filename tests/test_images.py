@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.agent import Agent
-from core.context import IMAGE_TOKEN_ESTIMATE, count_message_tokens
-from core.images import downscale, load_image, prune_old_images
-from providers import PROVIDERS
-from providers.base import openai_user_content
-from providers.openai import OpenAIProvider
-from schemas.message import ImageData, LLMResponse, Message
+from devorch.core.agent import Agent
+from devorch.core.context import IMAGE_TOKEN_ESTIMATE, count_message_tokens
+from devorch.core.images import downscale, load_image, prune_old_images
+from devorch.providers import PROVIDERS
+from devorch.providers.base import openai_user_content
+from devorch.providers.openai import OpenAIProvider
+from devorch.schemas.message import ImageData, LLMResponse, Message
 
 IMG = ImageData(media_type="image/png", data=base64.b64encode(b"pngbytes").decode(), name="a.png")
 
@@ -46,7 +46,7 @@ def test_openai_provider_sends_image_parts(monkeypatch):
 
 
 def test_anthropic_provider_sends_image_blocks():
-    from providers.anthropic import AnthropicProvider
+    from devorch.providers.anthropic import AnthropicProvider
 
     prov = AnthropicProvider(api_key="x")
     prov.client = MagicMock()
@@ -61,7 +61,7 @@ def test_anthropic_provider_sends_image_blocks():
 
 
 def test_gemini_provider_sends_inline_image(monkeypatch):
-    from providers.gemini import GeminiProvider
+    from devorch.providers.gemini import GeminiProvider
 
     prov = GeminiProvider(api_key="x")
     prov.client = MagicMock()
@@ -96,9 +96,9 @@ class _TextOnly:
 
 
 def _agent(provider):
-    from core.executor import ToolExecutor
-    from core.modes import AgentMode, ModeManager
-    from core.planner import Planner
+    from devorch.core.executor import ToolExecutor
+    from devorch.core.modes import AgentMode, ModeManager
+    from devorch.core.planner import Planner
 
     mm = ModeManager(default_mode=AgentMode.AUTO)
 

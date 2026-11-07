@@ -6,11 +6,11 @@ import time
 import pytest
 from rich.console import Console
 
-from core.agent import Agent
-from core.executor import ToolExecutor
-from schemas.message import ToolCall
-from tools.base import Tool
-from utils import tool_display as td
+from devorch.core.agent import Agent
+from devorch.core.executor import ToolExecutor
+from devorch.schemas.message import ToolCall
+from devorch.tools.base import Tool
+from devorch.utils import tool_display as td
 
 HOSTILE = [
     'echo "[/bold]"',
@@ -153,7 +153,7 @@ def test_git_and_agent_lines():
 
 
 def _agent_with_console(monkeypatch):
-    import core.agent as agent_mod
+    import devorch.core.agent as agent_mod
 
     buf = io.StringIO()
     monkeypatch.setattr(
@@ -194,7 +194,7 @@ def test_executor_timing_resets_when_tool_does_not_run():
 
 
 def test_executor_timing_excludes_permission_prompt(monkeypatch):
-    from config.permissions import PermissionChoice
+    from devorch.config.permissions import PermissionChoice
 
     ex = ToolExecutor([Sleepy()], require_confirmation=True)
 
@@ -214,7 +214,7 @@ def test_executor_timing_excludes_permission_prompt(monkeypatch):
     "msg", ["bad [/x] thing", "opened app/[id]/page.tsx", "x: List[int]", "[red]"]
 )
 def test_logger_helpers_do_not_eat_or_crash_on_brackets(monkeypatch, msg):
-    from utils import logger
+    from devorch.utils import logger
 
     buf = io.StringIO()
     monkeypatch.setattr(
@@ -228,7 +228,7 @@ def test_logger_helpers_do_not_eat_or_crash_on_brackets(monkeypatch, msg):
 
 
 def test_logger_helpers_accept_non_strings(monkeypatch):
-    from utils import logger
+    from devorch.utils import logger
 
     buf = io.StringIO()
     monkeypatch.setattr(
@@ -249,7 +249,7 @@ def _is_neutral(hex6: str, tolerance: int = 6) -> bool:
 def test_response_panel_background_is_neutral_grey():
     from rich.style import Style
 
-    from utils.logger import response_panel
+    from devorch.utils.logger import response_panel
 
     panel = response_panel("hello")
     bg = Style.parse(str(panel.style)).bgcolor.triplet
@@ -267,7 +267,7 @@ def test_shell_output_background_is_neutral_grey():
 def test_completion_menu_has_no_blue_tint():
     import re
 
-    from cli.constants import PROMPT_STYLE
+    from devorch.cli.constants import PROMPT_STYLE
 
     menu_bgs = [
         m

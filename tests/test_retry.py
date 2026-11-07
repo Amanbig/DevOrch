@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from core import retry as r
-from core.retry import (
+from devorch.core import retry as r
+from devorch.core.retry import (
     backoff_delay,
     call_with_retry,
     describe,

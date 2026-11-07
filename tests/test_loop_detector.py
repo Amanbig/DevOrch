@@ -1,4 +1,4 @@
-from core.loop_detector import LoopDetector, LoopSeverity, is_error_result
+from devorch.core.loop_detector import LoopDetector, LoopSeverity, is_error_result
 
 
 class TestLoopDetector:
