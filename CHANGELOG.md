@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- `devorch ask --save-session`, `--resume <id>` and `--continue` keep a conversation going across `ask` runs; the `--output json` / `stream-json` result now includes `session_id`.
+- `devorch sessions list --output json` and `devorch sessions messages <id>` (JSON), for editors and scripts.
 - **VS Code extension** now lives in `vscode-extension/` (moved from the DevOrch-Code repo): chat side panel, resume a session, run a skill, and explain/review/fix the selected code. CI type-checks, lints, bundles and packages it as a `.vsix`.
 - `install.sh` / `install.ps1` one-line installers.
 

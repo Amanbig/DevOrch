@@ -66,8 +66,10 @@ def build_result(
     started: float,
     tool_calls: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    sessions = getattr(agent, "session_manager", None)
     return {
         "type": "result",
+        "session_id": getattr(sessions, "current_session_id", None),
         "is_error": error is not None,
         "result": result if error is None else None,
         "error": error,

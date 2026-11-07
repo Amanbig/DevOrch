@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import time
@@ -2468,10 +2469,33 @@ def skills_list():
 def sessions_list(
     limit: int = typer.Option(20, "--limit", "-n", help="Number of sessions to show"),
     here: bool = typer.Option(False, "--here", help="Only sessions started in this directory"),
+    output: str = typer.Option("text", "--output", "-o", help="Output format: text or json"),
 ):
     """
     List recent chat sessions.
     """
+    if output == "json":
+        manager = SessionManager()
+        found = manager.list_sessions(
+            limit=limit, cwd=os.getcwd() if here else None, include_empty=False
+        )
+        print(
+            json.dumps(
+                [
+                    {
+                        "id": row["id"],
+                        "title": manager.first_user_message(row["id"]) or row["name"],
+                        "provider": row["provider"],
+                        "model": row["model"],
+                        "messages": row["message_count"],
+                        "updated_at": row["updated_at"],
+                        "cwd": row.get("cwd"),
+                    }
+                    for row in found
+                ]
+            )
+        )
+        return
     print_sessions_table(SessionManager(), limit, here=here)
     console.print("\n[dim]Resume a session: devorch --resume <id>[/dim]")
 
@@ -2483,6 +2507,29 @@ def sessions_show(session_id: str = typer.Argument(..., help="Session ID to show
     """
     if not print_session_details(SessionManager(), session_id):
         raise typer.Exit(1)
+
+
+@sessions_app.command("messages")
+def sessions_messages(session_id: str = typer.Argument(..., help="Session ID")):
+    """
+    Print a session's conversation as JSON (user and assistant messages only).
+    """
+    try:
+        _, messages = SessionManager().load_session(session_id)
+    except ValueError as e:
+        print_error(str(e))
+        raise typer.Exit(1) from e
+    print(
+        json.dumps(
+            [
+                {"role": m.role, "content": m.content}
+                for m in messages
+                if m.role in ("user", "assistant")
+                and isinstance(m.content, str)
+                and m.content.strip()
+            ]
+        )
+    )
 
 
 @sessions_app.command("delete")
