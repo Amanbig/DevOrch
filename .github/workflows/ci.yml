@@ -56,3 +56,59 @@ jobs:
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
+
+  # Exercises the same steps as the release workflow (build, upload-artifact, download-artifact, install)
+  # without publishing, so a bump of one of those actions is tested on a pull request and not first
+  # discovered when a version tag is pushed.
+  package:
+    name: Package (build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check distribution metadata
+        run: twine check --strict dist/*
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-smoke
+          path: dist/
+          retention-days: 1
+
+  package-install:
+    name: Package (install the built wheel)
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-smoke
+          path: dist/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install the wheel into a clean environment and run it
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/*.whl
+          out="$(/tmp/smoke/bin/devorch --version)"
+          echo "$out"
+          echo "$out" | grep -Eq '^devorch [0-9]+\.[0-9]+\.[0-9]+'
