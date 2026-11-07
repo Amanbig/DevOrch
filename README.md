@@ -614,23 +614,26 @@ pytest                          # tests (no network or API keys needed)
 
 ### Project Structure
 
+Everything installs as one `devorch` package (`python -m devorch` is the same as the `devorch` command):
+
 ```
 DevOrch/
-├── cli/
-│   ├── main.py           # App wiring, REPL, sessions/config commands
-│   ├── constants.py      # VERSION, banners, slash-command registry, styles
-│   └── commands/
-│       ├── _shared.py    # Shared helpers (agent builder, tool setup, etc.)
-│       ├── ask.py        # devorch ask
-│       ├── run.py        # devorch run
-│       └── edit.py       # devorch edit
-├── core/             # Agent, executor, memory, MCP, skills, modes
-├── config/           # Settings, permissions
-├── providers/        # AI provider implementations
-├── tools/            # Built-in tools (shell, edit, search, etc.)
-├── schemas/          # Pydantic models
-├── utils/            # Logging, display helpers
-└── tests/            # Test suite
+├── devorch/
+│   ├── __init__.py       # __version__ (the single source of the version)
+│   ├── __main__.py       # python -m devorch
+│   ├── cli/
+│   │   ├── main.py       # App wiring, REPL, sessions/config commands
+│   │   ├── constants.py  # banners, slash-command registry, styles
+│   │   └── commands/     # ask, run, edit and shared helpers
+│   ├── core/             # Agent, executor, memory, MCP, skills, modes, sessions
+│   ├── config/           # Settings, permissions, project settings
+│   ├── providers/        # AI provider implementations
+│   ├── tools/            # Built-in tools (shell, edit, search, git, ...)
+│   ├── schemas/          # Data models
+│   └── utils/            # Logging, display helpers
+├── tests/                # Test suite
+├── scripts/              # Developer scripts (not installed)
+└── docs/
 ```
 
 ## Roadmap

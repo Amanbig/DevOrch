@@ -2,8 +2,8 @@
 
 from datetime import datetime
 
-from schemas.message import LLMResponse, Message, ToolCall
-from schemas.task import Task, TaskList, TaskStatus
+from devorch.schemas.message import LLMResponse, Message, ToolCall
+from devorch.schemas.task import Task, TaskList, TaskStatus
 
 
 class TestMessage:

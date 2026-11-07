@@ -7,19 +7,19 @@ import pytest
 import typer.main
 from typer.testing import CliRunner
 
-import cli.main as cli_main
-import core.agent as agent_mod
-from cli.prompt_ui import ContextGauge
-from config import settings as settings_mod
-from config.settings import Settings, save_config
-from core.agent import Agent
-from core.context import ContextManager
-from core.executor import ToolExecutor
-from core.modes import AgentMode, ModeManager
-from core.planner import Planner
-from providers.base import response_was_truncated
-from schemas.message import LLMResponse, Message, ToolCall
-from tools.base import Tool
+import devorch.cli.main as cli_main
+import devorch.core.agent as agent_mod
+from devorch.cli.prompt_ui import ContextGauge
+from devorch.config import settings as settings_mod
+from devorch.config.settings import Settings, save_config
+from devorch.core.agent import Agent
+from devorch.core.context import ContextManager
+from devorch.core.executor import ToolExecutor
+from devorch.core.modes import AgentMode, ModeManager
+from devorch.core.planner import Planner
+from devorch.providers.base import response_was_truncated
+from devorch.schemas.message import LLMResponse, Message, ToolCall
+from devorch.tools.base import Tool
 
 
 class RateLimitError(Exception):
@@ -204,7 +204,7 @@ def test_ctrl_c_during_the_retry_wait_cancels_the_turn(monkeypatch):
     def interrupted(delay):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("core.retry.time.sleep", interrupted)
+    monkeypatch.setattr("devorch.core.retry.time.sleep", interrupted)
     prov = Provider([RateLimitError("x"), final("never")])
     agent = make(prov)
     agent.retry_base_delay = 1.0
@@ -298,7 +298,7 @@ def test_max_turns_is_validated():
 
 
 def test_max_turns_reaches_the_agent_run(monkeypatch):
-    import cli.commands.ask as ask_mod
+    import devorch.cli.commands.ask as ask_mod
 
     captured = {}
     monkeypatch.setattr(

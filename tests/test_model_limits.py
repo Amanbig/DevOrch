@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.context import ContextManager
-from core.model_limits import (
+from devorch.core.context import ContextManager
+from devorch.core.model_limits import (
     ANTHROPIC_DEFAULT_OUTPUT,
     COMPACT_CAP,
     DEFAULT_COMPACT_THRESHOLD,
@@ -14,8 +14,8 @@ from core.model_limits import (
     anthropic_max_output,
     parse_overrides,
 )
-from providers.anthropic import AnthropicProvider
-from schemas.message import Message
+from devorch.providers.anthropic import AnthropicProvider
+from devorch.schemas.message import Message
 
 L = ModelLimits()
 

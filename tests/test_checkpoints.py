@@ -1,9 +1,9 @@
 """Tests for file checkpoints / undo."""
 
-from core.checkpoints import CheckpointManager, tracked_path
-from core.executor import ToolExecutor
-from tools.edit import EditTool
-from tools.filesystem import FilesystemTool
+from devorch.core.checkpoints import CheckpointManager, tracked_path
+from devorch.core.executor import ToolExecutor
+from devorch.tools.edit import EditTool
+from devorch.tools.filesystem import FilesystemTool
 
 
 def test_tracked_path():

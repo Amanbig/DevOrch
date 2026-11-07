@@ -3,10 +3,10 @@
 import os
 from pathlib import Path
 
-from config import permissions as perm_mod
-from config import settings as settings_mod
-from core import sessions as sessions_mod
-from core.memory import MEMORY_DIR
+from devorch.config import permissions as perm_mod
+from devorch.config import settings as settings_mod
+from devorch.core import sessions as sessions_mod
+from devorch.core.memory import MEMORY_DIR
 
 
 def test_home_is_a_throwaway_directory():
@@ -27,7 +27,7 @@ def test_application_paths_resolve_under_the_test_home():
 
 
 def test_saving_permissions_does_not_touch_the_real_file():
-    from config.permissions import PermissionLevel, Permissions
+    from devorch.config.permissions import PermissionLevel, Permissions
 
     Permissions().set_tool_permission("edit", PermissionLevel.ALLOW)  # saves to PERMISSIONS_FILE
     assert perm_mod.PERMISSIONS_FILE.exists()

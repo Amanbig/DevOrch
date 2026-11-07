@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **DevOrch now installs as a single `devorch` package.** Before, the wheel put seven generic top-level packages
+  (`cli`, `config`, `core`, `providers`, `schemas`, `tools`, `utils`) into `site-packages`, where they could clash
+  with other software. If you import DevOrch's internals, imports become `from devorch.core.agent import Agent` and
+  so on; the `devorch` command, config and data are unchanged.
+- The version lives in one place, `devorch/__init__.py` (it used to be in two files), and `python -m devorch` works.
+- CI now checks that the built wheel contains only the `devorch` package.
+
 ## 0.5.2
 
 DevOrch behaves better out of the box: a rewritten system prompt, a long-standing loop-safeguard bug fixed, and limits

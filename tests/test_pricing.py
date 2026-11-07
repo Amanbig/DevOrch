@@ -6,15 +6,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from cli.commands._output import run_with_output
-from cli.prompt_ui import toolbar_text
-from config import settings as settings_mod
-from config.settings import Settings, save_config
-from core.agent import Agent
-from core.executor import ToolExecutor
-from core.modes import AgentMode, ModeManager
-from core.planner import Planner
-from core.pricing import (
+from devorch.cli.commands._output import run_with_output
+from devorch.cli.prompt_ui import toolbar_text
+from devorch.config import settings as settings_mod
+from devorch.config.settings import Settings, save_config
+from devorch.core.agent import Agent
+from devorch.core.executor import ToolExecutor
+from devorch.core.modes import AgentMode, ModeManager
+from devorch.core.planner import Planner
+from devorch.core.pricing import (
     CostTracker,
     Price,
     PriceBook,
@@ -22,7 +22,7 @@ from core.pricing import (
     parse_overrides,
     usage_cost,
 )
-from schemas.message import LLMResponse, Message, TokenUsage
+from devorch.schemas.message import LLMResponse, Message, TokenUsage
 
 
 def u(prompt=0, completion=0, cached=0, written=0):
@@ -161,7 +161,7 @@ def test_agent_records_cost_per_call():
 
 
 def test_sub_agent_cost_is_shared_with_parent():
-    from tools.agent import AgentTool
+    from devorch.tools.agent import AgentTool
 
     agent = make_agent()
     tool = AgentTool(provider=agent.provider, tools=[], costs=agent.costs)
@@ -178,7 +178,7 @@ def json_mode_console(monkeypatch):
     """
     import io
 
-    from utils.logger import get_console
+    from devorch.utils.logger import get_console
 
     monkeypatch.setattr(get_console(), "_file", io.StringIO())
 
@@ -209,7 +209,7 @@ def test_toolbar_shows_cost_only_when_known():
 def test_anthropic_usage_reports_cache_write_tokens():
     from unittest.mock import MagicMock
 
-    from providers.anthropic import AnthropicProvider
+    from devorch.providers.anthropic import AnthropicProvider
 
     prov = AnthropicProvider(api_key="x")
     prov.client = MagicMock()

@@ -11,8 +11,8 @@ DevOrch is an enterprise-ready, multi-provider AI coding assistant CLI with supp
 - **Testing & Quality**: Pytest, Pytest-asyncio, Ruff, Mypy
 
 ## Architecture & Project Structure
-- `cli/`: CLI entrypoints, Typer commands (`ask`, `edit`, `run`, `init`), slash command handlers, banners, and REPL.
-- `core/`: Agent orchestration engine:
+- `devorch/cli/`: CLI entrypoints, Typer commands (`ask`, `edit`, `run`, `init`), slash command handlers, banners, and REPL.
+- `devorch/core/`: Agent orchestration engine:
   - `agent.py`: Main agentic loop, tool calling, execution loop, plan mode approval.
   - `context.py`: Token estimation, context compaction, tool output pruning, token usage tracking.
   - `loop_detector.py`: Duplicate call detection, oscillation detection, error thrashing prevention, turn advisories.
@@ -22,14 +22,14 @@ DevOrch is an enterprise-ready, multi-provider AI coding assistant CLI with supp
   - `sessions.py`: Session persistence, continuation, and summarization.
   - `modes.py`: Agent execution modes (`ASK`, `AUTO`, `PLAN`).
   - `memory.py` & `skills.py`: Persistent memory and skill definitions.
-- `tools/`: Built-in tools:
+- `devorch/tools/`: Built-in tools:
   - `filesystem.py`: File reading with pagination, writing, directory listing.
   - `edit.py`: Surgical find/replace, line-based editing, diff generation.
   - `grep.py`: Fast regex pattern search across text files.
   - `search.py`: Glob-based file and directory search.
   - `shell.py` & `terminal_session.py`: Shell execution and persistent terminal sessions.
-- `providers/`: Unified LLM provider adapters (`openai`, `anthropic`, `gemini`, `groq`, `deepseek`, etc.).
-- `schemas/`: Dataclasses for `Message`, `ToolCall`, `LLMResponse`, `TokenUsage`.
+- `devorch/providers/`: Unified LLM provider adapters (`openai`, `anthropic`, `gemini`, `groq`, `deepseek`, etc.).
+- `devorch/schemas/`: Dataclasses for `Message`, `ToolCall`, `LLMResponse`, `TokenUsage`.
 
 ## Common Commands
 - **Run Tests**: `pytest` or `python -m pytest`
@@ -37,7 +37,7 @@ DevOrch is an enterprise-ready, multi-provider AI coding assistant CLI with supp
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`
 - **Type Check**: `mypy .`
-- **Run DevOrch Locally**: `devorch` or `python -m cli.main`
+- **Run DevOrch Locally**: `devorch` or `python -m devorch`
 
 ## Coding Standards & Minimal Token Guidelines
 1. **Find Before Reading**: Always use `search` (to find file paths) or `grep` (to find symbols/definitions) before reading file contents.

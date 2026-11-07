@@ -164,13 +164,15 @@ def test_parse_result_takes_the_json_line():
 
 def test_command_line():
     cmd = pe.command_for("do it", "openai", "gpt-4o")
-    assert (
-        cmd[-1] == "do it"
-        and cmd[cmd.index("-p") + 1] == "openai"
-        and cmd[cmd.index("-m") + 1] == "gpt-4o"
-    )
+    assert cmd[1:3] == ["-m", "devorch"]  # runs the installed package: python -m devorch ask ...
+    args = cmd[
+        cmd.index("ask") :
+    ]  # the model flag comes after `ask` (python's own -m is before it)
+    assert cmd[-1] == "do it" and args[args.index("-p") + 1] == "openai"
+    assert args[args.index("-m") + 1] == "gpt-4o"
     assert "--output" in cmd and "json" in cmd and cmd[cmd.index("--mode") + 1] == "auto"
     bare = pe.command_for("x", None, None)
+    bare = bare[bare.index("ask") :]
     assert "-p" not in bare and "-m" not in bare
 
 

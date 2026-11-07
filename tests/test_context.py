@@ -1,10 +1,10 @@
-from core.context import (
+from devorch.core.context import (
     ContextManager,
     compact_tool_output,
     count_message_tokens,
     estimate_tokens,
 )
-from schemas.message import Message, TokenUsage
+from devorch.schemas.message import Message, TokenUsage
 
 
 class TestContextManager:

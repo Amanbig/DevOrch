@@ -6,12 +6,12 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-import cli.main as cli_main
-from config.permissions import PermissionLevel, Permissions
-from config.project_settings import trust_root
-from config.settings import Settings
-from core import doctor
-from core.doctor import FAIL, INFO, OK, WARN, exit_code, run_checks
+import devorch.cli.main as cli_main
+from devorch.config.permissions import PermissionLevel, Permissions
+from devorch.config.project_settings import trust_root
+from devorch.config.settings import Settings
+from devorch.core import doctor
+from devorch.core.doctor import FAIL, INFO, OK, WARN, exit_code, run_checks
 
 SECRET = "sk-THIS-MUST-NEVER-BE-PRINTED-1234567890"
 
@@ -143,7 +143,7 @@ def test_non_utf8_terminal_is_a_warning(monkeypatch):
 
 
 def test_unwritable_config_folder_is_a_failure(monkeypatch, tmp_path):
-    from config import settings as settings_mod
+    from devorch.config import settings as settings_mod
 
     folder = tmp_path / "cfg"
     folder.mkdir()
@@ -154,7 +154,7 @@ def test_unwritable_config_folder_is_a_failure(monkeypatch, tmp_path):
 
 
 def test_sessions_row_counts_saved_sessions():
-    from core.sessions import SessionManager
+    from devorch.core.sessions import SessionManager
 
     sm = SessionManager()
     sm.create_session("openai", "gpt-4o")

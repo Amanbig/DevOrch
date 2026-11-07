@@ -5,9 +5,9 @@ import json
 import pytest
 import typer
 
-from cli.commands._output import FORMATS, run_with_output, validate_format
-from core.context import ContextManager
-from schemas.message import TokenUsage
+from devorch.cli.commands._output import FORMATS, run_with_output, validate_format
+from devorch.core.context import ContextManager
+from devorch.schemas.message import TokenUsage
 
 
 class FakeExecutor:
@@ -19,7 +19,7 @@ class FakeAgent:
     def __init__(self, fail=False):
         self.executor = FakeExecutor()
         self.context_manager = ContextManager.__new__(ContextManager)
-        from core.context import SessionTokenStats
+        from devorch.core.context import SessionTokenStats
 
         self.context_manager.stats = SessionTokenStats()
         self.context_manager.stats.add_turn(

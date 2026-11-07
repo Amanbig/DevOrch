@@ -2,8 +2,8 @@
 
 from prompt_toolkit.document import Document
 
-from cli.constants import SlashCommandCompleter
-from core.mentions import MAX_CHARS_PER_FILE, expand_mentions
+from devorch.cli.constants import SlashCommandCompleter
+from devorch.core.mentions import MAX_CHARS_PER_FILE, expand_mentions
 
 
 def test_attaches_file(tmp_path):
@@ -90,7 +90,7 @@ def test_image_type_sniffed_from_bytes(tmp_path):
 
 
 def test_oversized_image_skipped(tmp_path, monkeypatch):
-    import core.images as images
+    import devorch.core.images as images
 
     monkeypatch.setattr(images, "MAX_IMAGE_BYTES", 10)
     (tmp_path / "big.png").write_bytes(PNG)

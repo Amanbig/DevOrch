@@ -8,15 +8,15 @@ from unittest.mock import MagicMock
 import pytest
 from rich.console import Console
 
-from core.agent import Agent
-from core.executor import ToolExecutor
-from core.modes import AgentMode, ModeManager
-from core.planner import Planner
-from providers.base import chat_create, stream_chat_completion
-from providers.openai import OpenAIProvider
-from schemas.message import LLMResponse, Message
-from utils import logger
-from utils.streaming import StreamRenderer
+from devorch.core.agent import Agent
+from devorch.core.executor import ToolExecutor
+from devorch.core.modes import AgentMode, ModeManager
+from devorch.core.planner import Planner
+from devorch.providers.base import chat_create, stream_chat_completion
+from devorch.providers.openai import OpenAIProvider
+from devorch.schemas.message import LLMResponse, Message
+from devorch.utils import logger
+from devorch.utils.streaming import StreamRenderer
 
 
 def chunk(content=None, tool_calls=None, finish=None, usage=None, choices=True):
@@ -106,7 +106,7 @@ def test_openai_provider_streams_and_parses_tool_calls():
 
 
 def test_anthropic_provider_streams():
-    from providers.anthropic import AnthropicProvider
+    from devorch.providers.anthropic import AnthropicProvider
 
     prov = AnthropicProvider(api_key="x")
     final = MagicMock()
@@ -124,7 +124,7 @@ def test_anthropic_provider_streams():
 
 
 def test_streaming_flags():
-    from providers import PROVIDERS
+    from devorch.providers import PROVIDERS
 
     for name, cls in PROVIDERS.items():
         assert cls.supports_streaming, name
@@ -217,7 +217,7 @@ def _agent(prov, stream_output):
 
 def test_agent_streams_when_enabled_and_supported(monkeypatch):
     con = _console()
-    monkeypatch.setattr("core.agent.console", con)
+    monkeypatch.setattr("devorch.core.agent.console", con)
     monkeypatch.setattr(logger, "console", con)
     prov = _Prov(streaming=True)
     result = _agent(prov, True).run("hi")
@@ -240,7 +240,7 @@ def test_agent_falls_back_for_non_streaming_provider():
 
 def test_agent_tool_call_text_is_not_marked_as_final(monkeypatch):
     con = _console()
-    monkeypatch.setattr("core.agent.console", con)
+    monkeypatch.setattr("devorch.core.agent.console", con)
     monkeypatch.setattr(logger, "console", con)
     monkeypatch.setattr(logger, "_streamed_text", None)
     r = StreamRenderer(con)
@@ -259,8 +259,8 @@ def _reset_streamed():
 
 # ── httpx / SSE providers ───────────────────────────────────────────────────
 
-from providers.base import post_chat  # noqa: E402
-from providers.groq import GroqProvider  # noqa: E402
+from devorch.providers.base import post_chat  # noqa: E402
+from devorch.providers.groq import GroqProvider  # noqa: E402
 
 
 def sse(*events):
@@ -392,7 +392,7 @@ def test_groq_provider_streams_end_to_end():
 
 
 def test_gemini_provider_streams_text_and_function_calls():
-    from providers.gemini import GeminiProvider
+    from devorch.providers.gemini import GeminiProvider
 
     def part(text=None, fc=None):
         return NS(text=text, function_call=fc)

@@ -39,33 +39,33 @@ A good PR includes:
 
 ## Where things live
 
-See [`DEVORCH.md`](DEVORCH.md) and the project structure in the README. In short: `cli/` (commands, REPL, UI),
-`core/` (agent loop, executor, hooks, memory, sessions), `providers/` (one file per LLM provider), `tools/`
-(built-in tools), `config/` (settings, permissions, project settings), `tests/`.
+See [`DEVORCH.md`](DEVORCH.md) and the project structure in the README. In short: `devorch/cli/` (commands, REPL, UI),
+`devorch/core/` (agent loop, executor, hooks, memory, sessions), `devorch/providers/` (one file per LLM provider), `devorch/tools/`
+(built-in tools), `devorch/config/` (settings, permissions, project settings), `tests/`.
 
 ### Adding a provider
 
-Subclass `LLMProvider` in `providers/<name>.py`, implement `generate()`, and register it in
-`providers/__init__.py`. Set the capability flags honestly: `supports_images` and `supports_streaming`
+Subclass `LLMProvider` in `devorch/providers/<name>.py`, implement `generate()`, and register it in
+`devorch/providers/__init__.py`. Set the capability flags honestly: `supports_images` and `supports_streaming`
 (`generate()` then accepts `on_text` and streams deltas). OpenAI-compatible APIs can reuse `chat_create` /
-`post_chat` and `openai_user_content` from `providers/base.py`. Add tests with a mocked client.
+`post_chat` and `openai_user_content` from `devorch/providers/base.py`. Add tests with a mocked client.
 
 ### Adding a tool
 
-Subclass `Tool` in `tools/`, give it a pydantic `args_schema`, register it in `build_tools` /
-`start_repl`, and describe what the user sees in `utils/tool_display.py`. If it changes files, make sure
-checkpoints can snapshot it (`core/checkpoints.py`). Tools that can do damage need permission handling in
-`config/permissions.py`.
+Subclass `Tool` in `devorch/tools/`, give it a pydantic `args_schema`, register it in `build_tools` /
+`start_repl`, and describe what the user sees in `devorch/utils/tool_display.py`. If it changes files, make sure
+checkpoints can snapshot it (`devorch/core/checkpoints.py`). Tools that can do damage need permission handling in
+`devorch/config/permissions.py`.
 
 ### Adding a slash command
 
-Add it to `SLASH_COMMANDS` in `cli/constants.py` (that feeds the dropdown and `/help`) and handle it in the
-REPL in `cli/main.py`; put non-trivial logic in `cli/repl_commands.py` so it can be tested. A test fails if a
+Add it to `SLASH_COMMANDS` in `devorch/cli/constants.py` (that feeds the dropdown and `/help`) and handle it in the
+REPL in `devorch/cli/main.py`; put non-trivial logic in `devorch/cli/repl_commands.py` so it can be tested. A test fails if a
 command appears in the dropdown without a handler.
 
 ### Changing the system prompt
 
-The prompt lives in `cli/commands/_shared.py` (and the sub-agent's in `tools/agent.py`); tool descriptions are sent to the
+The prompt lives in `devorch/cli/commands/_shared.py` (and the sub-agent's in `devorch/tools/agent.py`); tool descriptions are sent to the
 model too, so a rule can be contradicted by a tool's own text. `tests/test_system_prompt.py` guards against specific past
 mistakes, but it cannot tell you a rewrite is *better*: run `python scripts/prompt_eval.py` on a real model before and
 after (see [docs/PROMPT_EVALUATION.md](docs/PROMPT_EVALUATION.md)).
@@ -82,6 +82,6 @@ after (see [docs/PROMPT_EVALUATION.md](docs/PROMPT_EVALUATION.md)).
 
 ## Releasing (maintainers)
 
-1. Bump the version in `pyproject.toml` **and** `cli/constants.py`, and add the `CHANGELOG.md` entry.
+1. Bump `__version__` in `devorch/__init__.py` (the only place; `pyproject.toml` and `--version` read it) and add the `CHANGELOG.md` entry.
 2. Merge to `main`, then push a `vX.Y.Z` tag. The publish workflow builds, uploads to PyPI and creates the
    GitHub release. Published versions cannot be reused, so double-check before tagging.

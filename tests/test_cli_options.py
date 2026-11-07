@@ -8,9 +8,9 @@ import pytest
 import typer.main
 from typer.testing import CliRunner
 
-import cli.main as cli_main
-from cli.constants import VERSION
-from cli.repl_commands import PICK_SESSION
+import devorch.cli.main as cli_main
+from devorch.cli.constants import VERSION
+from devorch.cli.repl_commands import PICK_SESSION
 
 normalize = cli_main.normalize_resume_argv
 
@@ -57,13 +57,57 @@ def test_version_flag_prints_and_exits_without_starting_anything():
         assert result.exit_code == 0 and result.output.strip() == f"devorch {VERSION}"
 
 
-def test_version_matches_pyproject():
-    # a release guard: the version is declared in two places and they must agree
-    text = (
+def _pyproject() -> str:
+    return (
         Path(__file__).resolve().parents[1].joinpath("pyproject.toml").read_text(encoding="utf-8")
     )
-    declared = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE).group(1)
-    assert declared == VERSION
+
+
+def test_the_version_has_a_single_source():
+    # a release guard: the version lives only in devorch/__init__.py; pyproject reads it from there and
+    # the CLI prints it, so the "forgot to bump the second place" mistake cannot happen
+    import devorch
+
+    text = _pyproject()
+    project_table = text[text.index("[project]") : text.index("[project.urls]")]
+    assert re.search(r'^dynamic\s*=\s*\["version"\]', project_table, re.MULTILINE)
+    assert not re.search(r"^version\s*=", project_table, re.MULTILINE), (
+        "a hard-coded version is back"
+    )
+    assert 'path = "devorch/__init__.py"' in text
+    assert re.fullmatch(r"\d+\.\d+\.\d+", devorch.__version__)
+    assert VERSION == devorch.__version__
+
+
+def test_the_wheel_ships_one_package_not_seven_generic_ones():
+    # regression: it used to install cli, config, core, providers, schemas, tools and utils into
+    # site-packages, where they can clash with other software
+    assert 'packages = ["devorch"]' in _pyproject()
+    root = Path(__file__).resolve().parents[1]
+    top_level_packages = sorted(
+        p.name for p in root.iterdir() if p.is_dir() and (p / "__init__.py").exists()
+    )
+    assert top_level_packages == ["devorch", "tests"], top_level_packages
+
+
+def test_every_directory_in_the_package_is_an_explicit_package():
+    package = Path(__file__).resolve().parents[1] / "devorch"
+    missing = [
+        str(d.relative_to(package.parent))
+        for d in package.rglob("*")
+        if d.is_dir() and d.name != "__pycache__" and not (d / "__init__.py").exists()
+    ]
+    assert missing == []
+
+
+def test_python_dash_m_devorch_is_the_same_cli():
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, "-m", "devorch", "--version"], capture_output=True, text=True, timeout=60
+    )
+    assert out.returncode == 0 and out.stdout.strip() == f"devorch {VERSION}"
 
 
 def test_continue_and_resume_are_options_of_the_repl_entry_points():

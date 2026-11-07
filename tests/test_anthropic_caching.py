@@ -3,9 +3,9 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from providers.anthropic import AnthropicProvider
-from providers.base import extract_token_usage
-from schemas.message import ImageData, Message
+from devorch.providers.anthropic import AnthropicProvider
+from devorch.providers.base import extract_token_usage
+from devorch.schemas.message import ImageData, Message
 
 
 def _provider(caching=True):

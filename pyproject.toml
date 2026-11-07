@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "devorch"
-version = "0.5.2"
+dynamic = ["version"]
 description = "Multi-provider AI coding assistant CLI with 13+ providers"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -58,10 +58,13 @@ dev = [
 ]
 
 [project.scripts]
-devorch = "cli.main:main"
+devorch = "devorch.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["cli", "core", "providers", "schemas", "tools", "config", "utils"]
+packages = ["devorch"]
+
+[tool.hatch.version]
+path = "devorch/__init__.py"
 
 [tool.ruff]
 target-version = "py310"
@@ -83,7 +86,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["cli", "core", "providers", "schemas", "tools", "config", "utils"]
+known-first-party = ["devorch"]
 
 [tool.ruff.format]
 quote-style = "double"
