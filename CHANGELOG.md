@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+- **VS Code extension** now lives in `vscode-extension/` (moved from the DevOrch-Code repo): chat side panel, resume a session, run a skill, and explain/review/fix the selected code. CI type-checks, lints, bundles and packages it as a `.vsix`.
+- `install.sh` / `install.ps1` one-line installers.
+
 ### Changed
 - **DevOrch now installs as a single `devorch` package.** Before, the wheel put seven generic top-level packages
   (`cli`, `config`, `core`, `providers`, `schemas`, `tools`, `utils`) into `site-packages`, where they could clash
