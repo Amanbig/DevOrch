@@ -232,7 +232,7 @@ class TerminalSessionTool(Tool):
     name = "terminal_session"
     description = """\
 Manages long-running terminal sessions that YOU (the AI) can see and interact with.
-This is the PRIMARY tool for all terminal/process needs. Sessions persist across DevOrch restarts.
+Use it for long-running or interactive processes (dev servers, watchers, REPLs); use the `shell` tool for commands that finish. Sessions persist across DevOrch restarts.
 
 Actions:
 - **start**  — Start a command in a managed session. Defaults to 'bash' if no command given.
