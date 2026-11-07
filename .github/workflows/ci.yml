@@ -196,3 +196,27 @@ jobs:
           ./install.ps1 -Yes -From $wheel
           ./install.ps1 -Uninstall
           if (Get-Command devorch -ErrorAction SilentlyContinue) { throw "devorch is still installed after -Uninstall" }
+
+  vscode-extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - run: npm ci
+
+      - name: Type-check, lint and bundle
+        run: npm run package
+
+      - name: Package the .vsix and check the chat page is inside it
+        run: |
+          npx --yes @vscode/vsce package --no-dependencies -o devorch-code.vsix
+          unzip -l devorch-code.vsix | grep -q 'src/webview.html' || { echo "webview.html missing from the .vsix"; exit 1; }
