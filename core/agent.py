@@ -1,6 +1,8 @@
 import json
 from collections.abc import Callable
 
+from rich.text import Text
+
 from core.context import ContextManager
 from core.executor import Executor
 from core.images import prune_old_images
@@ -46,6 +48,8 @@ After presenting the plan, ask: "Should I proceed with this plan? (yes/no/modify
 Do NOT execute any tools until the user approves the plan."""
 
 
+TOOL_PLACEHOLDER = "Calling tool..."  # what providers substitute for a reply with no text
+EMPTY_RESPONSE_TEXT = "(The model returned an empty response.)"
 INTERRUPTED_MESSAGE = "Interrupted. You can keep going; /undo reverts this turn's file changes."
 INTERRUPTED_NOTE = "[The user interrupted this turn before it finished.]"
 
@@ -170,6 +174,35 @@ class Agent:
                 "The reply was cut off by the model's output limit. Ask it to continue, or to do "
                 "this in smaller steps."
             )
+
+    @staticmethod
+    def _normalize_response_text(response) -> None:
+        """Replace the placeholder some providers invent when a reply has no text.
+
+        Providers fill an empty reply with "Calling tool...". That is not something the model said,
+        yet it was stored in history and sent back, and small models then imitate it. With tool calls
+        the text is simply empty. Without any, an empty reply gets an honest explanation (and must be
+        non-empty, since some APIs reject empty assistant text).
+        """
+        content = (response.message.content or "").strip()
+        if content and content != TOOL_PLACEHOLDER:
+            return
+        response.message.content = "" if response.tool_calls else EMPTY_RESPONSE_TEXT
+
+    @staticmethod
+    def _with_safeguard_notices(output: str, *verdicts) -> str:
+        """Append any loop-safeguard warnings (duplicate call, oscillation, error streak) to a tool
+        result so the model sees them. Each distinct message is added once."""
+        notices: list[str] = []
+        for v in verdicts:
+            if v.message and v.severity != LoopSeverity.NONE and v.message not in notices:
+                text = v.message
+                if not text.startswith("DevOrch Safeguard Notice:"):
+                    text = f"DevOrch Safeguard Notice: {text}"
+                notices.append(text)
+        if not notices:
+            return output
+        return output + "".join(f"\n\n[{n}]" for n in notices)
 
     def _save_message(self, message: Message):
         """Save a message to history and session storage."""
@@ -393,6 +426,8 @@ class Agent:
             send_messages = prune_old_images(planned_messages, keep=self.keep_recent_images)
             response = self._call_model(send_messages, tools_for_call, status_msg)
 
+            self._normalize_response_text(response)
+
             # Record token usage
             usage = getattr(response, "usage", None) or extract_token_usage(
                 getattr(response, "raw", None)
@@ -429,25 +464,22 @@ class Agent:
             for call in response.tool_calls:
                 self._display_tool_call(call)
 
-                # Loop safeguard check before execution
+                # Loop safeguard: record the call before running it (may halt a runaway loop)...
                 verdict = self.loop_detector.check_and_record(call.name, call.arguments)
                 if verdict.should_block:
-                    console.print(f"    [bold red]⛔ Safeguard: {verdict.message}[/bold red]")
+                    # message includes tool arguments: show it as plain text, never as markup
+                    console.print(Text(f"    ⛔ Safeguard: {verdict.message}", style="bold red"))
                     tool_output = (
                         f"Error: Action blocked by DevOrch safeguard to prevent infinite loop. "
                         f"{verdict.message}"
                     )
                 else:
                     tool_output = self.executor.execute(call.name, call.arguments)
-                    # Record result in loop detector to track errors and oscillations
-                    post_verdict = self.loop_detector.check_and_record(
-                        call.name, call.arguments, result=tool_output
+                    # ...then attach its outcome to that same record (no second count).
+                    post_verdict = self.loop_detector.record_result(
+                        call.name, call.arguments, tool_output
                     )
-                    if post_verdict.message and post_verdict.severity != LoopSeverity.NONE:
-                        notice_text = post_verdict.message
-                        if not notice_text.startswith("DevOrch Safeguard Notice:"):
-                            notice_text = f"DevOrch Safeguard Notice: {notice_text}"
-                        tool_output = f"{tool_output}\n\n[{notice_text}]"
+                    tool_output = self._with_safeguard_notices(tool_output, verdict, post_verdict)
 
                 self._display_tool_result(
                     call.name, tool_output, getattr(self.executor, "last_run_seconds", None)

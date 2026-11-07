@@ -588,3 +588,53 @@ class TestShellTool:
         assert normalize_windows_command("which python") == "where python"
         assert normalize_windows_command("clear") == "cls"
         assert normalize_windows_command("git status && npm test") == "git status && npm test"
+
+
+class TestSearchHints:
+    """search explains itself when it finds nothing, and tolerates a directory name in the pattern."""
+
+    @pytest.fixture
+    def tree(self, tmp_path):
+        (tmp_path / "pkg" / "sub").mkdir(parents=True)
+        (tmp_path / "pkg" / "a.py").write_text("x")
+        (tmp_path / "pkg" / "sub" / "b.py").write_text("x")
+        (tmp_path / "pkg" / "__pycache__").mkdir()
+        return tmp_path / "pkg"
+
+    def test_directory_name_in_the_pattern_is_tolerated(self, tree):
+        out = SearchTool().run({"pattern": "**/pkg/sub/*.py", "directory": str(tree)})
+        assert "b.py" in out and "relative to" in out and "**/sub/*.py" in out
+
+    def test_plain_prefix_form_also_works(self, tree):
+        out = SearchTool().run({"pattern": "pkg/sub/*.py", "directory": str(tree)})
+        assert "b.py" in out
+
+    def test_a_genuine_miss_lists_what_the_directory_contains(self, tree):
+        out = SearchTool().run({"pattern": "*.rs", "directory": str(tree)})
+        assert out.startswith("No files found matching: *.rs")
+        assert "contains:" in out and "sub/" in out and "a.py" in out
+        assert "__pycache__" not in out  # skipped directories are not advertised
+        assert "broader pattern" in out
+
+    def test_empty_directory_says_so(self, tmp_path):
+        out = SearchTool().run({"pattern": "*.py", "directory": str(tmp_path)})
+        assert "No files found" in out and "empty" in out
+
+    def test_normal_results_are_unchanged(self, tree):
+        out = SearchTool().run({"pattern": "*.py", "directory": str(tree)})
+        assert out.startswith("Found 2 result(s)") and "relative to" not in out
+
+    def test_result_cap_message_uses_the_real_total(self, tree):
+        out = SearchTool().run({"pattern": "*.py", "directory": str(tree), "max_results": 1})
+        assert "Showing 1 of 2 results" in out
+
+    def test_strip_directory_prefix_cases(self):
+        from tools.search import strip_directory_prefix as strip
+
+        assert strip("**/cli/commands/*.py", "cli") == "**/commands/*.py"
+        assert strip("cli/commands/*.py", "cli") == "commands/*.py"
+        assert strip("cli/*.py", "/home/u/proj/cli") == "*.py"
+        assert strip("proj/cli/*.py", "/home/u/proj/cli") == "*.py"
+        assert strip("*.py", "cli") is None
+        assert strip("commands/*.py", "cli") is None
+        assert strip("cli", "cli") is None  # nothing left to search for

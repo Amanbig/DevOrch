@@ -63,6 +63,13 @@ Add it to `SLASH_COMMANDS` in `cli/constants.py` (that feeds the dropdown and `/
 REPL in `cli/main.py`; put non-trivial logic in `cli/repl_commands.py` so it can be tested. A test fails if a
 command appears in the dropdown without a handler.
 
+### Changing the system prompt
+
+The prompt lives in `cli/commands/_shared.py` (and the sub-agent's in `tools/agent.py`); tool descriptions are sent to the
+model too, so a rule can be contradicted by a tool's own text. `tests/test_system_prompt.py` guards against specific past
+mistakes, but it cannot tell you a rewrite is *better*: run `python scripts/prompt_eval.py` on a real model before and
+after (see [docs/PROMPT_EVALUATION.md](docs/PROMPT_EVALUATION.md)).
+
 ## Testing notes
 
 - Tests must not touch your real `~/.devorch`: monkeypatch `Path.home()` and the config paths (see

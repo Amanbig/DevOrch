@@ -33,8 +33,29 @@ class ToolExecutionRecord:
     result_preview: str
 
 
+def is_error_result(result: Any) -> bool:
+    """Whether a tool result reports a failure.
+
+    Looks at the *start* of the result: tools report failure by beginning with "Error ..." (and the
+    shell tool returns just STDERR when a command prints nothing else). A result that merely
+    contains the word, such as a source file mentioning "error:", is not a failure.
+    """
+    if result is None:
+        return False
+    first = str(result).lstrip().split("\n", 1)[0].lower()
+    return first.startswith(
+        ("error", "stderr:", "failed", "filesystem error", "search error", "memory error")
+    )
+
+
 class LoopDetector:
-    """Monitors agent tool invocations to detect and prevent degenerative loops."""
+    """Monitors agent tool invocations to detect and prevent degenerative loops.
+
+    Use it around each tool call as: ``check_and_record(name, args)`` *before* running the tool
+    (records the call; detects duplicates and oscillation; may halt), then
+    ``record_result(name, args, output)`` *after* (updates that same call with its outcome and detects
+    error thrashing). Passing ``result=`` to ``check_and_record`` records a finished call in one step.
+    """
 
     def __init__(
         self,
@@ -87,18 +108,12 @@ class LoopDetector:
             else:
                 break
 
-        # Check error status
+        # Error status only changes when we actually know the outcome. A call recorded *before* it
+        # runs has no result yet and must not reset the error streak.
+        is_error = is_error_result(result)
+        if result is not None:
+            self.consecutive_errors = self.consecutive_errors + 1 if is_error else 0
         result_str = str(result) if result is not None else ""
-        is_error = (
-            "Error:" in result_str
-            or result_str.startswith("Error")
-            or "error:" in result_str.lower()
-        )
-
-        if is_error:
-            self.consecutive_errors += 1
-        else:
-            self.consecutive_errors = 0
 
         # Create record
         record = ToolExecutionRecord(
@@ -162,6 +177,31 @@ class LoopDetector:
                 )
 
         return LoopVerdict(severity=LoopSeverity.NONE)
+
+    def record_result(self, tool_name: str, arguments: dict[str, Any], result: Any) -> LoopVerdict:
+        """Attach a finished tool call's outcome to the record made by ``check_and_record``.
+
+        Does not add a record, so the call is not counted twice. Returns a warning when the last few
+        calls all failed.
+        """
+        call_hash = self._hash_args(tool_name, arguments)
+        is_error = is_error_result(result)
+        for record in reversed(self.history):
+            if record.args_hash == call_hash:
+                record.is_error = is_error
+                record.result_preview = str(result)[:120]
+                break
+        self.consecutive_errors = self.consecutive_errors + 1 if is_error else 0
+        if self.consecutive_errors >= self.error_threshold:
+            return LoopVerdict(
+                severity=LoopSeverity.WARNING,
+                should_block=False,
+                message=(
+                    f"DevOrch Safeguard Notice: Last {self.consecutive_errors} tool calls resulted in errors. "
+                    "Please carefully review the error messages, check file paths, and reconsider the approach."
+                ),
+            )
+        return LoopVerdict()
 
     def get_turn_advisory(self, iteration: int, max_iterations: int) -> str | None:
         """Provide a proactive nudge when approaching maximum iterations."""
