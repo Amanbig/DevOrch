@@ -1,0 +1,155 @@
+{
+  "name": "devorch-code",
+  "displayName": "Devorch-Code",
+  "description": "This extension connectes the python devorch cli directly to extension",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "devorch-explorer",
+          "title": "DevOrch",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "devorch-explorer": [
+        {
+          "type": "webview",
+          "id": "devorch-code.chatView",
+          "name": "DevOrch Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "devorch-code.startRepl",
+        "title": "DevOrch: Start Interactive Session",
+        "category": "DevOrch"
+      },
+      {
+        "command": "devorch-code.resumeRepl",
+        "title": "DevOrch: Resume Past Session",
+        "category": "DevOrch"
+      },
+      {
+        "command": "devorch-code.runSkill",
+        "title": "DevOrch: Run Skill",
+        "category": "DevOrch"
+      },
+      {
+        "command": "devorch-code.explainCode",
+        "title": "DevOrch: Explain Code",
+        "category": "DevOrch"
+      },
+      {
+        "command": "devorch-code.reviewCode",
+        "title": "DevOrch: Review Code",
+        "category": "DevOrch"
+      },
+      {
+        "command": "devorch-code.fixCode",
+        "title": "DevOrch: Fix Code",
+        "category": "DevOrch"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "devorch-code.explainCode",
+          "when": "editorHasSelection",
+          "group": "devorch@1"
+        },
+        {
+          "command": "devorch-code.reviewCode",
+          "when": "editorHasSelection",
+          "group": "devorch@2"
+        },
+        {
+          "command": "devorch-code.fixCode",
+          "when": "editorHasSelection",
+          "group": "devorch@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "DevOrch",
+      "properties": {
+        "devorch.executablePath": {
+          "type": "string",
+          "default": "devorch",
+          "description": "Path to the devorch executable."
+        },
+        "devorch.defaultProvider": {
+          "type": "string",
+          "default": "",
+          "description": "Default provider to use for chat (e.g. openai, anthropic, gemini, mistral, groq). If empty, the CLI's default provider is used."
+        },
+        "devorch.defaultModel": {
+          "type": "string",
+          "default": "",
+          "description": "Default model to use. If empty, the provider's default model is used."
+        },
+        "devorch.defaultMode": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "ask",
+            "auto",
+            "plan"
+          ],
+          "description": "Execution mode for DevOrch ask runs in the Webview."
+        },
+        "devorch.disableMcp": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable all MCP servers for chat runs."
+        },
+        "devorch.activeMcpServers": {
+          "type": "string",
+          "default": "",
+          "description": "Comma-separated list of MCP servers to use. If empty, all configured servers are used."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.100.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "typescript-eslint": "^8.61.1",
+    "eslint": "^10.5.0",
+    "esbuild": "^0.28.1",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.3",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  }
+}
