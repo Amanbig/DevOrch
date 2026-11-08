@@ -88,22 +88,34 @@
 	.row .s { display: block; font-size: .85em; color: var(--vscode-descriptionForeground); }
 	.row.current { background: var(--vscode-list-inactiveSelectionBackground); }
 
-	footer { padding: 8px 10px 10px; border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent)); }
-	.box { border: 1px solid var(--vscode-input-border, var(--vscode-widget-border)); border-radius: 6px; background: var(--vscode-input-background); }
+	footer { padding: 8px 10px 10px; }
+	.box {
+		border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, var(--vscode-panel-border)));
+		border-radius: 10px; background: var(--vscode-input-background); overflow: hidden;
+		transition: border-color .12s;
+	}
 	.box:focus-within { border-color: var(--vscode-focusBorder); }
 	textarea {
-		display: block; width: 100%; min-height: 38px; max-height: 160px; resize: none; padding: 8px 10px; border: 0; background: transparent;
-		color: var(--vscode-input-foreground); font: inherit; outline: none;
+		display: block; width: 100%; min-height: 44px; max-height: 180px; resize: none; padding: 11px 12px 4px; border: 0; background: transparent;
+		color: var(--vscode-input-foreground); font: inherit; line-height: 1.45; outline: none;
 	}
 	textarea::placeholder { color: var(--vscode-input-placeholderForeground); }
-	.bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px; flex-wrap: wrap; }
-	.seg { display: inline-flex; border: 1px solid var(--vscode-widget-border, var(--vscode-input-border, transparent)); border-radius: 4px; overflow: hidden; }
-	.seg button { background: none; border: 0; padding: 2px 8px; font-size: .9em; color: var(--vscode-descriptionForeground); }
+	.bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px 8px 10px; }
+	.seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 999px; background: var(--vscode-editor-background); }
+	.seg button { background: none; border: 0; border-radius: 999px; padding: 2px 10px; font-size: .88em; line-height: 1.5; color: var(--vscode-descriptionForeground); }
+	.seg button:hover { color: var(--vscode-foreground); }
 	.seg button[aria-pressed="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-	.attach { font-size: .9em; display: inline-flex; align-items: center; gap: 4px; color: var(--vscode-descriptionForeground); max-width: 45%; }
+	.attach { font-size: .88em; display: inline-flex; align-items: center; gap: 4px; color: var(--vscode-descriptionForeground); min-width: 0; flex: 0 1 auto; cursor: pointer; }
+	.attach input { margin: 0; flex: none; }
 	.attach span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.spacer { flex: 1; }
-	.hint { margin-top: 4px; font-size: .8em; color: var(--vscode-descriptionForeground); }
+	.go {
+		flex: none; width: 28px; height: 28px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center;
+		background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 15px; line-height: 1;
+	}
+	.go:hover { background: var(--vscode-button-hoverBackground); }
+	.go:disabled { opacity: .4; cursor: default; }
+	.hint { margin: 5px 4px 0; font-size: .8em; color: var(--vscode-descriptionForeground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -139,11 +151,11 @@
 			</div>
 			<label class="attach" id="attachWrap" title="Include the open file with your message"><input type="checkbox" id="attach"><span id="attachName"></span></label>
 			<span class="spacer"></span>
-			<button class="primary" id="btnSend">Send</button>
-			<button class="primary hidden" id="btnStop">Stop</button>
+			<button class="go" id="btnSend" title="Send (Enter)" aria-label="Send">↑</button>
+			<button class="go hidden" id="btnStop" title="Stop (Esc)" aria-label="Stop">■</button>
 		</div>
 	</div>
-	<div class="hint" id="hint">Auto mode can edit files and run commands in this folder.</div>
+	<div class="hint" id="hint">Auto can edit files and run commands</div>
 </footer>
 
 <script nonce="{{nonce}}">
@@ -219,7 +231,7 @@
 		mode = m;
 		$('modeAuto').setAttribute('aria-pressed', String(m === 'auto'));
 		$('modePlan').setAttribute('aria-pressed', String(m === 'plan'));
-		$('hint').textContent = m === 'auto' ? 'Auto mode can edit files and run commands in this folder.' : 'Plan mode is read-only: DevOrch looks around and proposes changes.';
+		$('hint').textContent = m === 'auto' ? 'Auto can edit files and run commands' : 'Plan is read-only: it proposes, changes nothing';
 		vscode.setState({ mode: m });
 	}
 
