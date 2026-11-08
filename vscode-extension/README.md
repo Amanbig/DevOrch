@@ -15,7 +15,8 @@ folder, with any model provider DevOrch supports (OpenAI, Anthropic, Gemini, Mis
 
 - **Chat** in the side panel. Each chat is a DevOrch session: it continues where you left off and shows up in
   `devorch --resume` in the terminal too.
-- **Auto or Plan.** Auto lets DevOrch edit files and run commands in your folder; Plan is read-only.
+- **Ask, Auto or Plan.** Ask (the default) shows each edit or command with Allow once / This session / Always / Deny
+  before it runs; Auto runs without asking; Plan is read-only. Ask needs DevOrch 0.5.4 or newer.
 - **Attach the open file**, or right-click a selection: *Add Selection to Chat*, *Explain*, *Review*, *Fix*.
 - **Conversations** (☰ button): everything you started in this folder; open or delete one.
 - **Terminal.** *DevOrch: Start Interactive Session*, *Continue Last Conversation* and *Resume Past Session* open the
@@ -27,12 +28,11 @@ folder, with any model provider DevOrch supports (OpenAI, Anthropic, Gemini, Mis
 |---|---|
 | `devorch.executablePath` | The `devorch` command (default `devorch`) |
 | `devorch.defaultProvider` / `devorch.defaultModel` | Override the provider and model for the panel |
-| `devorch.defaultMode` | `auto` or `plan` |
+| `devorch.defaultMode` | `ask`, `auto` or `plan` |
 | `devorch.disableMcp`, `devorch.activeMcpServers` | MCP servers used by the panel |
 
-The panel runs `devorch ask` without a terminal, so it cannot stop to ask permission for each action. Use Plan mode
-to look without touching, or the terminal commands to approve actions one by one. DevOrch's built-in blocks on dangerous
-commands and your deny rules still apply.
+DevOrch's built-in blocks on dangerous commands and your deny rules apply in every mode, and the terminal commands open the
+full interface.
 
 ## Develop
 

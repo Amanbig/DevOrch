@@ -1,5 +1,6 @@
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
 import questionary
@@ -70,6 +71,8 @@ class ToolExecutor(Executor):
         self.require_confirmation = require_confirmation
         self.permissions = permissions or get_permissions()
         self.mode_manager = mode_manager
+        # Replaces the terminal prompt when something else (an editor) answers permission requests
+        self.approver: Callable[[str, str, str | None], PermissionChoice] | None = None
 
     def _get_command_description(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Get a human-readable description of the command."""
@@ -223,7 +226,8 @@ class ToolExecutor(Executor):
                     return f"Error: Command denied - {reason or 'blocked by permission policy'}"
 
                 elif perm_level == PermissionLevel.ASK:
-                    choice = self._ask_permission(tool_name, command, reason)
+                    ask = self.approver or self._ask_permission
+                    choice = ask(tool_name, command, reason)
                     if not self._handle_permission_choice(choice, tool_name, command):
                         return "Error: User denied permission to execute this command."
 

@@ -15,6 +15,7 @@ from typing import Any
 
 import typer
 
+from devorch.config.permissions import PermissionChoice
 from devorch.utils.logger import get_console, print_error, print_panel, print_warning
 
 FORMATS = ("text", "json", "stream-json")
@@ -151,3 +152,50 @@ def run_with_output(
     )
     if error is not None:
         raise typer.Exit(130 if interrupted else 1)
+
+
+APPROVAL_CHOICES = {
+    "once": PermissionChoice.ALLOW_ONCE,
+    "session": PermissionChoice.ALLOW_SESSION,
+    "always": PermissionChoice.ALLOW_ALWAYS,
+    "deny": PermissionChoice.DENY,
+}
+
+
+def stdio_approver(stdin=None):
+    """Answer permission requests over stdin/stdout, for an editor that shows its own prompt.
+
+    For each request it writes one JSON line to stdout::
+
+        {"type": "permission_request", "id": 1, "tool": "shell", "command": "rm x", "reason": null}
+
+    and waits for one JSON line on stdin: ``{"id": 1, "choice": "once|session|always|deny"}``.
+    A closed stdin, a bad reply or an unknown choice all mean *deny*.
+    """
+    source = stdin if stdin is not None else sys.stdin
+    counter = {"n": 0}
+
+    def approve(tool_name: str, command: str, reason: str | None = None) -> PermissionChoice:
+        counter["n"] += 1
+        request_id = counter["n"]
+        _emit(
+            {
+                "type": "permission_request",
+                "id": request_id,
+                "tool": tool_name,
+                "command": command,
+                "reason": reason,
+            }
+        )
+        while True:
+            line = source.readline()
+            if not line:  # stdin closed: nobody can answer
+                return PermissionChoice.DENY
+            try:
+                reply = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(reply, dict) and reply.get("id") == request_id:
+                return APPROVAL_CHOICES.get(str(reply.get("choice")), PermissionChoice.DENY)
+
+    return approve

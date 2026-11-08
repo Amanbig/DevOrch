@@ -2,7 +2,12 @@
 
 import typer
 
-from devorch.cli.commands._output import configure_output, run_with_output, validate_format
+from devorch.cli.commands._output import (
+    configure_output,
+    run_with_output,
+    stdio_approver,
+    validate_format,
+)
 from devorch.cli.commands._shared import (
     SKIP_PERMISSIONS_HELP,
     build_agent,
@@ -44,6 +49,12 @@ def ask(
         "--save-session",
         help="Save this run as a session you can continue (always on with --resume/--continue)",
     ),
+    approvals: str = typer.Option(
+        "terminal",
+        "--approvals",
+        help="Where permission questions are answered: terminal (default) or stdio "
+        "(JSON lines, for editors; needs --output stream-json)",
+    ),
     max_turns: int = typer.Option(
         None,
         "--max-turns",
@@ -71,6 +82,12 @@ def ask(
       devorch ask --continue "keep going"
     """
     output = validate_format(output)
+    if approvals not in ("terminal", "stdio"):
+        print_error("--approvals must be 'terminal' or 'stdio'.")
+        raise typer.Exit(2)
+    if approvals == "stdio" and output != "stream-json":
+        print_error("--approvals stdio needs --output stream-json.")
+        raise typer.Exit(2)
     configure_output(output)
     settings = Settings.load()
     print_project_notices(settings)
@@ -114,6 +131,8 @@ def ask(
         context_windows=settings.context_windows,
     )
 
+    if approvals == "stdio":
+        agent.executor.approver = stdio_approver()
     if sessions is not None:
         agent.session_manager = sessions
         if history:
