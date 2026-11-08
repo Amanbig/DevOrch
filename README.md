@@ -49,14 +49,14 @@ including on uninstall. Run it again any time to upgrade. Read them first if you
 
 ```bash
 # options (pass them after `sh -s --`)
-curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --version 0.5.3
+curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --version 0.5.4
 curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --dry-run     # show, change nothing
 curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --uninstall
 ```
 
 ```powershell
 # options (a script block, because `| iex` cannot take parameters)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Version 0.5.3
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Version 0.5.4
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Uninstall
 ```
 
@@ -91,6 +91,13 @@ devorch edit src/auth.py "add input validation"
 ```
 
 On first run, DevOrch walks you through provider selection and API key setup.
+
+### VS Code
+
+The extension in [`vscode-extension/`](vscode-extension/README.md) puts DevOrch in the side bar: chat with Ask / Auto /
+Plan modes (Ask confirms each edit or command in the panel), `/` skills and commands, `@` file suggestions, and your
+conversations for the open folder. It needs the `devorch` command, so install that first. Install the `.vsix` from the
+[latest release](https://github.com/Amanbig/DevOrch/releases/latest) (Extensions → ⋯ → Install from VSIX).
 
 ## Features
 
@@ -496,6 +503,26 @@ With `--output json` stdout contains a single JSON object (`result`, `is_error`,
 on failure, so it is safe to use in scripts and CI. `stream-json` emits `tool_call` events as they happen
 followed by a final `result` event. Available on `ask` and `run`.
 
+#### Continuing a conversation from scripts and editors
+
+`ask` can keep a conversation going across runs, which is how the VS Code extension chats:
+
+```bash
+devorch ask --save-session --output json "start by reading the auth module"   # result includes "session_id"
+devorch ask --resume <session_id> "now add a test for the login path"
+devorch ask --continue "and the logout path"     # the latest session in this directory
+devorch sessions list --here --output json       # id, title, provider, model, messages, updated_at
+devorch sessions messages <session_id>           # the conversation as JSON
+devorch skills --output json                     # name, description, source
+```
+
+A resumed session keeps its own provider and model unless you pass `--provider` / `--model`. Sessions made this
+way show up in `devorch --resume` too.
+
+`--approvals stdio` (with `--output stream-json`) is for editors that show their own permission prompt. DevOrch
+writes `{"type": "permission_request", "id": 1, "tool": "shell", "command": "...", "reason": null}` and waits for
+`{"id": 1, "choice": "once|session|always|deny"}` on stdin; no answer means deny. Use it with `--mode ask`.
+
 All non-interactive commands support `--provider`, `--model`, `--mode`, `--mcp`, `--no-mcp` and
 `--dangerously-skip-permissions`. `devorch` / `devorch chat` take `--mode` and `--dangerously-skip-permissions`
 too, so you can start the REPL in a given mode.
@@ -661,6 +688,9 @@ DevOrch/
 │   ├── tools/            # Built-in tools (shell, edit, search, git, ...)
 │   ├── schemas/          # Data models
 │   └── utils/            # Logging, display helpers
+├── vscode-extension/     # The VS Code extension (TypeScript)
+├── install.sh            # One-line installers (Linux/macOS, Windows)
+├── install.ps1
 ├── tests/                # Test suite
 ├── scripts/              # Developer scripts (not installed)
 └── docs/

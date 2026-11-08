@@ -74,8 +74,11 @@ class AgentTool(Tool):
     )
     args_schema = AgentToolSchema
 
-    def __init__(self, provider, tools: list[Tool], costs=None):
+    def __init__(self, provider, tools: list[Tool], costs=None, parent_executor=None):
         self._provider = provider
+        # The executor of the agent that owns this tool: the sub-agent inherits its permission mode and
+        # how permission questions are asked, so approving "agent" does not approve everything inside it
+        self.parent_executor = parent_executor
         # Shared with the parent agent so sub-agent calls show up in the session cost
         self.costs = costs
         # Store all tools except this one — sub-agents can't spawn sub-agents
@@ -94,8 +97,16 @@ class AgentTool(Tool):
         else:
             sub_tools = self._available_tools
 
-        mode_manager = ModeManager(default_mode=AgentMode.AUTO)
+        parent = self.parent_executor
+        parent_mode = parent.mode_manager.mode if parent and parent.mode_manager else AgentMode.AUTO
+        # AUTO stays automatic; ASK keeps asking; PLAN (read-only planning) is treated as ASK inside
+        mode_manager = ModeManager(
+            default_mode=AgentMode.AUTO if parent_mode == AgentMode.AUTO else AgentMode.ASK
+        )
         executor = ToolExecutor(tools=sub_tools, mode_manager=mode_manager)
+        if parent is not None:
+            executor.approver = parent.approver
+            executor.permissions = parent.permissions
         planner = SubAgentPlanner()
 
         sub_agent = Agent(

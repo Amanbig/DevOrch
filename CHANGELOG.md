@@ -1,15 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.5.4
+
+Approve DevOrch's actions inside VS Code, and sub-agents no longer skip your approvals.
+
+### Upgrade notes
+- **Sub-agents now follow the permission mode of the agent that started them.** Before, the `agent` tool ran its
+  sub-agent in Auto mode even in Ask mode, so approving one `agent` call approved every command inside it. Now, in
+  Ask (or Plan) mode the sub-agent asks for each edit or command too; in Auto mode nothing changes. The VS Code
+  extension needs 0.5.4 for its Ask mode.
 
 ### Added
 - `devorch ask --approvals stdio` (with `--output stream-json`) lets an editor answer permission questions: DevOrch
   writes a `permission_request` JSON line and waits for `{"id": N, "choice": "once|session|always|deny"}` on stdin.
   No answer means deny.
-- **VS Code panel: Ask mode.** The panel now has Ask, Auto and Plan. Ask (the new default) shows each edit or command
-  as a card with Allow once / This session / Always / Deny, so DevOrch no longer changes things without asking. It
-  needs this DevOrch release; older versions start in Auto. Provider errors such as a 429 rate limit or a rejected API
-  key are explained in plain words.
+- `devorch ask --save-session` in text mode now prints the session id and how to continue it.
+- **VS Code extension 0.1.1: Ask mode.** The panel now has Ask, Auto and Plan. Ask (the new default) shows each edit
+  or command as a card with Allow once / This session / Always / Deny, so DevOrch no longer changes things without
+  asking. Older DevOrch versions start in Auto. Provider errors such as a 429 rate limit or a rejected API key are
+  explained in plain words.
+- The release workflow publishes the VS Code extension to the Marketplace (trusted publishing) after PyPI.
+- README: how to continue conversations from scripts and editors, and a VS Code section.
 
 ## 0.5.3
 

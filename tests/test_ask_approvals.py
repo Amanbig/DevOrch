@@ -172,3 +172,32 @@ def test_approvals_option_is_validated(setup):
     assert bad.exit_code == 2
     needs_stream = runner.invoke(app, ["ask", "--approvals", "stdio", "--output", "json", "x"])
     assert needs_stream.exit_code == 2
+
+
+# ── a sub-agent does not get more freedom than the agent that spawned it ────
+
+
+def test_a_sub_agent_inherits_ask_mode_and_the_approver():
+    from devorch.core.modes import AgentMode, ModeManager
+    from devorch.tools.agent import AgentTool
+
+    tool = Touch()
+    parent = ToolExecutor([tool], permissions=AlwaysAsk(), mode_manager=ModeManager(AgentMode.ASK))
+    asked = []
+    parent.approver = lambda t, c, r: asked.append(t) or PermissionChoice.DENY
+
+    sub = AgentTool(provider=Scripted(), tools=[tool], parent_executor=parent)
+    result = sub.run({"task": "touch a file"})
+    assert asked == ["touch"]  # the sub-agent's call went to the parent's approver
+    assert tool.ran == [] and result  # ...which said no
+
+
+def test_a_sub_agent_of_an_auto_agent_stays_automatic():
+    from devorch.core.modes import AgentMode, ModeManager
+    from devorch.tools.agent import AgentTool
+
+    tool = Touch()
+    parent = ToolExecutor([tool], permissions=AlwaysAsk(), mode_manager=ModeManager(AgentMode.AUTO))
+    parent.approver = lambda *a: pytest.fail("auto mode must not ask")
+    AgentTool(provider=Scripted(), tools=[tool], parent_executor=parent).run({"task": "touch"})
+    assert len(tool.ran) == 1

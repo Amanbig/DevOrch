@@ -133,3 +133,10 @@ def test_skills_as_json():
     assert result.exit_code == 0 and rows
     assert {"name", "description", "source"} <= set(rows[0])
     assert "commit" in [r["name"] for r in rows]
+
+
+def test_text_mode_tells_you_how_to_continue(provider, capsys):
+    result = runner.invoke(app, ["ask", "--mode", "auto", "--save-session", "hello"])
+    out = capsys.readouterr().out + result.output
+    sid = SessionManager().latest_session_id()
+    assert result.exit_code == 0 and f"devorch ask --resume {sid}" in out
