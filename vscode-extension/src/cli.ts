@@ -126,3 +126,8 @@ export function selectionPrompt(instruction: string, relPath: string, startLine:
 export function withFileMention(prompt: string, relPath: string | undefined): string {
 	return relPath ? `@${relPath} ${prompt}` : prompt;
 }
+
+/** Does this devorch's `ask --help` list the session options the chat panel relies on? */
+export function supportsSessions(askHelp: string): boolean {
+	return /--save-session/.test(askHelp) && /--resume/.test(askHelp);
+}

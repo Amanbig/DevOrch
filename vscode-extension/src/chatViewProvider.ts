@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 import {
-	buildAskArgs, explainFailure, Mode, parseMessages, parseSessions, parseStreamLine,
+	buildAskArgs, explainFailure, supportsSessions, Mode, parseMessages, parseSessions, parseStreamLine,
 	ResultEvent, withFileMention,
 } from './cli';
 
@@ -82,9 +82,13 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 		const cfg = vscode.workspace.getConfiguration('devorch');
 		const { stdout, code } = await this.run(['--version']);
 		const installed = code === 0 && /devorch/i.test(stdout);
+		// the panel needs `ask --resume`, which older releases do not have
+		const help = installed ? await this.run(['ask', '--help']) : undefined;
+		const outdated = installed && !(help && supportsSessions(help.stdout));
 		this.post({
 			type: 'status',
 			installed,
+			outdated,
 			version: installed ? stdout.trim() : '',
 			exe: this.exe(),
 			provider: cfg.get<string>('defaultProvider') || '',

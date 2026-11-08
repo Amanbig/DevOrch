@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert';
-import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt } from '../cli';
+import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt, supportsSessions } from '../cli';
 
 test('a new chat saves a session and passes the prompt after --', () => {
 	const a = buildAskArgs({ prompt: '-rf is not an option', mode: 'auto' });
@@ -58,4 +58,10 @@ test('file and selection context', () => {
 	assert.strictEqual(withFileMention('explain', 'src/a.py'), '@src/a.py explain');
 	assert.strictEqual(withFileMention('explain', undefined), 'explain');
 	assert.strictEqual(selectionPrompt('Explain', 'a.py', 10, 'x = 1'), 'Explain\n\na.py:10\n```\nx = 1\n```');
+});
+
+test('old releases without ask sessions are detected from ask --help', () => {
+	assert.strictEqual(supportsSessions('Options:\n --provider\n --save-session\n --resume -r'), true);
+	assert.strictEqual(supportsSessions('Options:\n --provider\n --model\n --output'), false);
+	assert.strictEqual(supportsSessions(''), false);
 });

@@ -131,7 +131,7 @@
 
 <footer>
 	<div class="box">
-		<textarea id="input" rows="1" placeholder="Ask DevOrch…  (Enter to send, Shift+Enter for a new line)" aria-label="Message"></textarea>
+		<textarea id="input" rows="1" placeholder="Ask DevOrch…" title="Enter to send, Shift+Enter for a new line" aria-label="Message"></textarea>
 		<div class="bar">
 			<div class="seg" role="group" aria-label="Mode">
 				<button id="modeAuto" aria-pressed="true" title="DevOrch may edit files and run commands">Auto</button>
@@ -240,6 +240,11 @@
 		$('attachWrap').classList.toggle('hidden', !s.file);
 		$('attachName').textContent = s.file || '';
 		if (!saved.mode) { setMode(s.mode); }
+		if (s.installed && s.outdated && !chat.querySelector('.banner.info')) {
+			const b = banner('<b>Update DevOrch</b> (you have ' + esc(s.version) + '). The chat panel needs a newer release. Update with this command; the terminal opens with it typed in, press Enter to run:<code class="cmd">' + esc(s.installCommand) + '</code><button class="primary" id="doInstall" type="button">Open terminal</button> <button class="link" id="doRecheck" type="button">I updated it</button>', 'info');
+			b.querySelector('#doInstall').onclick = () => vscode.postMessage({ type: 'install' });
+			b.querySelector('#doRecheck').onclick = () => { b.remove(); vscode.postMessage({ type: 'refresh' }); };
+		}
 		if (!s.installed && !chat.querySelector('.banner.info')) {
 			const b = banner('<b>DevOrch is not installed</b> (looked for <code>' + esc(s.exe) + '</code>).<br>Install it with this command; the terminal will open with it typed in, press Enter to run:<code class="cmd">' + esc(s.installCommand) + '</code><button class="primary" id="doInstall" type="button">Open terminal</button> <button class="link" id="doRecheck" type="button">I installed it</button>', 'info');
 			b.querySelector('#doInstall').onclick = () => vscode.postMessage({ type: 'install' });
