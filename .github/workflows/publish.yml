@@ -79,6 +79,29 @@ jobs:
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
 
+  publish-vscode:
+    name: Publish VS Code extension
+    # after PyPI: the extension's Ask mode needs the CLI release that goes out in the same tag
+    needs: [publish-pypi, build-extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # trusted publishing: the Marketplace trusts this workflow, no token is stored
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Download the .vsix
+        uses: actions/download-artifact@v8
+        with:
+          name: vscode-extension
+          path: extension/
+
+      # --skip-duplicate: a tag that does not change the extension version is not an error
+      - name: Publish to the Visual Studio Marketplace
+        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath extension/devorch-code.vsix --skip-duplicate
+
   create-github-release:
     name: Create GitHub Release
     needs: [publish-pypi, build-extension]

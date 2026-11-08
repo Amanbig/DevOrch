@@ -19,6 +19,7 @@ Approve DevOrch's actions inside VS Code, and sub-agents no longer skip your app
   or command as a card with Allow once / This session / Always / Deny, so DevOrch no longer changes things without
   asking. Older DevOrch versions start in Auto. Provider errors such as a 429 rate limit or a rejected API key are
   explained in plain words.
+- The release workflow publishes the VS Code extension to the Marketplace (trusted publishing) after PyPI.
 - README: how to continue conversations from scripts and editors, and a VS Code section.
 
 ## 0.5.3
