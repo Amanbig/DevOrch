@@ -2,7 +2,7 @@
   "name": "devorch-code",
   "displayName": "DevOrch",
   "description": "Chat with the DevOrch AI coding assistant from VS Code: any model provider, runs in your project, asks before it changes things.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "Procoder588",
   "license": "MIT",
   "icon": "media/icon.png",

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import * as assert from 'node:assert';
-import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt, supportsSessions, splitSkillCommand, parseSkills, supportsApprovals, permissionReply, friendlyError } from '../cli';
+import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt, supportsSessions, splitSkillCommand, parseSkills, supportsApprovals, permissionReply, friendlyError, pickWorkDir } from '../cli';
 
 test('a new chat saves a session and passes the prompt after --', () => {
 	const a = buildAskArgs({ prompt: '-rf is not an option', mode: 'auto' });
@@ -111,4 +111,14 @@ test('the package is published as the Marketplace publisher Procoder588', () => 
 	// the Marketplace rejects an upload whose publisher differs from the account's ID, and this was once wrong
 	const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
 	assert.strictEqual(pkg.publisher, 'Procoder588');
+});
+
+test('the working folder is an open folder, never the home directory', () => {
+	assert.strictEqual(pickWorkDir([]), undefined);
+	assert.strictEqual(pickWorkDir([], '/home/me/notes.txt'), undefined);  // a loose file is not a project
+	assert.strictEqual(pickWorkDir(['/work/a']), '/work/a');
+	assert.strictEqual(pickWorkDir(['/work/a', '/work/b'], '/work/b/src/x.py'), '/work/b');
+	assert.strictEqual(pickWorkDir(['/work/a', '/work/b'], '/elsewhere/y.py'), '/work/a');
+	assert.strictEqual(pickWorkDir(['/work/a', '/work/a/pkg'], '/work/a/pkg/m.py'), '/work/a/pkg');
+	assert.strictEqual(pickWorkDir(['/work/app'], '/work/app-old/z.py'), '/work/app');  // not a prefix match
 });
