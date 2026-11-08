@@ -1,7 +1,7 @@
 // Everything that knows how to talk to the `devorch` command line. No `vscode` imports here, so it
 // can be tested with plain Node.
 
-export type Mode = 'auto' | 'plan';
+export type Mode = 'ask' | 'auto' | 'plan';
 
 export interface AskOptions {
 	prompt: string;
@@ -17,6 +17,8 @@ export interface AskOptions {
 /** Arguments for one chat turn. A new chat starts with --save-session; later turns --resume it. */
 export function buildAskArgs(o: AskOptions): string[] {
 	const args = ['ask', '--output', 'stream-json', '--mode', o.mode];
+	// in ask mode the CLI sends each permission question to us as a JSON line and waits for the answer
+	if (o.mode === 'ask') { args.push('--approvals', 'stdio'); }
 	if (o.sessionId) {
 		args.push('--resume', o.sessionId);
 	} else {
@@ -56,7 +58,28 @@ export interface ResultEvent {
 	usage?: { total_tokens?: number; cost_usd?: number | null };
 }
 
-export type StreamEvent = ToolCallEvent | ResultEvent;
+export interface PermissionRequestEvent {
+	type: 'permission_request';
+	id: number;
+	tool: string;
+	command: string;
+	reason: string | null;
+}
+
+export type PermissionChoice = 'once' | 'session' | 'always' | 'deny';
+
+/** The line to write to the CLI's stdin to answer a permission request. */
+export function permissionReply(id: number, choice: PermissionChoice): string {
+	const allowed: PermissionChoice[] = ['once', 'session', 'always', 'deny'];
+	return JSON.stringify({ id, choice: allowed.includes(choice) ? choice : 'deny' }) + '\n';
+}
+
+export type StreamEvent = ToolCallEvent | ResultEvent | PermissionRequestEvent;
+
+/** Does this devorch's `ask --help` list --approvals (permission questions answered by the editor)? */
+export function supportsApprovals(askHelp: string): boolean {
+	return /--approvals/.test(askHelp);
+}
 
 /** One line of `--output stream-json`; anything that is not a known event (banners, noise) is null. */
 export function parseStreamLine(line: string): StreamEvent | null {
@@ -64,7 +87,7 @@ export function parseStreamLine(line: string): StreamEvent | null {
 	if (!text.startsWith('{')) { return null; }
 	try {
 		const obj = JSON.parse(text);
-		if (obj && (obj.type === 'tool_call' || obj.type === 'result')) { return obj as StreamEvent; }
+		if (obj && (obj.type === 'tool_call' || obj.type === 'result' || obj.type === 'permission_request')) { return obj as StreamEvent; }
 	} catch {
 		// a partial or non-JSON line
 	}
@@ -77,6 +100,21 @@ export function stripAnsi(text: string): string {
 	return text.replace(ANSI, '');
 }
 
+/** Turn a provider's raw error into something a person can act on. */
+export function friendlyError(text: string): string {
+	const t = text.replace(/\s*For more information check:\s*\S+/i, '').trim();
+	if (/\b429\b|too many requests|rate.?limit/i.test(t)) {
+		return 'The provider is rate limiting requests (429). Wait a moment and try again, or switch model or provider.';
+	}
+	if (/\b40[13]\b|unauthori[sz]ed|invalid api key|incorrect api key/i.test(t)) {
+		return 'The provider rejected the API key. Run `devorch set-key <provider>` in a terminal to update it.';
+	}
+	if (/\b5\d\d\b.*(server|unavailable|overloaded)|overloaded/i.test(t)) {
+		return 'The provider is having problems right now. Try again shortly.';
+	}
+	return t;
+}
+
 /** A short, human message for a failed run, from what the process printed on stderr. */
 export function explainFailure(stderr: string, exitCode: number | null): string {
 	const lines = stripAnsi(stderr)
@@ -86,7 +124,7 @@ export function explainFailure(stderr: string, exitCode: number | null): string 
 	if (lines.length === 0) {
 		return exitCode === null ? 'DevOrch stopped.' : `DevOrch exited with code ${exitCode}.`;
 	}
-	const text = lines.join(' ').replace(/\s+/g, ' ');
+	const text = friendlyError(lines.join(' ').replace(/\s+/g, ' '));
 	return text.length > 400 ? text.slice(0, 397) + '...' : text;
 }
 

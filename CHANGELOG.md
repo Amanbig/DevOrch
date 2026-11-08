@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `devorch ask --approvals stdio` (with `--output stream-json`) lets an editor answer permission questions: DevOrch
+  writes a `permission_request` JSON line and waits for `{"id": N, "choice": "once|session|always|deny"}` on stdin.
+  No answer means deny.
+- **VS Code panel: Ask mode.** The panel now has Ask, Auto and Plan. Ask (the new default) shows each edit or command
+  as a card with Allow once / This session / Always / Deny, so DevOrch no longer changes things without asking. It
+  needs this DevOrch release; older versions start in Auto. Provider errors such as a 429 rate limit or a rejected API
+  key are explained in plain words.
+
 ## 0.5.3
 
 Install DevOrch with one command, use it from VS Code, and continue a conversation from scripts and editors.

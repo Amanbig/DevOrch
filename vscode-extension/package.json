@@ -143,14 +143,16 @@
         },
         "devorch.defaultMode": {
           "type": "string",
-          "default": "auto",
+          "default": "ask",
           "enum": [
+            "ask",
             "auto",
             "plan"
           ],
-          "description": "Mode for the chat panel. (Ask mode needs a terminal to confirm each action; use the terminal command for that.)",
+          "description": "Mode the chat panel starts in. Ask confirms each action in the panel (needs DevOrch 0.5.4 or newer; older versions start in Auto).",
           "enumDescriptions": [
-            "DevOrch may edit files and run commands",
+            "Ask before editing files or running commands",
+            "Edit files and run commands without asking",
             "Read-only: plan only"
           ]
         },

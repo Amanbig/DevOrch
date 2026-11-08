@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert';
-import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt, supportsSessions, splitSkillCommand, parseSkills } from '../cli';
+import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt, supportsSessions, splitSkillCommand, parseSkills, supportsApprovals, permissionReply, friendlyError } from '../cli';
 
 test('a new chat saves a session and passes the prompt after --', () => {
 	const a = buildAskArgs({ prompt: '-rf is not an option', mode: 'auto' });
@@ -81,4 +81,26 @@ test('a skill run may have no prompt, and the prompt still goes after --', () =>
 	const b = buildAskArgs({ prompt: 'focus', mode: 'auto', skill: 'review' });
 	assert.deepStrictEqual(b.slice(-4), ['--skill', 'review', '--', 'focus']);
 	assert.deepStrictEqual(parseSkills('nope'), []);
+});
+
+test('ask mode hands permission questions to the editor; auto and plan do not', () => {
+	assert.deepStrictEqual(buildAskArgs({ prompt: 'x', mode: 'ask' }).slice(3, 7), ['--mode', 'ask', '--approvals', 'stdio']);
+	for (const mode of ['auto', 'plan'] as const) { assert.ok(!buildAskArgs({ prompt: 'x', mode }).includes('--approvals')); }
+	assert.strictEqual(supportsApprovals('--approvals TEXT'), true);
+	assert.strictEqual(supportsApprovals('--provider --resume'), false);
+});
+
+test('permission requests are parsed and answered with one JSON line', () => {
+	const ev = parseStreamLine('{"type":"permission_request","id":3,"tool":"shell","command":"rm x","reason":null}');
+	assert.strictEqual(ev?.type === 'permission_request' && ev.id, 3);
+	assert.strictEqual(permissionReply(3, 'once'), '{"id":3,"choice":"once"}\n');
+	assert.strictEqual(permissionReply(3, 'bogus' as never), '{"id":3,"choice":"deny"}\n');
+});
+
+test('provider errors become advice, without the docs link', () => {
+	const raw = "Client error '429 Too Many Requests' for url 'https://api.mistral.ai/v1/chat/completions' For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429";
+	assert.match(friendlyError(raw), /rate limiting/);
+	assert.match(friendlyError('401 Unauthorized'), /API key/);
+	assert.strictEqual(friendlyError('plain failure'), 'plain failure');
+	assert.match(explainFailure(raw, 1), /rate limiting/);
 });

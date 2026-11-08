@@ -65,7 +65,7 @@
 	@media (prefers-reduced-motion: reduce) { .dot { animation: none; opacity: .6; } }
 
 	.banner {
-		padding: 8px 10px; border-radius: 4px; font-size: .95em;
+		overflow-wrap: anywhere; padding: 8px 10px; border-radius: 4px; font-size: .95em;
 		background: var(--vscode-inputValidation-errorBackground, rgba(255,0,0,.1)); border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
 	}
 	.banner.info { background: var(--vscode-inputValidation-infoBackground); border-color: var(--vscode-inputValidation-infoBorder); }
@@ -74,6 +74,16 @@
 	.primary:hover { background: var(--vscode-button-hoverBackground); }
 	.link { background: none; border: 0; padding: 0; color: var(--vscode-textLink-foreground); text-decoration: underline; }
 
+	.perm { border: 1px solid var(--vscode-editorWarning-foreground, #cca700); border-radius: 6px; padding: 8px 10px; background: var(--vscode-editorWidget-background, transparent); }
+	.perm .q { font-weight: 600; margin-bottom: 4px; }
+	.perm code.cmd { display: block; margin: 4px 0 6px; padding: 4px 6px; white-space: pre-wrap; word-break: break-all; max-height: 140px; overflow-y: auto; }
+	.perm .why { font-size: .88em; color: var(--vscode-descriptionForeground); margin-bottom: 6px; }
+	.perm .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+	.perm .btns button { border-radius: 3px; padding: 3px 10px; border: 1px solid var(--vscode-button-border, transparent); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+	.perm .btns button.yes { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+	.perm .btns button:hover { filter: brightness(1.15); }
+	.perm.done { opacity: .65; }
+	.perm.done .btns { display: none; }
 	.empty { margin: auto 0; text-align: center; color: var(--vscode-descriptionForeground); }
 	.empty h2 { color: var(--vscode-foreground); font-size: 1.1em; margin: 0 0 4px; }
 	.chips { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
@@ -159,6 +169,7 @@
 		<textarea id="input" rows="1" placeholder="Ask DevOrch…  /  for commands,  @  for files" title="Enter to send, Shift+Enter for a new line" aria-label="Message"></textarea>
 		<div class="bar">
 			<div class="seg" role="group" aria-label="Mode">
+				<button id="modeAsk" aria-pressed="false" title="Confirm each edit or command before it runs">Ask</button>
 				<button id="modeAuto" aria-pressed="true" title="DevOrch may edit files and run commands">Auto</button>
 				<button id="modePlan" aria-pressed="false" title="Read-only: DevOrch plans but changes nothing">Plan</button>
 			</div>
@@ -179,7 +190,7 @@
 	let busy = false, mode = 'auto', status = null, thinking = null, skills = [], menuItems = [], menuIndex = 0, menuKind = null, fileResults = [], fileQuery = null;
 
 	const saved = vscode.getState() || {};
-	if (saved.mode === 'plan') { setMode('plan'); }
+	if (saved.mode === 'plan' || saved.mode === 'auto' || saved.mode === 'ask') { setMode(saved.mode, false); }
 
 	function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
@@ -233,6 +244,29 @@
 		const v = a.command || a.path || a.query || a.pattern || a.url || a.action || '';
 		return '<b>' + esc(name) + '</b> ' + esc(String(v).slice(0, 120));
 	}
+	function permissionCard(m) {
+		const d = el('div', 'perm');
+		d.appendChild(el('div', 'q', 'Allow <b>' + esc(m.tool) + '</b>?'));
+		d.appendChild(el('code', 'cmd', esc(m.command)));
+		if (m.reason) { d.appendChild(el('div', 'why', esc(m.reason))); }
+		const btns = el('div', 'btns');
+		const answer = (choice, label) => {
+			const b = el('button', choice === 'once' ? 'yes' : '', label);
+			b.type = 'button';
+			b.onclick = () => {
+				vscode.postMessage({ type: 'permissionResponse', id: m.id, choice });
+				d.classList.add('done');
+				d.querySelector('.q').innerHTML = (choice === 'deny' ? 'Denied' : 'Allowed') + ' <b>' + esc(m.tool) + '</b>';
+			};
+			btns.appendChild(b);
+		};
+		answer('once', 'Allow once'); answer('session', 'This session'); answer('always', 'Always'); answer('deny', 'Deny');
+		d.appendChild(btns);
+		if (thinking) { chat.insertBefore(d, thinking); } else { add(d); }
+		$('empty').classList.add('hidden'); scroll();
+		const first = btns.querySelector('button'); if (first) { first.focus(); }
+	}
+
 	function toolMsg(m) {
 		const d = el('details', 'tool' + (m.isError ? ' err' : ''));
 		d.appendChild(el('summary', '', toolSummary(m.name, m.arguments)));
@@ -240,12 +274,13 @@
 		if (thinking) { chat.insertBefore(d, thinking); $('empty').classList.add('hidden'); scroll(); } else { add(d); }
 	}
 
-	function setMode(m) {
+	function setMode(m, remember) {
 		mode = m;
+		$('modeAsk').setAttribute('aria-pressed', String(m === 'ask'));
 		$('modeAuto').setAttribute('aria-pressed', String(m === 'auto'));
 		$('modePlan').setAttribute('aria-pressed', String(m === 'plan'));
-		$('hint').textContent = m === 'auto' ? 'Auto can edit files and run commands' : 'Plan is read-only: it proposes, changes nothing';
-		vscode.setState({ mode: m });
+		$('hint').textContent = m === 'ask' ? 'Ask confirms each edit or command here' : m === 'auto' ? 'Auto can edit files and run commands without asking' : 'Plan is read-only: it proposes, changes nothing';
+		if (remember) { vscode.setState({ mode: m }); }  // only a choice the user made is remembered
 	}
 
 	function send(text) {
@@ -262,8 +297,9 @@
 	const COMMANDS = [
 		{ name: 'new', desc: 'Start a new chat', run: () => { vscode.postMessage({ type: 'newChat' }); toggleHistory(false); } },
 		{ name: 'history', desc: 'Conversations in this folder', run: () => toggleHistory(true) },
-		{ name: 'plan', desc: 'Read-only mode', run: () => setMode('plan') },
-		{ name: 'auto', desc: 'Let DevOrch edit files and run commands', run: () => setMode('auto') },
+		{ name: 'ask', desc: 'Confirm each action before it runs', run: () => setMode('ask', true) },
+		{ name: 'plan', desc: 'Read-only mode', run: () => setMode('plan', true) },
+		{ name: 'auto', desc: 'Let DevOrch edit files and run commands', run: () => setMode('auto', true) },
 		{ name: 'terminal', desc: 'Open DevOrch in the terminal', run: () => vscode.postMessage({ type: 'openTerminal' }) },
 		{ name: 'settings', desc: 'Open the DevOrch settings', run: () => vscode.postMessage({ type: 'openSettings' }) },
 	];
@@ -336,9 +372,11 @@
 	function renderStatus(s) {
 		status = s;
 		$('sub').textContent = s.installed ? (s.version + (s.provider ? ' · ' + s.provider : '') + (s.model ? '/' + s.model : '')) : 'not installed';
+		$('modeAsk').classList.toggle('hidden', !s.approvals);
+		if (!s.approvals && mode === 'ask') { setMode('auto'); }
 		$('attachWrap').classList.toggle('hidden', !s.file);
 		$('attachName').textContent = s.file || '';
-		if (!saved.mode) { setMode(s.mode); }
+		if (!saved.mode) { setMode(s.mode); }  // the remembered choice wins over the setting
 		if (s.installed && s.outdated && !chat.querySelector('.banner.info')) {
 			const b = banner('<b>Update DevOrch</b> (you have ' + esc(s.version) + '). The chat panel needs a newer release. Update with this command; the terminal opens with it typed in, press Enter to run:<code class="cmd">' + esc(s.installCommand) + '</code><button class="primary" id="doInstall" type="button">Open terminal</button> <button class="link" id="doRecheck" type="button">I updated it</button>', 'info');
 			b.querySelector('#doInstall').onclick = () => vscode.postMessage({ type: 'install' });
@@ -396,6 +434,7 @@
 			case 'prefill': input.value = m.text; grow(); input.focus(); break;
 			case 'start': break;
 			case 'tool': toolMsg(m); break;
+			case 'permission': permissionCard(m); break;
 			case 'answer':
 				assistantMsg(m.text, [m.model, m.ms ? (m.ms / 1000).toFixed(1) + 's' : '', m.tokens ? m.tokens + ' tokens' : '', m.cost ? '$' + m.cost.toFixed(4) : ''].filter(Boolean).join(' · '));
 				break;
@@ -417,8 +456,9 @@
 	$('btnHistory').onclick = () => toggleHistory();
 	$('btnTerminal').onclick = () => vscode.postMessage({ type: 'openTerminal' });
 	$('btnSettings').onclick = () => vscode.postMessage({ type: 'openSettings' });
-	$('modeAuto').onclick = () => setMode('auto');
-	$('modePlan').onclick = () => setMode('plan');
+	$('modeAsk').onclick = () => setMode('ask', true);
+	$('modeAuto').onclick = () => setMode('auto', true);
+	$('modePlan').onclick = () => setMode('plan', true);
 	document.querySelectorAll('.chip').forEach((c) => { c.onclick = () => send(c.dataset.prompt); });
 	chat.addEventListener('click', (e) => {
 		const b = e.target.closest && e.target.closest('.copy');

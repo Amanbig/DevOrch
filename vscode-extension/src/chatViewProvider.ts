@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 import {
-	buildAskArgs, explainFailure, supportsSessions, Mode, parseMessages, parseSessions, parseStreamLine,
+	buildAskArgs, explainFailure, friendlyError, permissionReply, PermissionChoice, supportsApprovals, supportsSessions, Mode, parseMessages, parseSessions, parseStreamLine,
 	ResultEvent, withFileMention, parseSkills, splitSkillCommand,
 } from './cli';
 
@@ -19,6 +19,7 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 	private sessionId?: string;
 	private pendingPrompt?: string;
 	private skills: string[] = [];
+	private approvalsSupported = false;
 
 	constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -32,8 +33,9 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 			switch (m.type) {
 				case 'ready': await this.sendStatus(); await this.sendSessions(); await this.sendSkills(); this.flushPending(); break;
 				case 'files': await this.sendFiles(String(m.query ?? '')); break;
-				case 'send': this.send(String(m.text ?? ''), m.mode === 'plan' ? 'plan' : 'auto', !!m.attachFile); break;
+				case 'send': this.send(String(m.text ?? ''), m.mode === 'plan' ? 'plan' : m.mode === 'ask' && this.approvalsSupported ? 'ask' : 'auto', !!m.attachFile); break;
 				case 'cancel': this.cancel(); break;
+				case 'permissionResponse': this.answerPermission(Number(m.id), m.choice as PermissionChoice); break;
 				case 'newChat': this.cancel(); this.sessionId = undefined; this.post({ type: 'cleared' }); break;
 				case 'loadSession': await this.loadSession(String(m.id)); break;
 				case 'deleteSession': await this.deleteSession(String(m.id)); break;
@@ -87,18 +89,31 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 		// the panel needs `ask --resume`, which older releases do not have
 		const help = installed ? await this.run(['ask', '--help']) : undefined;
 		const outdated = installed && !(help && supportsSessions(help.stdout));
+		this.approvalsSupported = !!(help && supportsApprovals(help.stdout));
 		this.post({
 			type: 'status',
 			installed,
 			outdated,
+			approvals: this.approvalsSupported,
 			version: installed ? stdout.trim() : '',
 			exe: this.exe(),
 			provider: cfg.get<string>('defaultProvider') || '',
 			model: cfg.get<string>('defaultModel') || '',
-			mode: cfg.get<string>('defaultMode') === 'plan' ? 'plan' : 'auto',
+			mode: this.defaultMode(cfg.get<string>('defaultMode')),
 			file: this.activeFile(),
 			installCommand: process.platform === 'win32' ? INSTALL_PS : INSTALL_SH,
 		});
+	}
+
+	private defaultMode(configured: string | undefined): Mode {
+		if (configured === 'plan') { return 'plan'; }
+		if (configured === 'auto') { return 'auto'; }
+		return this.approvalsSupported ? 'ask' : 'auto'; // 'ask' needs a CLI that can hand questions to the editor
+	}
+
+	private answerPermission(id: number, choice: PermissionChoice) {
+		const stdin = this.proc?.stdin;
+		if (stdin && !stdin.destroyed) { stdin.write(permissionReply(id, choice)); }
 	}
 
 	private activeFile(): string | undefined {
@@ -187,7 +202,8 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 		this.post({ type: 'start' });
 		const proc = childProcess.spawn(this.exe(), args, {
 			cwd: this.cwd(), env: { ...process.env, PYTHONUNBUFFERED: '1', NO_COLOR: '1' }, windowsHide: true,
-			stdio: ['ignore', 'pipe', 'pipe'], // no stdin: nothing here can wait for a keypress
+			// stdin carries permission answers in ask mode; otherwise nothing can wait for a keypress
+			stdio: [mode === 'ask' ? 'pipe' : 'ignore', 'pipe', 'pipe'],
 		});
 		this.proc = proc;
 
@@ -198,7 +214,9 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 			readline.createInterface({ input: proc.stdout }).on('line', (line) => {
 				const ev = parseStreamLine(line);
 				if (!ev) { return; }
-				if (ev.type === 'tool_call') {
+				if (ev.type === 'permission_request') {
+					this.post({ type: 'permission', id: ev.id, tool: ev.tool, command: ev.command, reason: ev.reason });
+				} else if (ev.type === 'tool_call') {
 					this.post({ type: 'tool', name: ev.name, arguments: ev.arguments, isError: ev.is_error, output: ev.output });
 				} else {
 					result = ev;
@@ -222,7 +240,7 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 				this.post({ type: 'answer', text: result.result, model: `${result.provider}/${result.model}`,
 					ms: result.duration_ms, tokens: result.usage?.total_tokens, cost: result.usage?.cost_usd });
 			} else {
-				this.post({ type: 'error', text: result?.error || explainFailure(stderr, code) });
+				this.post({ type: 'error', text: result?.error ? friendlyError(result.error) : explainFailure(stderr, code) });
 			}
 			this.post({ type: 'end' });
 			void this.sendSessions();
