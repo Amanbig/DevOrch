@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import * as assert from 'node:assert';
 import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt, supportsSessions, splitSkillCommand, parseSkills, supportsApprovals, permissionReply, friendlyError } from '../cli';
@@ -103,4 +105,10 @@ test('provider errors become advice, without the docs link', () => {
 	assert.match(friendlyError('401 Unauthorized'), /API key/);
 	assert.strictEqual(friendlyError('plain failure'), 'plain failure');
 	assert.match(explainFailure(raw, 1), /rate limiting/);
+});
+
+test('the package is published as the Marketplace publisher Procoder588', () => {
+	// the Marketplace rejects an upload whose publisher differs from the account's ID, and this was once wrong
+	const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
+	assert.strictEqual(pkg.publisher, 'Procoder588');
 });
