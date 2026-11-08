@@ -32,6 +32,34 @@ jobs:
           name: python-package-distributions
           path: dist/
 
+  build-extension:
+    name: Build VS Code extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Package the .vsix
+        run: npx --yes @vscode/vsce package --no-dependencies -o devorch-code.vsix
+
+      - name: Upload the .vsix
+        uses: actions/upload-artifact@v7
+        with:
+          name: vscode-extension
+          path: vscode-extension/devorch-code.vsix
+
   publish-pypi:
     name: Publish to PyPI
     needs: build
@@ -53,7 +81,7 @@ jobs:
 
   create-github-release:
     name: Create GitHub Release
-    needs: publish-pypi
+    needs: [publish-pypi, build-extension]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -66,6 +94,12 @@ jobs:
           name: python-package-distributions
           path: dist/
 
+      - name: Download the VS Code extension
+        uses: actions/download-artifact@v8
+        with:
+          name: vscode-extension
+          path: extension/
+
       - name: Extract version from tag
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
@@ -77,4 +111,4 @@ jobs:
           gh release create ${{ github.ref_name }} \
             --title "DevOrch v${{ steps.get_version.outputs.VERSION }}" \
             --generate-notes \
-            dist/*
+            dist/* extension/devorch-code.vsix

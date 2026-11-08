@@ -14,7 +14,7 @@
         irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1 | iex
 
     With options (a script block, because `| iex` cannot take parameters):
-        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Version 0.5.2
+        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Version 0.5.3
 
     Or set environment variables first: DEVORCH_VERSION, DEVORCH_METHOD, DEVORCH_FROM, DEVORCH_YES=1.
 

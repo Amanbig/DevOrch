@@ -1,20 +1,36 @@
 # Changelog
 
-## Unreleased
+## 0.5.3
 
-### Added
-- `devorch ask --save-session`, `--resume <id>` and `--continue` keep a conversation going across `ask` runs; the `--output json` / `stream-json` result now includes `session_id`.
-- `devorch sessions list --output json`, `devorch sessions messages <id>` and `devorch skills --output json`, for editors and scripts.
-- **VS Code extension** now lives in `vscode-extension/` (moved from the DevOrch-Code repo). Rewritten chat panel built on `devorch ask --resume` and the JSON session commands (no more scraping tables or editing the session database): Auto/Plan modes, tool calls shown as they happen, stop button, attach the open file, add selection to chat, conversations list, `/` menu (panel commands and your skills) and `@` file suggestions, install help when `devorch` is missing. CI type-checks, lints, tests, bundles and packages it as a `.vsix`.
-- `install.sh` / `install.ps1` one-line installers.
+Install DevOrch with one command, use it from VS Code, and continue a conversation from scripts and editors.
 
-### Changed
+### Upgrade notes
 - **DevOrch now installs as a single `devorch` package.** Before, the wheel put seven generic top-level packages
   (`cli`, `config`, `core`, `providers`, `schemas`, `tools`, `utils`) into `site-packages`, where they could clash
-  with other software. If you import DevOrch's internals, imports become `from devorch.core.agent import Agent` and
-  so on; the `devorch` command, config and data are unchanged.
-- The version lives in one place, `devorch/__init__.py` (it used to be in two files), and `python -m devorch` works.
-- CI now checks that the built wheel contains only the `devorch` package.
+  with other software. The `devorch` command, config and data are unchanged. Only code that imports DevOrch's
+  internals is affected: `from core.agent import Agent` becomes `from devorch.core.agent import Agent`.
+
+### Added
+- **One-line installers.** Linux and macOS: `curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh`.
+  Windows: `irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1 | iex`. They use uv, then pipx,
+  then a private virtual environment, and offer to install uv if none is available. They never use sudo or
+  administrator rights, print every command, and leave `~/.devorch` alone (also on uninstall). Options:
+  `--version`, `--method`, `--from`, `--bin-dir`, `--yes`, `--dry-run`, `--uninstall`. CI installs the built wheel
+  with them on Ubuntu, macOS and Windows.
+- **VS Code extension** (in `vscode-extension/`, moved from the DevOrch-Code repo and rewritten): a chat panel in the
+  side bar with Auto and Plan modes, tool calls shown as they happen, a stop button, the open file or selection as
+  context, a conversations list, a `/` menu (panel commands and your skills), `@` file suggestions, and help to
+  install or update the `devorch` command. Terminal commands to start, continue or resume a session. Install it from
+  the `.vsix` attached to the GitHub release.
+- `devorch ask --save-session`, `--resume <id>` and `--continue` keep a conversation going across `ask` runs; the
+  `--output json` / `stream-json` result now includes `session_id`.
+- `devorch sessions list --output json`, `devorch sessions messages <id>` and `devorch skills --output json`, for
+  editors and scripts.
+- `python -m devorch` works.
+
+### Changed
+- The version lives in one place, `devorch/__init__.py` (it used to be in two files).
+- CI checks that the built wheel contains only the `devorch` package, and builds, lints and tests the extension.
 
 ## 0.5.2
 

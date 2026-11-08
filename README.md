@@ -49,14 +49,14 @@ including on uninstall. Run it again any time to upgrade. Read them first if you
 
 ```bash
 # options (pass them after `sh -s --`)
-curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --version 0.5.2
+curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --version 0.5.3
 curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --dry-run     # show, change nothing
 curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --uninstall
 ```
 
 ```powershell
 # options (a script block, because `| iex` cannot take parameters)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Version 0.5.2
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Version 0.5.3
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.ps1))) -Uninstall
 ```
 
