@@ -827,6 +827,7 @@ def start_repl(
     agent.costs = CostTracker(PriceBook(parse_overrides(settings.pricing)))
     agent.set_context_overrides(settings.context_windows)
     agent_tool = AgentTool(provider=llm, tools=tools, costs=agent.costs)
+    agent_tool.parent_executor = executor
     executor.tools[agent_tool.name] = agent_tool
     agent.tools.append(agent_tool)
     planner.update_tools(agent.tools)

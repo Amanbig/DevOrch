@@ -169,3 +169,6 @@ def ask(
         images=mentions.images,
         max_iterations=max_turns or 15,
     )
+    if output == "text" and sessions is not None and sessions.current_session_id:
+        sid = sessions.current_session_id
+        console.print(f'[dim]Session {sid}: continue with devorch ask --resume {sid} "..."[/dim]')
