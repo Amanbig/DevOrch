@@ -64,6 +64,11 @@
         "category": "DevOrch"
       },
       {
+        "command": "devorch-code.continueRepl",
+        "title": "DevOrch: Continue Last Conversation (Terminal)",
+        "category": "DevOrch"
+      },
+      {
         "command": "devorch-code.resumeRepl",
         "title": "DevOrch: Resume Past Session",
         "category": "DevOrch"
@@ -87,10 +92,20 @@
         "command": "devorch-code.fixCode",
         "title": "DevOrch: Fix Code",
         "category": "DevOrch"
+      },
+      {
+        "command": "devorch-code.addSelection",
+        "title": "DevOrch: Add Selection to Chat",
+        "category": "DevOrch"
       }
     ],
     "menus": {
       "editor/context": [
+        {
+          "command": "devorch-code.addSelection",
+          "when": "editorHasSelection",
+          "group": "devorch@0"
+        },
         {
           "command": "devorch-code.explainCode",
           "when": "editorHasSelection",
@@ -130,11 +145,14 @@
           "type": "string",
           "default": "auto",
           "enum": [
-            "ask",
             "auto",
             "plan"
           ],
-          "description": "Execution mode for DevOrch ask runs in the Webview."
+          "description": "Mode for the chat panel. (Ask mode needs a terminal to confirm each action; use the terminal command for that.)",
+          "enumDescriptions": [
+            "DevOrch may edit files and run commands",
+            "Read-only: plan only"
+          ]
         },
         "devorch.disableMcp": {
           "type": "boolean",
@@ -156,24 +174,19 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "pretest": "npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "tsc -p tsconfig.test.json && node --test \"out/test/*.test.js\""
   },
   "devDependencies": {
     "@types/vscode": "^1.100.0",
-    "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
     "typescript-eslint": "^8.61.1",
     "eslint": "^10.5.0",
     "esbuild": "^0.28.1",
     "npm-run-all": "^4.1.5",
-    "typescript": "^6.0.3",
-    "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0"
+    "typescript": "^6.0.3"
   },
   "overrides": {
     "diff": "^8.0.4",

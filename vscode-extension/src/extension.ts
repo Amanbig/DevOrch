@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as childProcess from 'child_process';
 import { DevOrchChatViewProvider } from './chatViewProvider';
+import { parseSessions, selectionPrompt } from './cli';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('DevOrch Code Assistant extension is active!');
@@ -25,6 +26,26 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(startReplDisposable);
 
+	// Command: continue the latest conversation in this folder (terminal)
+	context.subscriptions.push(vscode.commands.registerCommand('devorch-code.continueRepl', () => {
+		const exePath = vscode.workspace.getConfiguration('devorch').get<string>('executablePath') || 'devorch';
+		const terminal = vscode.window.createTerminal('DevOrch');
+		terminal.sendText(`${exePath} --continue`);
+		terminal.show();
+	}));
+
+	// Command: put the selection (with its file and line) into the chat box
+	context.subscriptions.push(vscode.commands.registerCommand('devorch-code.addSelection', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor || editor.selection.isEmpty) {
+			vscode.window.showWarningMessage('Select some code first.');
+			return;
+		}
+		await vscode.commands.executeCommand('devorch-code.chatView.focus');
+		chatProvider.sendContextPrompt(selectionPrompt('', vscode.workspace.asRelativePath(editor.document.uri, false),
+			editor.selection.start.line + 1, editor.document.getText(editor.selection)).trimStart());
+	}));
+
 	// Command: Resume Past Session (REPL)
 	const resumeReplDisposable = vscode.commands.registerCommand('devorch-code.resumeRepl', async (sessionId?: string) => {
 		const config = vscode.workspace.getConfiguration('devorch');
@@ -37,73 +58,32 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		// Otherwise, query and show QuickPick
-		vscode.window.withProgress({
-			location: vscode.ProgressLocation.Notification,
-			title: "Fetching DevOrch sessions...",
-			cancellable: false
-		}, async () => {
-			return new Promise<void>((resolveProgress) => {
-				childProcess.exec(`${exePath} sessions list`, { env: { ...process.env } }, async (error, stdout) => {
-					resolveProgress();
-					if (error) {
-						vscode.window.showErrorMessage(`Failed to fetch sessions: ${error.message}`);
-						return;
-					}
-
-					const lines = stdout.split('\n');
-					const items: { label: string; description: string; detail: string; id: string }[] = [];
-					let currentItem: any = null;
-
-					for (const line of lines) {
-						const clean = line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
-						if (!clean.includes('│') && !clean.includes('|')) {
-							continue;
-						}
-						const parts = clean.split(/[│|]/).map(p => p.trim());
-						if (parts.length < 6) { continue; }
-						const id = parts[1];
-						const name = parts[2];
-						const provider = parts[3];
-						const model = parts[4];
-						const msgs = parts[5];
-						const updated = parts[7] || '';
-
-						if (id && /^[0-9a-f]{8}$/.test(id)) {
-							currentItem = {
-								label: name || `Session ${id}`,
-								description: `${provider} | ${model}`,
-								detail: `ID: ${id} | Messages: ${msgs} | Updated: ${updated}`,
-								id: id
-							};
-							items.push(currentItem);
-						} else if (!id && items.length > 0) {
-							// wrapped line
-							const last = items[items.length - 1];
-							if (name) { last.label += ' ' + name; }
-							if (provider) { last.description += ' ' + provider; }
-							if (model) { last.description += ' ' + model; }
-							if (updated) { last.detail += ' ' + updated; }
-						}
-					}
-
-					if (items.length === 0) {
-						vscode.window.showInformationMessage("No active DevOrch sessions found.");
-						return;
-					}
-
-					const selected = await vscode.window.showQuickPick(items, {
-						placeHolder: "Select a DevOrch session to resume"
-					});
-
-					if (selected) {
-						const terminal = vscode.window.createTerminal(`DevOrch: ${selected.id}`);
-						terminal.sendText(`${exePath} --resume ${selected.id}`);
-						terminal.show();
-					}
-				});
+		// Otherwise, pick from the conversations started in this folder
+		childProcess.execFile(exePath, ['sessions', 'list', '--here', '--output', 'json', '--limit', '30'],
+			{ cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, windowsHide: true }, async (error, stdout) => {
+				if (error) {
+					vscode.window.showErrorMessage(`Could not list DevOrch conversations: ${error.message}`);
+					return;
+				}
+				const rows = parseSessions(stdout);
+				if (rows.length === 0) {
+					vscode.window.showInformationMessage('No DevOrch conversations in this folder yet.');
+					return;
+				}
+				const picked = await vscode.window.showQuickPick(
+					rows.map(r => ({
+						label: r.title || 'Untitled',
+						description: `${r.provider}/${r.model}`,
+						detail: `${r.messages} messages · ${r.updated_at}`,
+						id: r.id,
+					})),
+					{ placeHolder: 'Select a conversation to resume' });
+				if (picked) {
+					const terminal = vscode.window.createTerminal(`DevOrch: ${picked.id}`);
+					terminal.sendText(`${exePath} --resume ${picked.id}`);
+					terminal.show();
+				}
 			});
-		});
 	});
 	context.subscriptions.push(resumeReplDisposable);
 

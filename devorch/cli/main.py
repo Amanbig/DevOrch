@@ -2441,12 +2441,18 @@ def memory_cmd(
 
 
 @app.command("skills")
-def skills_list():
+def skills_list(
+    output: str = typer.Option("text", "--output", "-o", help="Output format: text or json"),
+):
     """
     List all available skills.
     """
     skill_manager = SkillManager()
     all_skills = skill_manager.list_skills()
+
+    if output == "json":
+        print(json.dumps(all_skills))
+        return
 
     if not all_skills:
         print_info("No skills found.")

@@ -1,2150 +1,445 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevOrch Code Assistant</title>
-    <style>
-        :root {
-            --primary-gradient: linear-gradient(135deg, #a855f7, #06b6d4);
-            --bg-dark: #0f0f11;
-            --card-bg: rgba(255, 255, 255, 0.03);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --active-glow: 0 0 15px rgba(168, 85, 247, 0.25);
-            --text-primary: var(--vscode-editor-foreground, #f4f4f5);
-            --text-secondary: var(--vscode-descriptionForeground, #a1a1aa);
-        }
-
-        body {
-            font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
-            font-size: var(--vscode-font-size, 13px);
-            color: var(--text-primary);
-            background-color: var(--vscode-editor-background, var(--bg-dark));
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-            position: relative;
-        }
-
-        /* --- Header & Layout --- */
-        header {
-            padding: 14px 16px;
-            background: rgba(0, 0, 0, 0.15);
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 10;
-        }
-
-        .header-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .title-gradient {
-            font-size: 15px;
-            font-weight: 700;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: 0.3px;
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .icon-btn {
-            background: transparent;
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
-            border-radius: 6px;
-            padding: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.15s ease;
-        }
-
-        .icon-btn:hover {
-            color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.15);
-        }
-
-        .status-bar {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        .status-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: #ef4444;
-            transition: all 0.3s ease;
-        }
-
-        .status-dot.active {
-            background: #22c55e;
-            box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-        }
-
-        /* --- Tabs --- */
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid var(--border-color);
-            background: rgba(0, 0, 0, 0.1);
-            padding: 0 8px;
-        }
-
-        .tab {
-            padding: 10px 12px;
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-weight: 600;
-            border-bottom: 2px solid transparent;
-            transition: all 0.15s ease;
-            font-size: 12px;
-            text-align: center;
-        }
-
-        .tab:hover {
-            color: var(--text-primary);
-        }
-
-        .tab.active {
-            color: var(--text-primary);
-            border-bottom-color: #a855f7;
-        }
-
-        /* --- Tab Panels --- */
-        .panel-container {
-            flex: 1;
-            overflow-y: auto;
-            position: relative;
-            background: rgba(0, 0, 0, 0.05);
-        }
-
-        .tab-panel {
-            display: none;
-            height: 100%;
-        }
-
-        .tab-panel.active {
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* --- Welcome Screen --- */
-        .welcome-container {
-            padding: 32px 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            gap: 20px;
-            margin: auto 0;
-        }
-
-        .welcome-logo {
-            width: 52px;
-            height: 52px;
-            border-radius: 12px;
-            background: var(--primary-gradient);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--active-glow);
-            animation: pulse-glow 3s infinite alternate;
-        }
-
-        @keyframes pulse-glow {
-            0% { box-shadow: 0 0 10px rgba(168, 85, 247, 0.2); }
-            100% { box-shadow: 0 0 20px rgba(6, 182, 212, 0.5); }
-        }
-
-        .welcome-title {
-            font-size: 17px;
-            font-weight: 700;
-            margin: 0;
-            letter-spacing: -0.2px;
-        }
-
-        .welcome-desc {
-            color: var(--text-secondary);
-            max-width: 260px;
-            line-height: 1.5;
-            margin: 0;
-            font-size: 12px;
-        }
-
-        .welcome-cards {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            width: 100%;
-            margin-top: 8px;
-        }
-
-        .welcome-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px 14px;
-            text-align: left;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .welcome-card:hover {
-            border-color: rgba(168, 85, 247, 0.4);
-            background: rgba(255, 255, 255, 0.06);
-            transform: translateY(-1px);
-        }
-
-        .welcome-card-title {
-            font-weight: 600;
-            font-size: 12px;
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .welcome-card-desc {
-            font-size: 11px;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        /* --- Chat Feed --- */
-        .chat-feed {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .message {
-            display: flex;
-            flex-direction: column;
-            animation: slide-up 0.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
-            max-width: 92%;
-        }
-
-        @keyframes slide-up {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .message.user {
-            align-self: flex-end;
-        }
-
-        .message.assistant {
-            align-self: flex-start;
-            width: 100%;
-            max-width: 100%;
-        }
-
-        .message-sender {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            margin-bottom: 6px;
-            display: block;
-        }
-
-        .message.user .message-sender {
-            text-align: right;
-        }
-
-        .message-bubble {
-            border-radius: 12px;
-            line-height: 1.5;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            font-size: 13px;
-        }
-
-        .message.user .message-bubble {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            padding: 10px 14px;
-            color: var(--text-primary);
-            border-bottom-right-radius: 3px;
-        }
-
-        .message.assistant .message-bubble {
-            background: transparent;
-            border: none;
-            padding: 0;
-            color: var(--text-primary);
-        }
-
-        /* --- Tool Logs (Inline Steps) --- */
-        .tool-logs-container {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            margin-top: 10px;
-            margin-bottom: 10px;
-        }
-
-        .tool-step {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--border-color);
-            border-left: 3px solid #06b6d4;
-            border-radius: 6px;
-            overflow: hidden;
-            font-size: 12px;
-            transition: all 0.2s ease;
-        }
-
-        .tool-step.success {
-            border-left-color: #22c55e;
-        }
-
-        .tool-step.failed {
-            border-left-color: #ef4444;
-        }
-
-        .tool-header {
-            padding: 8px 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .tool-header:hover {
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        .tool-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .tool-status-icon {
-            width: 14px;
-            height: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-        }
-
-        .spinner {
-            width: 10px;
-            height: 10px;
-            border: 2px solid rgba(6, 182, 212, 0.2);
-            border-top-color: #06b6d4;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .tool-status-success { color: #22c55e; }
-        .tool-status-failed { color: #ef4444; }
-        .tool-status-pending { color: #06b6d4; }
-
-        .tool-details {
-            display: none;
-            padding: 10px 12px;
-            border-top: 1px solid var(--border-color);
-            background: rgba(0, 0, 0, 0.2);
-            font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 11px;
-            white-space: pre-wrap;
-            overflow-x: auto;
-        }
-
-        .tool-step.expanded .tool-details {
-            display: block;
-        }
-
-        .arrow-icon {
-            transition: transform 0.2s ease;
-            font-size: 9px;
-            color: var(--text-secondary);
-        }
-
-        .tool-step.expanded .arrow-icon {
-            transform: rotate(90deg);
-        }
-
-        /* --- Logs/Debug panel --- */
-        .logs-panel {
-            padding: 6px 12px;
-            font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 10px;
-            color: var(--text-secondary);
-            background: rgba(0, 0, 0, 0.25);
-            border-top: 1px solid var(--border-color);
-            max-height: 80px;
-            overflow-y: auto;
-            display: none;
-        }
-
-        /* --- Footer & Input Area --- */
-        footer {
-            padding: 12px 14px;
-            background: var(--vscode-editor-background, var(--bg-dark));
-            border-top: 1px solid var(--border-color);
-        }
-
-        .input-container {
-            background: rgba(0, 0, 0, 0.15);
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            display: flex;
-            flex-direction: column;
-            padding: 8px 10px;
-            transition: all 0.2s ease;
-        }
-
-        .input-container:focus-within {
-            border-color: rgba(168, 85, 247, 0.5);
-            box-shadow: 0 0 10px rgba(168, 85, 247, 0.15);
-        }
-
-        textarea {
-            background: transparent;
-            border: none;
-            color: var(--text-primary);
-            resize: none;
-            width: 100%;
-            min-height: 28px;
-            max-height: 120px;
-            font-family: inherit;
-            font-size: 13px;
-            outline: none;
-            padding: 0;
-            box-sizing: border-box;
-            line-height: 1.4;
-        }
-
-        .input-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 8px;
-            padding-top: 6px;
-            border-top: 1px solid rgba(255, 255, 255, 0.04);
-        }
-
-        .send-btn {
-            background: var(--primary-gradient);
-            color: #ffffff;
-            border: none;
-            border-radius: 6px;
-            height: 28px;
-            width: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-
-        .send-btn:hover:not(:disabled) {
-            transform: scale(1.05);
-            box-shadow: var(--active-glow);
-        }
-
-        .send-btn:disabled {
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--text-secondary);
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        .send-btn.running {
-            background: #ef4444;
-        }
-
-        .send-btn.running:hover {
-            background: #dc2626;
-            transform: scale(1.05);
-            box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
-        }
-
-        .send-btn .stop-icon {
-            display: none;
-        }
-
-        .send-btn.running .send-icon {
-            display: none;
-        }
-
-        .send-btn.running .stop-icon {
-            display: block;
-        }
-
-        .cancel-btn {
-            display: none;
-        }
-
-        .cancel-btn:hover {
-            background: #dc2626;
-        }
-
-        .mode-selector {
-            display: flex;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 2px;
-        }
-
-        .mode-option {
-            padding: 3px 8px;
-            font-size: 9px;
-            font-weight: 700;
-            border-radius: 4px;
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: all 0.15s ease;
-            text-transform: uppercase;
-        }
-
-        .mode-option.active {
-            color: #ffffff;
-        }
-
-        .mode-option.active.auto { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; }
-        .mode-option.active.ask { background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.3); color: #eab308; }
-        .mode-option.active.plan { background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); color: #06b6d4; }
-
-        /* --- Slash Command Menu --- */
-        .slash-menu {
-            position: absolute;
-            bottom: 74px;
-            left: 14px;
-            right: 14px;
-            background: #18181b;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-            z-index: 100;
-            max-height: 180px;
-            overflow-y: auto;
-            display: none;
-            flex-direction: column;
-            padding: 4px 0;
-        }
-
-        .slash-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 6px 12px;
-            cursor: pointer;
-            transition: all 0.1s ease;
-        }
-
-        .slash-item:hover, .slash-item.selected {
-            background: rgba(168, 85, 247, 0.15);
-        }
-
-        .slash-cmd {
-            font-weight: 700;
-            color: #a855f7;
-            font-size: 11.5px;
-            font-family: var(--vscode-editor-font-family, Consolas, Monaco, monospace);
-        }
-
-        .slash-desc {
-            color: var(--text-secondary);
-            font-size: 11px;
-        }
-
-        .slash-trigger-btn {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 700;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-
-        .slash-trigger-btn:hover {
-            background: rgba(255, 255, 255, 0.08);
-            color: var(--text-primary);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        /* --- Settings Modal --- */
-        .modal-backdrop {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            z-index: 200;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-        }
-
-        .settings-modal {
-            background: #18181b;
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            width: 100%;
-            max-width: 330px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            animation: modal-show 0.18s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
-        }
-
-        @keyframes modal-show {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-
-        .settings-header {
-            padding: 14px 16px;
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .settings-title {
-            font-weight: 700;
-            font-size: 13px;
-        }
-
-        .close-modal-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 13px;
-            padding: 2px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .close-modal-btn:hover {
-            color: var(--text-primary);
-        }
-
-        .settings-body {
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            max-height: 380px;
-            overflow-y: auto;
-        }
-
-        .setting-field {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .setting-field label {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-secondary);
-        }
-
-        .setting-field select, .setting-field input {
-            background: var(--vscode-dropdown-background, rgba(0, 0, 0, 0.25));
-            border: 1px solid var(--vscode-dropdown-border, var(--border-color));
-            color: var(--vscode-dropdown-foreground, var(--text-primary));
-            border-radius: 6px;
-            padding: 8px 10px;
-            font-size: 12px;
-            outline: none;
-            width: 100%;
-            box-sizing: border-box;
-            font-family: inherit;
-        }
-
-        .setting-field select option {
-            background-color: var(--vscode-dropdown-background, #18181b);
-            color: var(--vscode-dropdown-foreground, var(--text-primary));
-        }
-
-        .setting-field select:focus, .setting-field input:focus {
-            border-color: #a855f7;
-        }
-
-        .settings-footer {
-            padding: 12px 16px;
-            border-top: 1px solid var(--border-color);
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            background: rgba(0, 0, 0, 0.1);
-        }
-
-        .settings-btn {
-            padding: 7px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-        }
-
-        .settings-btn.primary {
-            background: var(--primary-gradient);
-            color: #ffffff;
-        }
-
-        .settings-btn.primary:hover {
-            transform: scale(1.02);
-            box-shadow: var(--active-glow);
-        }
-
-        .settings-btn.secondary {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-        }
-
-        .settings-btn.secondary:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        /* --- Sessions & Skills Panel lists --- */
-        .list-container {
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .list-item {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .list-item:hover {
-            border-color: rgba(168, 85, 247, 0.3);
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .list-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .list-item-title {
-            font-weight: 600;
-            font-size: 12px;
-        }
-
-        .list-item-badge {
-            font-size: 9px;
-            padding: 2px 6px;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--text-secondary);
-            border: 1px solid var(--border-color);
-        }
-
-        .list-item-desc {
-            font-size: 11px;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        .list-item-meta {
-            font-size: 10px;
-            color: var(--text-secondary);
-            opacity: 0.7;
-            margin-top: 2px;
-        }
-
-        /* --- Code Block Styling --- */
-        pre {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px;
-            overflow-x: auto;
-            position: relative;
-            margin: 12px 0;
-        }
-
-        code {
-            font-family: var(--vscode-editor-font-family, Consolas, Monaco, monospace);
-            font-size: 12px;
-        }
-
-        .copy-btn {
-            position: absolute;
-            top: 6px;
-            right: 6px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 3px 8px;
-            font-size: 9px;
-            color: #ffffff;
-            cursor: pointer;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        pre:hover .copy-btn {
-            opacity: 1;
-        }
-
-        .copy-btn:hover {
-            background: rgba(255, 255, 255, 0.12);
-        }
-
-        /* --- Inline Formatting --- */
-        p {
-            margin: 0 0 10px 0;
-        }
-        p:last-child {
-            margin-bottom: 0;
-        }
-        ul, ol {
-            margin: 0 0 10px 0;
-            padding-left: 20px;
-        }
-        li {
-            margin-bottom: 6px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-{{nonce}}'; script-src 'nonce-{{nonce}}';">
+<title>DevOrch</title>
+<style nonce="{{nonce}}">
+	* { box-sizing: border-box; }
+	html, body { height: 100%; margin: 0; }
+	body {
+		display: flex; flex-direction: column; overflow: hidden;
+		font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);
+		color: var(--vscode-foreground); background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	}
+	button { font: inherit; color: inherit; cursor: pointer; }
+	.icon-btn {
+		background: none; border: 1px solid transparent; border-radius: 4px; padding: 3px 7px;
+		color: var(--vscode-icon-foreground, var(--vscode-foreground)); opacity: .85;
+	}
+	.icon-btn:hover { background: var(--vscode-toolbar-hoverBackground); opacity: 1; }
+	.icon-btn:focus-visible, button:focus-visible, textarea:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+
+	header {
+		display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+		border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+	}
+	header .title { font-weight: 600; flex: 1; min-width: 0; }
+	header .sub { display: block; font-weight: 400; font-size: .85em; color: var(--vscode-descriptionForeground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+	main { flex: 1; overflow-y: auto; padding: 12px 10px; display: flex; flex-direction: column; gap: 12px; }
+	.hidden { display: none !important; }
+
+	.msg { max-width: 100%; line-height: 1.5; overflow-wrap: anywhere; }
+	.msg.user {
+		align-self: flex-end; max-width: 88%; padding: 6px 10px; border-radius: 10px 10px 2px 10px;
+		background: var(--vscode-button-secondaryBackground, var(--vscode-input-background)); color: var(--vscode-button-secondaryForeground, inherit);
+		white-space: pre-wrap;
+	}
+	.msg.assistant p { margin: 0 0 .6em; }
+	.msg.assistant p:last-child { margin-bottom: 0; }
+	.msg.assistant ul, .msg.assistant ol { margin: 0 0 .6em; padding-left: 1.4em; }
+	.msg.assistant h1, .msg.assistant h2, .msg.assistant h3 { font-size: 1.05em; margin: .8em 0 .3em; }
+	code { font-family: var(--vscode-editor-font-family); font-size: .92em; background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 3px; }
+	pre {
+		position: relative; margin: .4em 0 .7em; padding: 8px 10px; overflow-x: auto; border-radius: 4px;
+		background: var(--vscode-textCodeBlock-background); border: 1px solid var(--vscode-widget-border, transparent);
+	}
+	pre code { background: none; padding: 0; white-space: pre; }
+	pre .copy { position: absolute; top: 4px; right: 4px; font-size: .8em; padding: 1px 6px; opacity: 0; background: var(--vscode-button-secondaryBackground); border: 0; border-radius: 3px; }
+	pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
+	.meta { margin-top: 4px; font-size: .8em; color: var(--vscode-descriptionForeground); }
+
+	.tool { font-size: .9em; border-left: 2px solid var(--vscode-textLink-foreground); padding: 1px 0 1px 8px; color: var(--vscode-descriptionForeground); }
+	.tool.err { border-left-color: var(--vscode-errorForeground); }
+	.tool summary { cursor: pointer; list-style: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.tool summary::-webkit-details-marker { display: none; }
+	.tool b { color: var(--vscode-foreground); font-weight: 600; }
+	.tool pre { margin: 4px 0; max-height: 180px; font-size: .9em; }
+
+	.thinking { display: flex; gap: 4px; align-items: center; color: var(--vscode-descriptionForeground); font-size: .9em; }
+	.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.2s infinite ease-in-out; }
+	.dot:nth-child(2) { animation-delay: .2s; } .dot:nth-child(3) { animation-delay: .4s; }
+	@keyframes pulse { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+	@media (prefers-reduced-motion: reduce) { .dot { animation: none; opacity: .6; } }
+
+	.banner {
+		padding: 8px 10px; border-radius: 4px; font-size: .95em;
+		background: var(--vscode-inputValidation-errorBackground, rgba(255,0,0,.1)); border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+	}
+	.banner.info { background: var(--vscode-inputValidation-infoBackground); border-color: var(--vscode-inputValidation-infoBorder); }
+	.banner code.cmd { display: block; margin: 6px 0; padding: 4px 6px; user-select: all; white-space: pre-wrap; word-break: break-all; }
+	.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: 0; border-radius: 3px; padding: 4px 10px; }
+	.primary:hover { background: var(--vscode-button-hoverBackground); }
+	.link { background: none; border: 0; padding: 0; color: var(--vscode-textLink-foreground); text-decoration: underline; }
+
+	.empty { margin: auto 0; text-align: center; color: var(--vscode-descriptionForeground); }
+	.empty h2 { color: var(--vscode-foreground); font-size: 1.1em; margin: 0 0 4px; }
+	.chips { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+	.chip { text-align: left; padding: 6px 10px; border-radius: 4px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, transparent)); }
+	.chip:hover { border-color: var(--vscode-focusBorder); }
+
+	.history { flex: 1; overflow-y: auto; padding: 6px; }
+	.row { display: flex; align-items: center; gap: 4px; border-radius: 4px; }
+	.row:hover { background: var(--vscode-list-hoverBackground); }
+	.row button.open { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 6px 8px; }
+	.row .t { display: block; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.row .s { display: block; font-size: .85em; color: var(--vscode-descriptionForeground); }
+	.row.current { background: var(--vscode-list-inactiveSelectionBackground); }
+
+	footer { padding: 8px 10px 10px; position: relative; }
+	.menu {
+		position: absolute; left: 10px; right: 10px; bottom: calc(100% - 6px); max-height: 240px; overflow-y: auto; z-index: 5; padding: 4px;
+		background: var(--vscode-editorSuggestWidget-background, var(--vscode-editorWidget-background, var(--vscode-input-background)));
+		border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-widget-border, var(--vscode-focusBorder)));
+		border-radius: 8px; box-shadow: 0 4px 16px var(--vscode-widget-shadow, rgba(0,0,0,.3));
+	}
+	.menu .item { display: flex; align-items: baseline; gap: 8px; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+	.menu .item .n { font-weight: 600; white-space: nowrap; }
+	.menu .item .d { color: var(--vscode-descriptionForeground); font-size: .88em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+	.menu .item[aria-selected="true"] { background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground)); color: var(--vscode-list-activeSelectionForeground, inherit); }
+	.menu .item[aria-selected="true"] .d { color: inherit; opacity: .85; }
+	.menu .group { padding: 4px 8px 2px; font-size: .75em; text-transform: uppercase; letter-spacing: .04em; color: var(--vscode-descriptionForeground); }
+	.box {
+		border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, var(--vscode-panel-border)));
+		border-radius: 10px; background: var(--vscode-input-background); overflow: hidden;
+		transition: border-color .12s;
+	}
+	.box:focus-within { border-color: var(--vscode-focusBorder); }
+	textarea {
+		display: block; width: 100%; min-height: 44px; max-height: 180px; resize: none; padding: 11px 12px 4px; border: 0; background: transparent;
+		color: var(--vscode-input-foreground); font: inherit; line-height: 1.45; outline: none;
+	}
+	textarea::placeholder { color: var(--vscode-input-placeholderForeground); }
+	.bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px 8px 10px; }
+	.seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 999px; background: var(--vscode-editor-background); }
+	.seg button { background: none; border: 0; border-radius: 999px; padding: 2px 10px; font-size: .88em; line-height: 1.5; color: var(--vscode-descriptionForeground); }
+	.seg button:hover { color: var(--vscode-foreground); }
+	.seg button[aria-pressed="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+	.attach { font-size: .88em; display: inline-flex; align-items: center; gap: 4px; color: var(--vscode-descriptionForeground); min-width: 0; flex: 0 1 auto; cursor: pointer; }
+	.attach input { margin: 0; flex: none; }
+	.attach span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.spacer { flex: 1; }
+	.go {
+		flex: none; width: 28px; height: 28px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center;
+		background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 15px; line-height: 1;
+	}
+	.go:hover { background: var(--vscode-button-hoverBackground); }
+	.go:disabled { opacity: .4; cursor: default; }
+	.hint { margin: 5px 4px 0; font-size: .8em; color: var(--vscode-descriptionForeground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
 </head>
 <body>
-    <header>
-        <div class="header-top">
-            <span class="title-gradient">DevOrch Code</span>
-            <div class="header-actions">
-                <button class="icon-btn" id="open-repl-btn" title="Open Interactive REPL Terminal">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h10"/></svg>
-                </button>
-                <button class="icon-btn" id="clear-btn" title="Clear Conversation / New Session">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                </button>
-            </div>
-        </div>
-        <div class="status-bar">
-            <div class="status-dot" id="status-dot"></div>
-            <span id="status-text">Checking DevOrch installation...</span>
-        </div>
-    </header>
-
-    <div class="tabs">
-        <button class="tab active" id="tab-chat" onclick="switchTab('chat')">Chat</button>
-        <button class="tab" id="tab-skills" onclick="switchTab('skills')">Skills</button>
-        <button class="tab" id="tab-sessions" onclick="switchTab('sessions')">Sessions</button>
-        <button class="tab" id="tab-mcp" onclick="switchTab('mcp')">MCP</button>
-    </div>
-
-    <div class="panel-container">
-        <!-- Chat Panel -->
-        <div class="tab-panel active" id="panel-chat">
-            <div class="chat-feed" id="chat-feed">
-                <!-- Welcome Screen -->
-                <div class="welcome-container" id="welcome-screen">
-                    <div class="welcome-logo">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5">
-                            <path d="M12 2a10 10 0 0110 10c0 5.523-4.477 10-10 10S2 17.523 2 12A10 10 0 0112 2z"/>
-                            <path d="M12 6v12M6 12h12"/>
-                        </svg>
-                    </div>
-                    <h3 class="welcome-title">DevOrch Assistant</h3>
-                    <p class="welcome-desc">A multi-provider AI coding assistant executing tools directly on your system.</p>
-                    
-                    <div class="welcome-cards">
-                        <div class="welcome-card" onclick="triggerQuickAction('Explain this project structure')">
-                            <div class="welcome-card-title">🔍 Explain Project</div>
-                            <div class="welcome-card-desc">Understand file layout and purpose of codebase</div>
-                        </div>
-                        <div class="welcome-card" onclick="triggerQuickAction('Generate a git commit message for my staged changes')">
-                            <div class="welcome-card-title">📝 Stage & Commit</div>
-                            <div class="welcome-card-desc">Write an explanatory commit for changes</div>
-                        </div>
-                        <div class="welcome-card" onclick="triggerQuickAction('Review the main files in this project for bugs and security issues')">
-                            <div class="welcome-card-title">🛠️ Code Review</div>
-                            <div class="welcome-card-desc">Find potential improvements or bugs</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Skills Panel -->
-        <div class="tab-panel" id="panel-skills">
-            <div class="list-container" id="skills-list">
-                <div style="text-align: center; color: var(--text-secondary); padding: 20px;">
-                    Loading skills...
-                </div>
-            </div>
-        </div>
-
-        <!-- Sessions Panel -->
-        <div class="tab-panel" id="panel-sessions">
-            <div class="list-container" id="sessions-list">
-                <div style="text-align: center; color: var(--text-secondary); padding: 20px;">
-                    Loading sessions...
-                </div>
-            </div>
-        </div>
-
-        <!-- MCP Panel -->
-        <div class="tab-panel" id="panel-mcp">
-            <div class="list-container" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; height: 100%; box-sizing: border-box; overflow-y: auto;">
-                <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Model Context Protocol (MCP)</div>
-                
-                <div class="setting-field" style="flex-direction: row; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <input type="checkbox" id="tab-disable-mcp" style="width: auto; cursor: pointer;" onchange="toggleTabDisableMcp(this.checked)">
-                    <label for="tab-disable-mcp" style="cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text-primary);">Disable all MCP servers</label>
-                </div>
-
-                <div id="tab-mcp-servers-container" style="display: flex; flex-direction: column; gap: 6px; padding-left: 2px;">
-                    <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Active MCP Servers:</label>
-                    <div id="tab-mcp-checkboxes" style="display: flex; flex-direction: column; gap: 6px;">
-                        <!-- Dynamically filled -->
-                    </div>
-                </div>
-
-                <div id="tab-add-mcp-container" style="display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.02); margin-top: 8px;">
-                    <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px;">Add New MCP Server</div>
-                    <div class="setting-field">
-                        <label for="tab-add-mcp-name">Server Name</label>
-                        <input type="text" id="tab-add-mcp-name" placeholder="e.g. github" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; padding: 6px 8px; font-size: 11px;">
-                    </div>
-                    <div class="setting-field">
-                        <label for="tab-add-mcp-command">Command</label>
-                        <input type="text" id="tab-add-mcp-command" placeholder="e.g. npx" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; padding: 6px 8px; font-size: 11px;">
-                    </div>
-                    <div class="setting-field">
-                        <label for="tab-add-mcp-args">Arguments (comma-separated)</label>
-                        <input type="text" id="tab-add-mcp-args" placeholder="e.g. -y, @modelcontextprotocol/server-github" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; padding: 6px 8px; font-size: 11px;">
-                    </div>
-                    <button class="settings-btn primary" onclick="submitTabNewMcpServer()" style="margin-top: 6px; font-size: 11px; padding: 6px 10px; width: 100%;">Add MCP Server</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Slash Commands Menu -->
-    <div class="slash-menu" id="slash-menu">
-        <div class="slash-item" data-cmd="/settings">
-            <span class="slash-cmd">/settings</span>
-            <span class="slash-desc">Configure settings & keys</span>
-        </div>
-        <div class="slash-item" data-cmd="/model">
-            <span class="slash-cmd">/model</span>
-            <span class="slash-desc">Change model/provider</span>
-        </div>
-        <div class="slash-item" data-cmd="/repl">
-            <span class="slash-cmd">/repl</span>
-            <span class="slash-desc">Launch REPL Terminal</span>
-        </div>
-        <div class="slash-item" data-cmd="/clear">
-            <span class="slash-cmd">/clear</span>
-            <span class="slash-desc">Clear Conversation / New Session</span>
-        </div>
-        <div class="slash-item" data-cmd="/explain">
-            <span class="slash-cmd">/explain</span>
-            <span class="slash-desc">Explain Selected Code</span>
-        </div>
-        <div class="slash-item" data-cmd="/review">
-            <span class="slash-cmd">/review</span>
-            <span class="slash-desc">Review Selected Code</span>
-        </div>
-        <div class="slash-item" data-cmd="/fix">
-            <span class="slash-cmd">/fix</span>
-            <span class="slash-desc">Fix Selected Code</span>
-        </div>
-        <div class="slash-item" data-cmd="/skills">
-            <span class="slash-cmd">/skills</span>
-            <span class="slash-desc">Show Custom Skills</span>
-        </div>
-        <div class="slash-item" data-cmd="/sessions">
-            <span class="slash-cmd">/sessions</span>
-            <span class="slash-desc">Show Past Sessions</span>
-        </div>
-        <div class="slash-item" data-cmd="/compact">
-            <span class="slash-cmd">/compact</span>
-            <span class="slash-desc">Compact history & preserve summary</span>
-        </div>
-        <div class="slash-item" data-cmd="/undo">
-            <span class="slash-cmd">/undo</span>
-            <span class="slash-desc">Undo last message and response</span>
-        </div>
-    </div>
-
-    <!-- Model Configuration Overlay Modal -->
-    <div class="modal-backdrop" id="model-modal" onclick="closeModelModal(event)" style="display: none;">
-        <div class="settings-modal" onclick="event.stopPropagation()" style="max-height: 420px; width: 340px;">
-            <div class="settings-header">
-                <span class="settings-title">Select Provider & Model</span>
-                <button class="close-modal-btn" onclick="hideModelModal()">✕</button>
-            </div>
-            
-            <div class="settings-body" style="padding: 16px;">
-                <div class="setting-field">
-                    <label for="model-dialog-provider">Provider</label>
-                    <select id="model-dialog-provider" onchange="onModelDialogProviderChange()">
-                        <!-- Dynamically filled -->
-                    </select>
-                </div>
-                
-                <div class="setting-field" style="margin-top: 10px;">
-                    <label for="model-dialog-model">Model</label>
-                    <input type="text" id="model-dialog-model" placeholder="e.g. gpt-4o, claude-3-5-sonnet" list="model-dialog-presets">
-                    <datalist id="model-dialog-presets">
-                    </datalist>
-                </div>
-                
-                <div class="setting-field" id="model-dialog-key-container" style="margin-top: 10px; display: none;">
-                    <label for="model-dialog-key" style="color: #ff9800;">API Key (Required to execute this provider)</label>
-                    <input type="password" id="model-dialog-key" placeholder="Enter API Key to save to secure store">
-                </div>
-            </div>
-
-            <div class="settings-footer">
-                <button class="settings-btn secondary" onclick="hideModelModal()">Cancel</button>
-                <button class="settings-btn primary" onclick="saveModelDialogSettings()">Save</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Permission Required Overlay Modal -->
-    <div class="modal-backdrop" id="permission-modal" style="display: none;">
-        <div class="settings-modal" style="max-height: 440px; width: 340px; border-color: rgba(224, 160, 80, 0.4);">
-            <div class="settings-header" style="border-bottom-color: rgba(224, 160, 80, 0.2);">
-                <span class="settings-title" style="color: #e0a050; font-weight: 700;">⚠️ Permission Required</span>
-            </div>
-            
-            <div class="settings-body" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto;">
-                <div style="font-size: 11px; color: var(--text-secondary);">
-                    DevOrch wants to run a tool command on your system.
-                </div>
-                
-                <div style="background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); padding: 8px; border-radius: 6px; font-size: 11px;">
-                    <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Tool:</div>
-                    <div id="permission-tool" style="font-family: monospace; color: #a855f7; margin-bottom: 8px;"></div>
-                    <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Command:</div>
-                    <div id="permission-command" style="font-family: monospace; color: #06b6d4; word-break: break-all; white-space: pre-wrap;"></div>
-                </div>
-            </div>
-
-            <div class="settings-footer" style="flex-direction: column; gap: 6px; padding: 12px 16px;">
-                <button class="settings-btn primary" onclick="submitPermissionResponse('once')" style="width: 100%; text-align: center; margin: 0;">Allow Once</button>
-                <button class="settings-btn primary" onclick="submitPermissionResponse('session')" style="width: 100%; text-align: center; margin: 0; background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.3);">Allow for this Session</button>
-                <button class="settings-btn primary" onclick="submitPermissionResponse('always')" style="width: 100%; text-align: center; margin: 0; background: rgba(6, 182, 212, 0.15); border-color: rgba(6, 182, 212, 0.3);">Always Allow</button>
-                <button class="settings-btn secondary" onclick="submitPermissionResponse('deny')" style="width: 100%; text-align: center; margin: 0; color: #ef4444; border-color: rgba(239, 68, 68, 0.2);">Deny</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Logs panel -->
-    <div class="logs-panel" id="logs-panel"></div>
-
-    <footer>
-        <div class="input-container">
-            <textarea id="chat-input" placeholder="Ask DevOrch... (type / for commands)" rows="1"></textarea>
-            <div class="input-footer">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="mode-selector">
-                        <div class="mode-option auto" id="mode-auto" onclick="setMode('auto')">Auto</div>
-                        <div class="mode-option ask" id="mode-ask" onclick="setMode('ask')">Ask</div>
-                        <div class="mode-option plan" id="mode-plan" onclick="setMode('plan')">Plan</div>
-                    </div>
-                    <button class="slash-trigger-btn" id="slash-btn" title="Show Commands (/)">/</button>
-                </div>
-                <button class="send-btn" id="send-btn" disabled>
-                    <!-- Send Icon -->
-                    <svg class="send-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
-                    <!-- Stop Icon -->
-                    <svg class="stop-icon" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                        <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </footer>
-
-    <script>
-        const vscode = acquireVsCodeApi();
-        
-        const chatFeed = document.getElementById('chat-feed');
-        const chatInput = document.getElementById('chat-input');
-        const sendBtn = document.getElementById('send-btn');
-        const statusDot = document.getElementById('status-dot');
-        const statusText = document.getElementById('status-text');
-        const logsPanel = document.getElementById('logs-panel');
-        const clearBtn = document.getElementById('clear-btn');
-        const openReplBtn = document.getElementById('open-repl-btn');
-        const slashMenu = document.getElementById('slash-menu');
-        const slashBtn = document.getElementById('slash-btn');
-
-        let isRunning = false;
-        let activeMode = 'auto';
-        let currentAssistantMessageElement = null;
-        let currentToolLogsContainer = null;
-        let currentToolStepElement = null;
-        let activeSessionId = null;
-        let selectedSlashIndex = 0;
-        let currentSettings = {};
-        let cliProviders = {};
-        let mcpServers = [];
-        let activeCliProvider = '';
-
-        function updateSendButtonState() {
-            if (isRunning) {
-                sendBtn.disabled = false;
-                sendBtn.classList.add('running');
-                sendBtn.title = 'Stop Execution';
-            } else {
-                sendBtn.classList.remove('running');
-                sendBtn.disabled = !chatInput.value.trim();
-                sendBtn.title = 'Send Message';
-            }
-        }
-
-        // Initialize state
-        vscode.postMessage({ type: 'init' });
-
-        // Auto-resize input textarea
-        chatInput.addEventListener('input', () => {
-            chatInput.style.height = 'auto';
-            chatInput.style.height = (chatInput.scrollHeight) + 'px';
-            updateSendButtonState();
-
-            const text = chatInput.value;
-            if (text.startsWith('/')) {
-                showSlashMenu();
-                filterSlashMenu(text);
-            } else {
-                hideSlashMenu();
-            }
-        });
-
-        chatInput.addEventListener('keydown', (e) => {
-            if (slashMenu.style.display === 'flex') {
-                const items = Array.from(slashMenu.querySelectorAll('.slash-item')).filter(el => el.style.display !== 'none');
-                if (items.length > 0) {
-                    if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        selectedSlashIndex = (selectedSlashIndex + 1) % items.length;
-                        updateSelectedSlashItem(items);
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        selectedSlashIndex = (selectedSlashIndex - 1 + items.length) % items.length;
-                        updateSelectedSlashItem(items);
-                    } else if (e.key === 'Enter' || e.key === 'Tab') {
-                        e.preventDefault();
-                        executeSlashCommand(items[selectedSlashIndex].getAttribute('data-cmd'));
-                    } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        hideSlashMenu();
-                    }
-                }
-            } else {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!isRunning) {
-                        sendMessage();
-                    }
-                }
-            }
-        });
-
-        sendBtn.addEventListener('click', sendMessage);
-        
-        clearBtn.addEventListener('click', () => {
-            clearChat();
-            activeSessionId = null;
-            vscode.postMessage({ type: 'clear' });
-            vscode.postMessage({ type: 'init' }); // refresh stats
-        });
-
-        openReplBtn.addEventListener('click', () => {
-            vscode.postMessage({ type: 'openTerminal' });
-        });
-
-        slashBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleSlashMenu();
-        });
-
-        document.addEventListener('click', () => {
-            hideSlashMenu();
-        });
-
-        function toggleSlashMenu() {
-            if (slashMenu.style.display === 'flex') {
-                hideSlashMenu();
-            } else {
-                showSlashMenu();
-                filterSlashMenu(chatInput.value);
-            }
-        }
-
-        function showSlashMenu() {
-            slashMenu.style.display = 'flex';
-            selectedSlashIndex = 0;
-            const items = Array.from(slashMenu.querySelectorAll('.slash-item'));
-            items.forEach(el => el.classList.remove('selected'));
-            if (items[0]) items[0].classList.add('selected');
-        }
-
-        function hideSlashMenu() {
-            slashMenu.style.display = 'none';
-        }
-
-        function filterSlashMenu(query) {
-            const items = Array.from(slashMenu.querySelectorAll('.slash-item'));
-            items.forEach((item) => {
-                const cmd = item.getAttribute('data-cmd');
-                if (cmd.startsWith(query.toLowerCase())) {
-                    item.style.display = 'flex';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
-
-            // Recalibrate index on visible items
-            const visible = items.filter(el => el.style.display !== 'none');
-            if (visible.length > 0) {
-                selectedSlashIndex = 0;
-                visible.forEach((el, idx) => {
-                    el.classList.remove('selected');
-                    if (idx === 0) el.classList.add('selected');
-                });
-            }
-        }
-
-        function updateSelectedSlashItem(visibleItems) {
-            visibleItems.forEach((el, idx) => {
-                if (idx === selectedSlashIndex) {
-                    el.classList.add('selected');
-                    el.scrollIntoView({ block: 'nearest' });
-                } else {
-                    el.classList.remove('selected');
-                }
-            });
-        }
-
-        function executeSlashCommand(cmd) {
-            hideSlashMenu();
-            chatInput.value = '';
-            chatInput.style.height = 'auto';
-            sendBtn.disabled = true;
-
-            switch (cmd) {
-                case '/settings':
-                    showSettingsModal();
-                    break;
-                case '/model':
-                    showModelModal();
-                    break;
-                case '/repl':
-                    vscode.postMessage({ type: 'openTerminal' });
-                    break;
-                case '/clear':
-                    clearBtn.click();
-                    break;
-                case '/skills':
-                    switchTab('skills');
-                    break;
-                case '/sessions':
-                    switchTab('sessions');
-                    break;
-                case '/explain':
-                    triggerQuickAction('Explain this code');
-                    break;
-                case '/review':
-                    triggerQuickAction('Review this code');
-                    break;
-                case '/fix':
-                    triggerQuickAction('Fix any bugs in this code');
-                    break;
-                case '/compact':
-                    vscode.postMessage({ type: 'compactSession', sessionId: activeSessionId });
-                    break;
-                case '/undo':
-                    vscode.postMessage({ type: 'undoSessionMessage', sessionId: activeSessionId });
-                    break;
-            }
-        }
-
-        // Allow clicking item to select
-        slashMenu.addEventListener('click', (e) => {
-            const item = e.target.closest('.slash-item');
-            if (item) {
-                e.stopPropagation();
-                executeSlashCommand(item.getAttribute('data-cmd'));
-            }
-        });
-
-        // --- Model Modal Actions ---
-        function showModelModal() {
-            const select = document.getElementById('model-dialog-provider');
-            select.innerHTML = '';
-            
-            Object.keys(cliProviders).forEach(prov => {
-                const opt = document.createElement('option');
-                opt.value = prov;
-                opt.innerText = prov.toUpperCase();
-                select.appendChild(opt);
-            });
-
-            const provToSelect = currentSettings.defaultProvider || activeCliProvider || Object.keys(cliProviders)[0] || '';
-            select.value = provToSelect;
-            document.getElementById('model-dialog-key').value = '';
-            
-            onModelDialogProviderChange(true);
-            
-            const modelToSelect = currentSettings.defaultModel || (cliProviders[provToSelect] ? cliProviders[provToSelect].model : '');
-            document.getElementById('model-dialog-model').value = modelToSelect;
-            document.getElementById('model-modal').style.display = 'flex';
-        }
-
-        function onModelDialogProviderChange(keepValue) {
-            const provider = document.getElementById('model-dialog-provider').value;
-            const modelInput = document.getElementById('model-dialog-model');
-            const datalist = document.getElementById('model-dialog-presets');
-            const keyContainer = document.getElementById('model-dialog-key-container');
-            
-            datalist.innerHTML = '';
-            
-            if (provider && cliProviders[provider]) {
-                const defaultModel = cliProviders[provider].model;
-                const opt = document.createElement('option');
-                opt.value = defaultModel;
-                datalist.appendChild(opt);
-                
-                let popular = [];
-                if (provider === 'openai') {
-                    popular = ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'];
-                } else if (provider === 'anthropic') {
-                    popular = ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'];
-                } else if (provider === 'gemini') {
-                    popular = ['gemini-1.5-pro', 'gemini-1.5-flash'];
-                } else if (provider === 'mistral') {
-                    popular = ['mistral-large-latest', 'mistral-medium-latest'];
-                } else if (provider === 'groq') {
-                    popular = ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
-                }
-                
-                popular.forEach(m => {
-                    if (m !== defaultModel) {
-                        const optPop = document.createElement('option');
-                        optPop.value = m;
-                        datalist.appendChild(optPop);
-                    }
-                });
-                
-                if (!keepValue) {
-                    modelInput.value = defaultModel;
-                }
-
-                // Show API key field if not set
-                if (cliProviders[provider].keyStatus === 'not_set') {
-                    keyContainer.style.display = 'flex';
-                } else {
-                    keyContainer.style.display = 'none';
-                }
-            } else {
-                keyContainer.style.display = 'none';
-            }
-        }
-
-        function saveModelDialogSettings() {
-            const provider = document.getElementById('model-dialog-provider').value;
-            const model = document.getElementById('model-dialog-model').value.trim();
-            const key = document.getElementById('model-dialog-key').value.trim();
-
-            vscode.postMessage({
-                type: 'updateSetting',
-                key: 'defaultProvider',
-                value: provider
-            });
-
-            vscode.postMessage({
-                type: 'updateSetting',
-                key: 'defaultModel',
-                value: model
-            });
-
-            if (key) {
-                vscode.postMessage({
-                    type: 'setApiKey',
-                    provider: provider,
-                    key: key
-                });
-            }
-
-            hideModelModal();
-        }
-
-        function hideModelModal() {
-            document.getElementById('model-modal').style.display = 'none';
-        }
-
-        function closeModelModal(e) {
-            if (e.target.id === 'model-modal') {
-                hideModelModal();
-            }
-        }
-
-        function submitPermissionResponse(choice) {
-            document.getElementById('permission-modal').style.display = 'none';
-            vscode.postMessage({
-                type: 'permissionResponse',
-                choice: choice
-            });
-        }
-
-        // --- MCP Tab Actions ---
-        function renderMcpTab() {
-            const disableCheck = document.getElementById('tab-disable-mcp');
-            if (disableCheck) {
-                disableCheck.checked = currentSettings.disableMcp || false;
-            }
-
-            const mcpCheckboxes = document.getElementById('tab-mcp-checkboxes');
-            if (!mcpCheckboxes) return;
-            mcpCheckboxes.innerHTML = '';
-            
-            if (mcpServers.length === 0) {
-                mcpCheckboxes.innerHTML = '<span style="font-size: 11px; color: var(--text-secondary); font-style: italic;">No MCP servers configured in ~/.devorch/config.yaml</span>';
-            } else {
-                const activeList = (currentSettings.activeMcpServers || '').split(',').map(s => s.trim()).filter(Boolean);
-                mcpServers.forEach(server => {
-                    const div = document.createElement('div');
-                    div.style.display = 'flex';
-                    div.style.alignItems = 'center';
-                    div.style.gap = '8px';
-                    
-                    const chk = document.createElement('input');
-                    chk.type = 'checkbox';
-                    chk.value = server;
-                    chk.id = `tab-mcp-chk-${server}`;
-                    chk.style.width = 'auto';
-                    chk.style.margin = '0';
-                    chk.style.cursor = 'pointer';
-                    chk.checked = activeList.length === 0 || activeList.includes(server);
-                    chk.onchange = () => toggleTabMcpServer(server, chk.checked);
-                    
-                    const lbl = document.createElement('label');
-                    lbl.htmlFor = `tab-mcp-chk-${server}`;
-                    lbl.innerText = server;
-                    lbl.style.cursor = 'pointer';
-                    lbl.style.fontSize = '11px';
-                    lbl.style.color = 'var(--text-primary)';
-                    
-                    div.appendChild(chk);
-                    div.appendChild(lbl);
-                    mcpCheckboxes.appendChild(div);
-                });
-            }
-            toggleMcpTabList();
-        }
-
-        function toggleTabMcpServer(server, isChecked) {
-            const activeList = (currentSettings.activeMcpServers || '').split(',').map(s => s.trim()).filter(Boolean);
-            let newList = [];
-            if (isChecked) {
-                if (!activeList.includes(server)) {
-                    newList = [...activeList, server];
-                } else {
-                    newList = activeList;
-                }
-            } else {
-                newList = activeList.filter(s => s !== server);
-            }
-            
-            vscode.postMessage({
-                type: 'updateSetting',
-                key: 'activeMcpServers',
-                value: newList.join(',')
-            });
-        }
-
-        function toggleTabDisableMcp(isChecked) {
-            vscode.postMessage({
-                type: 'updateSetting',
-                key: 'disableMcp',
-                value: isChecked
-            });
-            toggleMcpTabList();
-        }
-
-        function toggleMcpTabList() {
-            const disableCheck = document.getElementById('tab-disable-mcp');
-            if (!disableCheck) return;
-            const disabled = disableCheck.checked;
-            const container = document.getElementById('tab-mcp-servers-container');
-            const addContainer = document.getElementById('tab-add-mcp-container');
-            
-            if (container) container.style.opacity = disabled ? '0.4' : '1';
-            if (addContainer) addContainer.style.opacity = disabled ? '0.4' : '1';
-            
-            if (container) {
-                const inputs = container.querySelectorAll('input');
-                inputs.forEach(inp => inp.disabled = disabled);
-            }
-            
-            if (addContainer) {
-                const addInputs = addContainer.querySelectorAll('input, button');
-                addInputs.forEach(inp => inp.disabled = disabled);
-            }
-        }
-
-        function submitTabNewMcpServer() {
-            const nameInput = document.getElementById('tab-add-mcp-name');
-            const commandInput = document.getElementById('tab-add-mcp-command');
-            const argsInput = document.getElementById('tab-add-mcp-args');
-
-            const name = nameInput.value.trim();
-            const command = commandInput.value.trim();
-            const args = argsInput.value.trim();
-
-            if (!name || !command) {
-                alert('Please specify both a Server Name and Command.');
-                return;
-            }
-
-            vscode.postMessage({
-                type: 'addMcpServer',
-                name: name,
-                command: command,
-                args: args
-            });
-
-            nameInput.value = '';
-            commandInput.value = '';
-            argsInput.value = '';
-        }
-
-        // --- Settings Modal Actions ---
-        function showSettingsModal() {
-            vscode.postMessage({ type: 'openSettings' });
-        }
-
-        function setMode(mode) {
-            if (isRunning) return;
-            activeMode = mode;
-            document.querySelectorAll('.mode-option').forEach(el => el.classList.remove('active'));
-            const activeEl = document.getElementById(`mode-${mode}`);
-            if (activeEl) {
-                activeEl.classList.add('active');
-            }
-        }
-
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
-            
-            document.getElementById(`tab-${tabName}`).classList.add('active');
-            document.getElementById(`panel-${tabName}`).classList.add('active');
-
-            if (tabName === 'mcp') {
-                renderMcpTab();
-            }
-        }
-
-        function triggerQuickAction(text) {
-            chatInput.value = text;
-            chatInput.dispatchEvent(new Event('input'));
-            sendMessage();
-        }
-
-        function clearChat() {
-            chatFeed.innerHTML = `
-                <div class="welcome-container" id="welcome-screen">
-                    <div class="welcome-logo">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5">
-                            <path d="M12 2a10 10 0 0110 10c0 5.523-4.477 10-10 10S2 17.523 2 12A10 10 0 0112 2z"/>
-                            <path d="M12 6v12M6 12h12"/>
-                        </svg>
-                    </div>
-                    <h3 class="welcome-title">DevOrch Assistant</h3>
-                    <p class="welcome-desc">A multi-provider AI coding assistant executing tools directly on your system.</p>
-                    <div class="welcome-cards">
-                        <div class="welcome-card" onclick="triggerQuickAction('Explain this project structure')">
-                            <div class="welcome-card-title">🔍 Explain Project</div>
-                            <div class="welcome-card-desc">Understand file layout and purpose of codebase</div>
-                        </div>
-                        <div class="welcome-card" onclick="triggerQuickAction('Generate a git commit message for my staged changes')">
-                            <div class="welcome-card-title">📝 Stage & Commit</div>
-                            <div class="welcome-card-desc">Write an explanatory commit for changes</div>
-                        </div>
-                        <div class="welcome-card" onclick="triggerQuickAction('Review the main files in this project for bugs and security issues')">
-                            <div class="welcome-card-title">🛠️ Code Review</div>
-                            <div class="welcome-card-desc">Find potential improvements or bugs</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            logsPanel.style.display = 'none';
-            logsPanel.innerHTML = '';
-        }
-
-        function sendMessage() {
-            if (isRunning) {
-                vscode.postMessage({ type: 'cancel' });
-                return;
-            }
-            const text = chatInput.value.trim();
-            if (!text) return;
-
-            // Remove welcome screen
-            const welcome = document.getElementById('welcome-screen');
-            if (welcome) {
-                welcome.remove();
-            }
-
-            appendMessage('user', text);
-            vscode.postMessage({
-                type: 'sendMessage',
-                text: text,
-                mode: activeMode
-            });
-
-            chatInput.value = '';
-            chatInput.style.height = 'auto';
-            sendBtn.disabled = true;
-        }
-
-        function appendMessage(sender, text) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${sender}`;
-
-            const bubble = document.createElement('div');
-            bubble.className = 'message-bubble';
-            
-            if (sender === 'user') {
-                bubble.innerText = text;
-            } else {
-                bubble.innerHTML = formatMarkdown(text);
-            }
-
-            const senderLabel = document.createElement('span');
-            senderLabel.className = 'message-sender';
-            senderLabel.innerText = sender === 'user' ? 'You' : 'DevOrch';
-
-            msgDiv.appendChild(senderLabel);
-            msgDiv.appendChild(bubble);
-            
-            chatFeed.appendChild(msgDiv);
-            chatFeed.scrollTop = chatFeed.scrollHeight;
-
-            if (sender === 'assistant') {
-                currentAssistantMessageElement = bubble;
-                currentToolLogsContainer = null;
-            }
-            return bubble;
-        }
-
-        // --- Markdown Formatting ---
-        function formatMarkdown(text) {
-            if (!text) return '';
-
-            function escape(html) {
-                return html
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;');
-            }
-
-            const lines = text.split('\n');
-            let resultHtml = [];
-            let inCodeBlock = false;
-            let codeContent = [];
-            let codeLang = '';
-            let inList = false;
-
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-
-                if (line.trim().startsWith('```')) {
-                    if (inCodeBlock) {
-                        inCodeBlock = false;
-                        const codeStr = escape(codeContent.join('\n'));
-                        resultHtml.push(`<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>${codeStr}</code></pre>`);
-                        codeContent = [];
-                    } else {
-                        inCodeBlock = true;
-                        codeLang = line.trim().slice(3);
-                    }
-                    continue;
-                }
-
-                if (inCodeBlock) {
-                    codeContent.push(line);
-                    continue;
-                }
-
-                const listMatch = line.match(/^(\s*)([\-\*\+])\s+(.+)$/);
-                if (listMatch) {
-                    if (!inList) {
-                        inList = true;
-                        resultHtml.push('<ul style="margin: 0 0 10px 0; padding-left: 20px;">');
-                    }
-                    resultHtml.push(`<li>${parseInlineMarkdown(listMatch[3])}</li>`);
-                    continue;
-                } else if (inList && line.trim() === '') {
-                    let nextIsList = false;
-                    for (let j = i + 1; j < lines.length; j++) {
-                        if (lines[j].trim() === '') continue;
-                        if (lines[j].match(/^(\s*)([\-\*\+])\s+(.+)$/)) {
-                            nextIsList = true;
-                        }
-                        break;
-                    }
-                    if (!nextIsList) {
-                        inList = false;
-                        resultHtml.push('</ul>');
-                    }
-                    continue;
-                } else if (inList) {
-                    inList = false;
-                    resultHtml.push('</ul>');
-                }
-
-                const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
-                if (headerMatch) {
-                    const level = headerMatch[1].length;
-                    resultHtml.push(`<h${level} style="margin: 14px 0 8px 0; font-weight: 700; font-size: ${16 - level * 0.8}px;">${parseInlineMarkdown(headerMatch[2])}</h${level}>`);
-                    continue;
-                }
-
-                if (line.trim() === '---' || line.trim() === '***' || line.trim() === '___') {
-                    resultHtml.push('<hr style="border: 0; border-top: 1px solid var(--border-color); margin: 16px 0;">');
-                    continue;
-                }
-
-                if (line.trim() !== '') {
-                    resultHtml.push(`<p style="margin: 0 0 10px 0; line-height: 1.5;">${parseInlineMarkdown(line)}</p>`);
-                }
-            }
-
-            if (inList) {
-                resultHtml.push('</ul>');
-            }
-            if (inCodeBlock) {
-                const codeStr = escape(codeContent.join('\n'));
-                resultHtml.push(`<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>${codeStr}</code></pre>`);
-            }
-
-            return resultHtml.join('\n');
-
-            function parseInlineMarkdown(txt) {
-                let escaped = escape(txt);
-
-                // Inline code: `code`
-                escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-                // Bold: **text** or __text__
-                escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-                escaped = escaped.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-
-                // Italic: *text* or _text_
-                escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-                escaped = escaped.replace(/_([^_]+)_/g, '<em>$1</em>');
-
-                return escaped;
-            }
-        }
-
-        function copyCode(btn) {
-            const pre = btn.parentElement;
-            const code = pre.querySelector('code').innerText;
-            navigator.clipboard.writeText(code);
-            
-            btn.innerText = 'Copied!';
-            setTimeout(() => {
-                btn.innerText = 'Copy';
-            }, 2000);
-        }
-
-        // --- Handle Messages from extension host ---
-        window.addEventListener('message', (event) => {
-            const message = event.data;
-            switch (message.type) {
-                case 'status':
-                    statusDot.className = 'status-dot' + (message.available ? ' active' : '');
-                    if (message.available) {
-                        activeCliProvider = message.provider;
-                        const sessText = activeSessionId ? ` | Session: ${activeSessionId}` : '';
-                        statusText.innerText = `Active: ${message.provider.toUpperCase()} (${message.mode.toUpperCase()})${sessText}`;
-                        setMode(message.mode);
-                    } else {
-                        statusText.innerText = message.error;
-                    }
-                    if (message.settings) {
-                        currentSettings = message.settings;
-                        const mcpTab = document.getElementById('tab-mcp');
-                        if (mcpTab && mcpTab.classList.contains('active')) {
-                            renderMcpTab();
-                        }
-                    }
-                    if (message.cliProviders) {
-                        cliProviders = message.cliProviders;
-                    }
-                    if (message.mcpServers) {
-                        mcpServers = message.mcpServers;
-                        const mcpTab = document.getElementById('tab-mcp');
-                        if (mcpTab && mcpTab.classList.contains('active')) {
-                            renderMcpTab();
-                        }
-                    }
-                    break;
-                
-                case 'data':
-                    renderSkills(message.skills);
-                    renderSessions(message.sessions);
-                    break;
-
-                case 'sessionLoaded':
-                    // Switch to chat tab and load past messages
-                    switchTab('chat');
-                    chatFeed.innerHTML = '';
-                    activeSessionId = message.sessionId;
-                    
-                    if (message.messages && message.messages.length > 0) {
-                        message.messages.forEach(msg => {
-                            if (msg.role === 'user') {
-                                appendMessage('user', msg.content);
-                            } else if (msg.role === 'tool') {
-                                appendToolStepCard(msg.name || 'tool', msg.content);
-                            } else if (msg.role === 'assistant') {
-                                if (msg.content === 'Calling tool...' || msg.content.startsWith('Calling tool')) {
-                                    return;
-                                }
-                                appendMessage('assistant', msg.content);
-                            }
-                        });
-                    } else {
-                        appendMessage('assistant', `Resumed empty session ${message.sessionId}.`);
-                    }
-
-                    // Update status bar message
-                    statusText.innerText = `Active Session: ${message.sessionId}`;
-                    isRunning = false;
-                    updateSendButtonState();
-                    logsPanel.style.display = 'none';
-                    logsPanel.innerHTML = '';
-                    break;
-
-                case 'triggerPrompt':
-                    // Trigger a prompt directly (e.g. from editor context menu)
-                    const welcome = document.getElementById('welcome-screen');
-                    if (welcome) welcome.remove();
-                    
-                    chatInput.value = message.text;
-                    chatInput.dispatchEvent(new Event('input'));
-                    break;
-
-                case 'start':
-                    isRunning = true;
-                    updateSendButtonState();
-                    logsPanel.innerHTML = '';
-                    logsPanel.style.display = 'block';
-                    currentAssistantMessageElement = null;
-                    break;
-
-                case 'tool_start':
-                    createToolStep(message.tool);
-                    currentAssistantMessageElement = null;
-                    break;
-
-                case 'permission_request':
-                    document.getElementById('permission-tool').innerText = message.tool;
-                    document.getElementById('permission-command').innerText = message.command;
-                    document.getElementById('permission-modal').style.display = 'flex';
-                    break;
-
-                case 'tool_done':
-                    updateToolStep(message.status, message.info);
-                    break;
-
-                case 'tool_output':
-                    if (currentToolStepElement) {
-                        const details = currentToolStepElement.querySelector('.tool-details');
-                        if (details) {
-                            if (details.innerText === 'Starting tool execution...' || details.innerText === '') {
-                                details.innerText = message.output;
-                            } else {
-                                details.innerText += '\n' + message.output;
-                            }
-                        }
-                    }
-                    break;
-
-                case 'response_start':
-                    break;
-
-                case 'response_chunk':
-                    if (!currentAssistantMessageElement) {
-                        appendMessage('assistant', '');
-                    }
-                    currentAssistantMessageElement.markdownText = (currentAssistantMessageElement.markdownText || '') + message.chunk;
-                    currentAssistantMessageElement.innerHTML = formatMarkdown(currentAssistantMessageElement.markdownText);
-                    chatFeed.scrollTop = chatFeed.scrollHeight;
-                    break;
-
-                case 'response_end':
-                    break;
-
-                case 'log':
-                    const logLine = document.createElement('div');
-                    logLine.innerText = message.message;
-                    logsPanel.appendChild(logLine);
-                    logsPanel.scrollTop = logsPanel.scrollHeight;
-                    break;
-
-                case 'end':
-                case 'cancelled':
-                case 'error':
-                    isRunning = false;
-                    updateSendButtonState();
-                    document.getElementById('permission-modal').style.display = 'none';
-                    if (message.type === 'error') {
-                        appendMessage('assistant', `❌ Error: ${message.message}`);
-                    } else if (message.type === 'cancelled') {
-                        appendMessage('assistant', `⚠️ Subprocess cancelled by user.`);
-                    }
-                    break;
-            }
-        });
-
-        // --- Tool Step Builders ---
-        function createToolStep(toolName) {
-            const step = document.createElement('div');
-            step.className = 'tool-step';
-            step.style.margin = '10px 0';
-            step.style.maxWidth = '92%';
-            
-            step.innerHTML = `
-                <div class="tool-header" onclick="toggleToolDetails(this.parentElement)">
-                    <div class="tool-info">
-                        <div class="tool-status-icon"><div class="spinner"></div></div>
-                        <span>Running tool: <strong>${toolName}</strong></span>
-                    </div>
-                    <span class="arrow-icon">▶</span>
-                </div>
-                <div class="tool-details">Starting tool execution...</div>
-            `;
-            
-            chatFeed.appendChild(step);
-            currentToolStepElement = step;
-            chatFeed.scrollTop = chatFeed.scrollHeight;
-        }
-
-        function appendToolStepCard(toolName, output) {
-            const step = document.createElement('div');
-            step.className = 'tool-step success';
-            step.style.margin = '10px 0';
-            step.style.maxWidth = '92%';
-            
-            step.innerHTML = `
-                <div class="tool-header" onclick="toggleToolDetails(this.parentElement)">
-                    <div class="tool-info">
-                        <div class="tool-status-icon"><span class="tool-status-success">✓</span></div>
-                        <span>Executed: <strong>${toolName}</strong></span>
-                    </div>
-                    <span class="arrow-icon">▶</span>
-                </div>
-                <div class="tool-details">${escapeHtml(output)}</div>
-            `;
-            
-            chatFeed.appendChild(step);
-            chatFeed.scrollTop = chatFeed.scrollHeight;
-        }
-
-        function escapeHtml(text) {
-            if (!text) return '';
-            return text
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
-        }
-
-        function updateToolStep(status, info) {
-            if (!currentToolStepElement) return;
-
-            const iconContainer = currentToolStepElement.querySelector('.tool-status-icon');
-            const details = currentToolStepElement.querySelector('.tool-details');
-            const titleSpan = currentToolStepElement.querySelector('.tool-info span');
-
-            currentToolStepElement.classList.add(status);
-
-            if (status === 'success') {
-                iconContainer.innerHTML = '<span class="tool-status-success">✓</span>';
-                if (details.innerText === 'Starting tool execution...') {
-                    details.innerText = `Result:\n${info || 'Succeeded'}`;
-                } else {
-                    details.innerText += `\nResult:\n${info || 'Succeeded'}`;
-                }
-                titleSpan.innerHTML = titleSpan.innerHTML.replace('Running tool:', 'Executed:');
-            } else {
-                iconContainer.innerHTML = '<span class="tool-status-failed">✗</span>';
-                if (details.innerText === 'Starting tool execution...') {
-                    details.innerText = `Error:\n${info || 'Failed'}`;
-                } else {
-                    details.innerText += `\nError:\n${info || 'Failed'}`;
-                }
-                titleSpan.innerHTML = titleSpan.innerHTML.replace('Running tool:', 'Failed tool:');
-            }
-
-            chatFeed.scrollTop = chatFeed.scrollHeight;
-        }
-
-        function toggleToolDetails(stepEl) {
-            stepEl.classList.toggle('expanded');
-        }
-
-        // --- Data Renderers ---
-        function renderSkills(skills) {
-            const list = document.getElementById('skills-list');
-            if (!skills || skills.length === 0) {
-                list.innerHTML = `<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No skills found.</div>`;
-                return;
-            }
-
-            list.innerHTML = skills.map(skill => `
-                <div class="list-item" onclick="triggerSkill('${skill.name}')">
-                    <div class="list-item-header">
-                        <span class="list-item-title">/${skill.name}</span>
-                        <span class="list-item-badge">${skill.source}</span>
-                    </div>
-                    <div class="list-item-desc">${skill.description}</div>
-                </div>
-            `).join('');
-        }
-
-        function triggerSkill(skillName) {
-            switchTab('chat');
-            chatInput.value = '';
-            chatInput.placeholder = `Enter extra instructions for skill /${skillName} (optional)...`;
-            chatInput.focus();
-            
-            // Change send button behavior for this click
-            const oldSend = sendBtn.onclick;
-            sendBtn.disabled = false;
-            
-            const handleSkillSend = () => {
-                const welcome = document.getElementById('welcome-screen');
-                if (welcome) welcome.remove();
-
-                const promptText = chatInput.value.trim();
-                appendMessage('user', `Run skill /${skillName}${promptText ? ': ' + promptText : ''}`);
-                
-                vscode.postMessage({
-                    type: 'runSkill',
-                    skillName: skillName,
-                    prompt: promptText
-                });
-
-                chatInput.value = '';
-                chatInput.placeholder = 'Ask DevOrch...';
-                chatInput.style.height = 'auto';
-                
-                // restore old click handler
-                sendBtn.removeEventListener('click', handleSkillSend);
-                sendBtn.addEventListener('click', sendMessage);
-                sendBtn.disabled = true;
-            };
-
-            sendBtn.removeEventListener('click', sendMessage);
-            sendBtn.addEventListener('click', handleSkillSend);
-            
-            // Listen for enter too
-            const handleKeydown = (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSkillSend();
-                    chatInput.removeEventListener('keydown', handleKeydown);
-                }
-            };
-            chatInput.addEventListener('keydown', handleKeydown);
-        }
-
-        function renderSessions(sessions) {
-            const list = document.getElementById('sessions-list');
-            if (!sessions || sessions.length === 0) {
-                list.innerHTML = `<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No sessions found.</div>`;
-                return;
-            }
-
-            list.innerHTML = sessions.map(session => `
-                <div class="list-item" onclick="resumeSession('${session.id}')">
-                    <div class="list-item-header">
-                        <span class="list-item-title">${session.name || 'Unnamed Session'}</span>
-                        <span class="list-item-badge">${session.messages} msgs</span>
-                    </div>
-                    <div class="list-item-desc">Provider: ${session.provider.toUpperCase()} | Model: ${session.model}</div>
-                    <div class="list-item-meta">ID: ${session.id} | Updated: ${session.updated}</div>
-                </div>
-            `).join('');
-        }
-
-        function resumeSession(sessionId) {
-            vscode.postMessage({
-                type: 'resumeSession',
-                sessionId: sessionId
-            });
-        }
-    </script>
+<header>
+	<div class="title">DevOrch<span class="sub" id="sub">&nbsp;</span></div>
+	<button class="icon-btn" id="btnNew" title="New chat" aria-label="New chat">＋</button>
+	<button class="icon-btn" id="btnHistory" title="Conversations in this folder" aria-label="Conversations" aria-pressed="false">☰</button>
+	<button class="icon-btn" id="btnTerminal" title="Open DevOrch in the terminal" aria-label="Open in terminal">&gt;_</button>
+	<button class="icon-btn" id="btnSettings" title="Settings" aria-label="Settings">⚙</button>
+</header>
+
+<main id="chat" aria-live="polite">
+	<div class="empty" id="empty">
+		<h2>What are we working on?</h2>
+		<div>DevOrch can read and change files in this folder.</div>
+		<div class="chips">
+			<button class="chip" data-prompt="Explain how this project is structured.">Explain how this project is structured</button>
+			<button class="chip" data-prompt="Run the tests and tell me what fails.">Run the tests and tell me what fails</button>
+			<button class="chip" data-prompt="Find likely bugs in the open file.">Find likely bugs in the open file</button>
+		</div>
+	</div>
+</main>
+
+<section class="history hidden" id="history" aria-label="Conversations"></section>
+
+<footer>
+	<div class="menu hidden" id="menu" role="listbox" aria-label="Suggestions"></div>
+	<div class="box">
+		<textarea id="input" rows="1" placeholder="Ask DevOrch…  /  for commands,  @  for files" title="Enter to send, Shift+Enter for a new line" aria-label="Message"></textarea>
+		<div class="bar">
+			<div class="seg" role="group" aria-label="Mode">
+				<button id="modeAuto" aria-pressed="true" title="DevOrch may edit files and run commands">Auto</button>
+				<button id="modePlan" aria-pressed="false" title="Read-only: DevOrch plans but changes nothing">Plan</button>
+			</div>
+			<label class="attach" id="attachWrap" title="Include the open file with your message"><input type="checkbox" id="attach"><span id="attachName"></span></label>
+			<span class="spacer"></span>
+			<button class="go" id="btnSend" title="Send (Enter)" aria-label="Send">↑</button>
+			<button class="go hidden" id="btnStop" title="Stop (Esc)" aria-label="Stop">■</button>
+		</div>
+	</div>
+	<div class="hint" id="hint">Auto can edit files and run commands</div>
+</footer>
+
+<script nonce="{{nonce}}">
+(function () {
+	const vscode = acquireVsCodeApi();
+	const $ = (id) => document.getElementById(id);
+	const chat = $('chat'), input = $('input');
+	let busy = false, mode = 'auto', status = null, thinking = null, skills = [], menuItems = [], menuIndex = 0, menuKind = null, fileResults = [], fileQuery = null;
+
+	const saved = vscode.getState() || {};
+	if (saved.mode === 'plan') { setMode('plan'); }
+
+	function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+	// A small, safe Markdown subset: fenced code, inline code, bold, headings, lists, paragraphs.
+	function inline(s) {
+		return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+	}
+	function markdown(src) {
+		const out = [];
+		const parts = String(src).split(/```[^\n]*\n?/);
+		parts.forEach((part, i) => {
+			if (i % 2 === 1) { out.push('<pre><button class="copy" type="button">Copy</button><code>' + esc(part.replace(/\n$/, '')) + '</code></pre>'); return; }
+			let list = null;
+			const close = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+			part.split('\n').forEach((line) => {
+				let m;
+				if ((m = /^\s*[-*]\s+(.*)/.exec(line))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inline(m[1]) + '</li>'); }
+				else if ((m = /^\s*\d+[.)]\s+(.*)/.exec(line))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + inline(m[1]) + '</li>'); }
+				else if ((m = /^#{1,3}\s+(.*)/.exec(line))) { close(); out.push('<h3>' + inline(m[1]) + '</h3>'); }
+				else if (line.trim()) { close(); out.push('<p>' + inline(line) + '</p>'); }
+				else { close(); }
+			});
+			close();
+		});
+		return out.join('');
+	}
+
+	function scroll() { chat.scrollTop = chat.scrollHeight; }
+	function add(el) { $('empty').classList.add('hidden'); chat.appendChild(el); scroll(); return el; }
+	function el(tag, cls, html) { const e = document.createElement(tag); if (cls) { e.className = cls; } if (html !== undefined) { e.innerHTML = html; } return e; }
+
+	function userMsg(text) { add(el('div', 'msg user')).textContent = text; }
+	function assistantMsg(text, meta) {
+		const d = add(el('div', 'msg assistant', markdown(text)));
+		if (meta) { d.appendChild(el('div', 'meta', esc(meta))); }
+	}
+	function banner(html, cls) { return add(el('div', 'banner ' + (cls || ''), html)); }
+
+	function setBusy(on) {
+		busy = on;
+		$('btnSend').classList.toggle('hidden', on);
+		$('btnStop').classList.toggle('hidden', !on);
+		input.disabled = false;
+		if (on) {
+			thinking = add(el('div', 'thinking', '<span class="dot"></span><span class="dot"></span><span class="dot"></span><span>Working…</span>'));
+		} else if (thinking) { thinking.remove(); thinking = null; }
+	}
+
+	function toolSummary(name, a) {
+		a = a || {};
+		const v = a.command || a.path || a.query || a.pattern || a.url || a.action || '';
+		return '<b>' + esc(name) + '</b> ' + esc(String(v).slice(0, 120));
+	}
+	function toolMsg(m) {
+		const d = el('details', 'tool' + (m.isError ? ' err' : ''));
+		d.appendChild(el('summary', '', toolSummary(m.name, m.arguments)));
+		if (m.output) { d.appendChild(el('pre', '', '<code>' + esc(m.output) + '</code>')); }
+		if (thinking) { chat.insertBefore(d, thinking); $('empty').classList.add('hidden'); scroll(); } else { add(d); }
+	}
+
+	function setMode(m) {
+		mode = m;
+		$('modeAuto').setAttribute('aria-pressed', String(m === 'auto'));
+		$('modePlan').setAttribute('aria-pressed', String(m === 'plan'));
+		$('hint').textContent = m === 'auto' ? 'Auto can edit files and run commands' : 'Plan is read-only: it proposes, changes nothing';
+		vscode.setState({ mode: m });
+	}
+
+	function send(text) {
+		text = (text || input.value).trim();
+		if (!text || busy) { return; }
+		userMsg(text);
+		input.value = ''; grow();
+		setBusy(true);
+		vscode.postMessage({ type: 'send', text, mode, attachFile: $('attach').checked });
+	}
+
+
+	// ---- "/" commands and "@" file suggestions -------------------------------------------------
+	const COMMANDS = [
+		{ name: 'new', desc: 'Start a new chat', run: () => { vscode.postMessage({ type: 'newChat' }); toggleHistory(false); } },
+		{ name: 'history', desc: 'Conversations in this folder', run: () => toggleHistory(true) },
+		{ name: 'plan', desc: 'Read-only mode', run: () => setMode('plan') },
+		{ name: 'auto', desc: 'Let DevOrch edit files and run commands', run: () => setMode('auto') },
+		{ name: 'terminal', desc: 'Open DevOrch in the terminal', run: () => vscode.postMessage({ type: 'openTerminal' }) },
+		{ name: 'settings', desc: 'Open the DevOrch settings', run: () => vscode.postMessage({ type: 'openSettings' }) },
+	];
+
+	function hideMenu() { menuKind = null; menuItems = []; $('menu').classList.add('hidden'); }
+
+	function drawMenu() {
+		const box = $('menu');
+		box.innerHTML = '';
+		if (!menuItems.length) { box.classList.add('hidden'); return; }  // keep menuKind: file results may still arrive
+		let lastGroup = null;
+		menuItems.forEach((it, i) => {
+			if (it.group && it.group !== lastGroup) { box.appendChild(el('div', 'group', esc(it.group))); lastGroup = it.group; }
+			const row = el('div', 'item', '<span class="n">' + esc(it.label) + '</span><span class="d">' + esc(it.desc || '') + '</span>');
+			row.setAttribute('role', 'option');
+			row.setAttribute('aria-selected', String(i === menuIndex));
+			row.onmousedown = (e) => { e.preventDefault(); pick(i); };
+			box.appendChild(row);
+		});
+		box.classList.remove('hidden');
+		const sel = box.querySelector('[aria-selected="true"]');
+		if (sel && sel.scrollIntoView) { sel.scrollIntoView({ block: 'nearest' }); }
+	}
+
+	// The token the cursor is in, when it starts with "/" (first word only) or "@".
+	function currentToken() {
+		const pos = input.selectionStart, before = input.value.slice(0, pos);
+		const m = /(^|\s)([\/@])([^\s]*)$/.exec(before);
+		if (!m) { return null; }
+		if (m[2] === '/' && before.slice(0, m.index + m[1].length).trim() !== '') { return null; }  // "/" only starts a message
+		return { trigger: m[2], query: m[3], start: pos - m[3].length - 1, end: pos };
+	}
+
+	function updateMenu() {
+		if (busy) { hideMenu(); return; }
+		const t = currentToken();
+		if (!t) { hideMenu(); return; }
+		const q = t.query.toLowerCase();
+		if (t.trigger === '/') {
+			menuKind = 'cmd';
+			const cmds = COMMANDS.filter((c) => c.name.startsWith(q)).map((c) => ({ label: '/' + c.name, desc: c.desc, group: 'Panel', cmd: c }));
+			const sk = skills.filter((k) => k.name.toLowerCase().startsWith(q) || (q.length > 1 && k.name.toLowerCase().includes(q)))
+				.map((k) => ({ label: '/' + k.name, desc: k.description, group: 'Skills', skill: k }));
+			menuItems = cmds.concat(sk).slice(0, 30);
+		} else {
+			menuKind = 'file';
+			if (fileQuery !== t.query) { fileQuery = t.query; vscode.postMessage({ type: 'files', query: t.query }); }
+			menuItems = fileResults.map((f) => ({ label: f.slice(f.lastIndexOf('/') + 1), desc: f, path: f }));
+		}
+		menuIndex = Math.min(menuIndex, Math.max(0, menuItems.length - 1));
+		drawMenu();
+	}
+
+	function pick(i) {
+		const it = menuItems[i], t = currentToken();
+		if (!it || !t) { hideMenu(); return; }
+		if (it.cmd) {
+			input.value = input.value.slice(0, t.start) + input.value.slice(t.end);
+			hideMenu(); grow(); it.cmd.run(); input.focus(); return;
+		}
+		const insert = it.skill ? '/' + it.skill.name + ' ' : '@' + it.path + ' ';
+		input.value = input.value.slice(0, t.start) + insert + input.value.slice(t.end);
+		const caret = t.start + insert.length;
+		input.setSelectionRange(caret, caret);
+		hideMenu(); grow(); input.focus();
+	}
+
+	function grow() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; }
+
+	function renderStatus(s) {
+		status = s;
+		$('sub').textContent = s.installed ? (s.version + (s.provider ? ' · ' + s.provider : '') + (s.model ? '/' + s.model : '')) : 'not installed';
+		$('attachWrap').classList.toggle('hidden', !s.file);
+		$('attachName').textContent = s.file || '';
+		if (!saved.mode) { setMode(s.mode); }
+		if (s.installed && s.outdated && !chat.querySelector('.banner.info')) {
+			const b = banner('<b>Update DevOrch</b> (you have ' + esc(s.version) + '). The chat panel needs a newer release. Update with this command; the terminal opens with it typed in, press Enter to run:<code class="cmd">' + esc(s.installCommand) + '</code><button class="primary" id="doInstall" type="button">Open terminal</button> <button class="link" id="doRecheck" type="button">I updated it</button>', 'info');
+			b.querySelector('#doInstall').onclick = () => vscode.postMessage({ type: 'install' });
+			b.querySelector('#doRecheck').onclick = () => { b.remove(); vscode.postMessage({ type: 'refresh' }); };
+		}
+		if (!s.installed && !chat.querySelector('.banner.info')) {
+			const b = banner('<b>DevOrch is not installed</b> (looked for <code>' + esc(s.exe) + '</code>).<br>Install it with this command; the terminal will open with it typed in, press Enter to run:<code class="cmd">' + esc(s.installCommand) + '</code><button class="primary" id="doInstall" type="button">Open terminal</button> <button class="link" id="doRecheck" type="button">I installed it</button>', 'info');
+			b.querySelector('#doInstall').onclick = () => vscode.postMessage({ type: 'install' });
+			b.querySelector('#doRecheck').onclick = () => { b.remove(); vscode.postMessage({ type: 'refresh' }); };
+		}
+	}
+
+	function renderHistory(rows) {
+		const box = $('history');
+		box.innerHTML = '';
+		if (!rows.length) { box.appendChild(el('div', 'empty', '<h2>No conversations yet</h2>Chats you start in this folder show up here.')); return; }
+		rows.forEach((r) => {
+			const row = el('div', 'row' + (r.id === currentId ? ' current' : ''));
+			const open = el('button', 'open', '<span class="t">' + esc(r.title || 'Untitled') + '</span><span class="s">' + esc(r.provider + '/' + r.model + ' · ' + r.messages + ' messages') + '</span>');
+			open.onclick = () => { vscode.postMessage({ type: 'loadSession', id: r.id }); toggleHistory(false); };
+			const del = el('button', 'icon-btn', '✕'); del.title = 'Delete'; del.setAttribute('aria-label', 'Delete conversation');
+			del.onclick = () => vscode.postMessage({ type: 'deleteSession', id: r.id });
+			row.append(open, del); box.appendChild(row);
+		});
+	}
+	let currentId = null;
+
+	function toggleHistory(show) {
+		const on = show === undefined ? $('history').classList.contains('hidden') : show;
+		$('history').classList.toggle('hidden', !on);
+		chat.classList.toggle('hidden', on);
+		$('btnHistory').setAttribute('aria-pressed', String(on));
+		if (on) { vscode.postMessage({ type: 'refresh' }); }
+	}
+
+	function reset() {
+		chat.querySelectorAll('.msg, .tool, .banner, .thinking').forEach((n) => n.remove());
+		$('empty').classList.remove('hidden');
+		currentId = null; thinking = null; busy = false;
+		$('btnSend').classList.remove('hidden'); $('btnStop').classList.add('hidden');
+	}
+
+	window.addEventListener('message', (e) => {
+		const m = e.data;
+		switch (m.type) {
+			case 'status': renderStatus(m); break;
+			case 'sessions': renderHistory(m.rows); break;
+			case 'cleared': reset(); break;
+			case 'loaded':
+				reset(); currentId = m.sessionId;
+				m.messages.forEach((x) => x.role === 'user' ? userMsg(x.content) : assistantMsg(x.content));
+				break;
+			case 'skills': skills = m.rows; if (menuKind === 'cmd') { updateMenu(); } break;
+			case 'files': if (m.query === fileQuery) { fileResults = m.files; if (menuKind === 'file') { menuIndex = 0; updateMenu(); } } break;
+			case 'prefill': input.value = m.text; grow(); input.focus(); break;
+			case 'start': break;
+			case 'tool': toolMsg(m); break;
+			case 'answer':
+				assistantMsg(m.text, [m.model, m.ms ? (m.ms / 1000).toFixed(1) + 's' : '', m.tokens ? m.tokens + ' tokens' : '', m.cost ? '$' + m.cost.toFixed(4) : ''].filter(Boolean).join(' · '));
+				break;
+			case 'error':
+				banner(esc(m.text) + (m.notInstalled ? '' : ''));
+				if (m.notInstalled) { vscode.postMessage({ type: 'refresh' }); }
+				break;
+			case 'end':
+				setBusy(false);
+				if (m.cancelled) { add(el('div', 'meta', 'Stopped.')); }
+				input.focus();
+				break;
+		}
+	});
+
+	$('btnSend').onclick = () => send();
+	$('btnStop').onclick = () => vscode.postMessage({ type: 'cancel' });
+	$('btnNew').onclick = () => { vscode.postMessage({ type: 'newChat' }); toggleHistory(false); input.focus(); };
+	$('btnHistory').onclick = () => toggleHistory();
+	$('btnTerminal').onclick = () => vscode.postMessage({ type: 'openTerminal' });
+	$('btnSettings').onclick = () => vscode.postMessage({ type: 'openSettings' });
+	$('modeAuto').onclick = () => setMode('auto');
+	$('modePlan').onclick = () => setMode('plan');
+	document.querySelectorAll('.chip').forEach((c) => { c.onclick = () => send(c.dataset.prompt); });
+	chat.addEventListener('click', (e) => {
+		const b = e.target.closest && e.target.closest('.copy');
+		if (b) { navigator.clipboard && navigator.clipboard.writeText(b.parentElement.querySelector('code').textContent); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1200); }
+	});
+	input.addEventListener('input', () => { grow(); menuIndex = 0; updateMenu(); });
+	input.addEventListener('click', updateMenu);
+	input.addEventListener('blur', () => setTimeout(hideMenu, 120));
+	input.addEventListener('keydown', (e) => {
+		if (menuKind && menuItems.length) {
+			if (e.key === 'ArrowDown') { e.preventDefault(); menuIndex = (menuIndex + 1) % menuItems.length; drawMenu(); return; }
+			if (e.key === 'ArrowUp') { e.preventDefault(); menuIndex = (menuIndex - 1 + menuItems.length) % menuItems.length; drawMenu(); return; }
+			if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.isComposing)) { e.preventDefault(); pick(menuIndex); return; }
+			if (e.key === 'Escape') { e.preventDefault(); hideMenu(); return; }
+		}
+		if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+		if (e.key === 'Escape' && busy) { vscode.postMessage({ type: 'cancel' }); }
+	});
+	vscode.postMessage({ type: 'ready' });
+	window.addEventListener('focus', () => vscode.postMessage({ type: 'refresh' }));
+})();
+</script>
 </body>
 </html>
