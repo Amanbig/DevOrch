@@ -6,7 +6,7 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import {
 	buildAskArgs, explainFailure, friendlyError, permissionReply, PermissionChoice, supportsApprovals, supportsSessions, Mode, parseMessages, parseSessions, parseStreamLine,
-	ResultEvent, withFileMention, parseSkills, splitSkillCommand,
+	pickWorkDir, ResultEvent, withFileMention, parseSkills, splitSkillCommand,
 } from './cli';
 
 const INSTALL_SH = 'curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh';
@@ -67,12 +67,17 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 		return vscode.workspace.getConfiguration('devorch').get<string>('executablePath') || 'devorch';
 	}
 
-	private cwd(): string {
-		return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+	/** The open folder DevOrch works in, or undefined when none is open. */
+	private cwd(): string | undefined {
+		const active = vscode.window.activeTextEditor?.document.uri;
+		return pickWorkDir(
+			(vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath),
+			active?.scheme === 'file' ? active.fsPath : undefined);
 	}
 
 	private run(args: string[]): Promise<{ stdout: string; stderr: string; code: number | null }> {
 		return new Promise((resolve) => {
+			// without an open folder, only commands that do not depend on the directory run (cwd falls back to the extension host's)
 			childProcess.execFile(this.exe(), args, { cwd: this.cwd(), maxBuffer: 16 * 1024 * 1024, windowsHide: true },
 				(error, stdout, stderr) => {
 					const e = error as (NodeJS.ErrnoException & { code?: number | string }) | null;
@@ -101,6 +106,7 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 			model: cfg.get<string>('defaultModel') || '',
 			mode: this.defaultMode(cfg.get<string>('defaultMode')),
 			file: this.activeFile(),
+			folder: this.cwd() ? path.basename(this.cwd() as string) : '',
 			installCommand: process.platform === 'win32' ? INSTALL_PS : INSTALL_SH,
 		});
 	}
@@ -142,6 +148,7 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async sendSessions() {
+		if (!this.cwd()) { this.post({ type: 'sessions', rows: [] }); return; }  // --here needs a folder
 		const { stdout, code } = await this.run(['sessions', 'list', '--here', '--output', 'json', '--limit', '30']);
 		this.post({ type: 'sessions', rows: code === 0 ? parseSessions(stdout) : [] });
 	}
@@ -185,6 +192,12 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private send(text: string, mode: Mode, attachFile: boolean) {
+		const cwd = this.cwd();
+		if (!cwd) {
+			this.post({ type: 'error', text: 'Open a folder first (File > Open Folder). DevOrch works in the folder you have open, and will not run in your home directory.' });
+			this.post({ type: 'end' });
+			return;
+		}
 		const cmd = splitSkillCommand(text, this.skills);
 		if ((!text.trim() && !cmd.skill) || this.proc) { return; }
 		const cfg = vscode.workspace.getConfiguration('devorch');
@@ -201,7 +214,7 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 
 		this.post({ type: 'start' });
 		const proc = childProcess.spawn(this.exe(), args, {
-			cwd: this.cwd(), env: { ...process.env, PYTHONUNBUFFERED: '1', NO_COLOR: '1' }, windowsHide: true,
+			cwd, env: { ...process.env, PYTHONUNBUFFERED: '1', NO_COLOR: '1' }, windowsHide: true,
 			// stdin carries permission answers in ask mode; otherwise nothing can wait for a keypress
 			stdio: [mode === 'ask' ? 'pipe' : 'ignore', 'pipe', 'pipe'],
 		});

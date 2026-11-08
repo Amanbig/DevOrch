@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **VS Code extension 0.1.2: it now always works in the folder you have open.** With no folder open it used to run in
+  your home directory (and could list or change files there). Now it uses the open folder (in a multi-root window,
+  the one containing the active file), shows it in the panel header, and refuses to run, with a notice, when no
+  folder is open. The terminal commands start in that folder too.
+- The extension's `publisher` is `Procoder588` (it said `amanbig`, which the Marketplace rejected).
+
 ## 0.5.4
 
 Approve DevOrch's actions inside VS Code, and sub-agents no longer skip your approvals.

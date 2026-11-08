@@ -1,7 +1,15 @@
 import * as vscode from 'vscode';
 import * as childProcess from 'child_process';
 import { DevOrchChatViewProvider } from './chatViewProvider';
-import { parseSessions, selectionPrompt } from './cli';
+import { parseSessions, pickWorkDir, selectionPrompt } from './cli';
+
+/** Terminal options that start in the open folder (VS Code would otherwise start wherever it likes). */
+function terminalIn(name: string): vscode.TerminalOptions {
+	const active = vscode.window.activeTextEditor?.document.uri;
+	const cwd = pickWorkDir((vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath),
+		active?.scheme === 'file' ? active.fsPath : undefined);
+	return cwd ? { name, cwd } : { name };
+}
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('DevOrch Code Assistant extension is active!');
@@ -20,7 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const config = vscode.workspace.getConfiguration('devorch');
 		const exePath = config.get<string>('executablePath') || 'devorch';
 		
-		const terminal = vscode.window.createTerminal('DevOrch REPL');
+		const terminal = vscode.window.createTerminal(terminalIn('DevOrch REPL'));
 		terminal.sendText(exePath);
 		terminal.show();
 	});
@@ -29,7 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// Command: continue the latest conversation in this folder (terminal)
 	context.subscriptions.push(vscode.commands.registerCommand('devorch-code.continueRepl', () => {
 		const exePath = vscode.workspace.getConfiguration('devorch').get<string>('executablePath') || 'devorch';
-		const terminal = vscode.window.createTerminal('DevOrch');
+		const terminal = vscode.window.createTerminal(terminalIn('DevOrch'));
 		terminal.sendText(`${exePath} --continue`);
 		terminal.show();
 	}));
@@ -52,7 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const exePath = config.get<string>('executablePath') || 'devorch';
 
 		if (sessionId && typeof sessionId === 'string') {
-			const terminal = vscode.window.createTerminal(`DevOrch: ${sessionId}`);
+			const terminal = vscode.window.createTerminal(terminalIn(`DevOrch: ${sessionId}`));
 			terminal.sendText(`${exePath} --resume ${sessionId}`);
 			terminal.show();
 			return;
@@ -60,7 +68,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// Otherwise, pick from the conversations started in this folder
 		childProcess.execFile(exePath, ['sessions', 'list', '--here', '--output', 'json', '--limit', '30'],
-			{ cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, windowsHide: true }, async (error, stdout) => {
+			{ cwd: terminalIn('').cwd as string | undefined, windowsHide: true }, async (error, stdout) => {
 				if (error) {
 					vscode.window.showErrorMessage(`Could not list DevOrch conversations: ${error.message}`);
 					return;
@@ -79,7 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
 					})),
 					{ placeHolder: 'Select a conversation to resume' });
 				if (picked) {
-					const terminal = vscode.window.createTerminal(`DevOrch: ${picked.id}`);
+					const terminal = vscode.window.createTerminal(terminalIn(`DevOrch: ${picked.id}`));
 					terminal.sendText(`${exePath} --resume ${picked.id}`);
 					terminal.show();
 				}

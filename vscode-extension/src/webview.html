@@ -150,6 +150,7 @@
 </header>
 
 <main id="chat" aria-live="polite">
+	<div class="banner info hidden" id="noFolder"><b>No folder is open.</b> DevOrch works in the folder you have open, so open one (File → Open Folder) before asking it to do anything.</div>
 	<div class="empty" id="empty">
 		<h2>What are we working on?</h2>
 		<div>DevOrch can read and change files in this folder.</div>
@@ -371,7 +372,9 @@
 
 	function renderStatus(s) {
 		status = s;
-		$('sub').textContent = s.installed ? (s.version + (s.provider ? ' · ' + s.provider : '') + (s.model ? '/' + s.model : '')) : 'not installed';
+		$('sub').textContent = s.installed ? (s.version + (s.provider ? ' · ' + s.provider : '') + (s.model ? '/' + s.model : '') + (s.folder ? ' · ' + s.folder : '')) : 'not installed';
+		$('sub').title = s.folder ? 'DevOrch works in the folder ' + s.folder : '';
+		$('noFolder').classList.toggle('hidden', !!s.folder || !s.installed);
 		$('modeAsk').classList.toggle('hidden', !s.approvals);
 		if (!s.approvals && mode === 'ask') { setMode('auto'); }
 		$('attachWrap').classList.toggle('hidden', !s.file);
@@ -413,7 +416,7 @@
 	}
 
 	function reset() {
-		chat.querySelectorAll('.msg, .tool, .banner, .thinking').forEach((n) => n.remove());
+		chat.querySelectorAll('.msg, .tool, .banner:not(#noFolder), .perm, .thinking').forEach((n) => n.remove());
 		$('empty').classList.remove('hidden');
 		currentId = null; thinking = null; busy = false;
 		$('btnSend').classList.remove('hidden'); $('btnStop').classList.add('hidden');

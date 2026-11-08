@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 // Everything that knows how to talk to the `devorch` command line. No `vscode` imports here, so it
 // can be tested with plain Node.
 
@@ -188,4 +190,21 @@ export function splitSkillCommand(text: string, skills: string[]): { skill?: str
 	const m = /^\/([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
 	if (m && skills.includes(m[1])) { return { skill: m[1], rest: (m[2] ?? '').trim() }; }
 	return { rest: text };
+}
+
+/**
+ * The folder DevOrch should work in: the open folder that contains the active file (multi-root windows),
+ * else the first open folder. Undefined when no folder is open: never fall back to the home directory or
+ * wherever VS Code happened to start, because DevOrch can edit files and run commands there.
+ */
+export function pickWorkDir(folders: string[], activeFile?: string): string | undefined {
+	if (folders.length === 0) { return undefined; }
+	if (activeFile) {
+		const inside = folders.filter(f => {
+			const rel = path.relative(f, activeFile);
+			return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+		});
+		if (inside.length > 0) { return inside.sort((a, b) => b.length - a.length)[0]; }  // the innermost
+	}
+	return folders[0];
 }
