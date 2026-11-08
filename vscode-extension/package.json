@@ -3,7 +3,7 @@
   "displayName": "DevOrch",
   "description": "Chat with the DevOrch AI coding assistant from VS Code: any model provider, runs in your project, asks before it changes things.",
   "version": "0.1.0",
-  "publisher": "amanbig",
+  "publisher": "Procoder588",
   "license": "MIT",
   "icon": "media/icon.png",
   "repository": {
