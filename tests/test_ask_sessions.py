@@ -125,3 +125,11 @@ def test_sessions_list_and_messages_as_json(provider):
 def test_sessions_messages_for_an_unknown_id_fails():
     result = runner.invoke(app, ["sessions", "messages", "nope1234"])
     assert result.exit_code == 1
+
+
+def test_skills_as_json():
+    result = runner.invoke(app, ["skills", "--output", "json"])
+    rows = json.loads(result.stdout)
+    assert result.exit_code == 0 and rows
+    assert {"name", "description", "source"} <= set(rows[0])
+    assert "commit" in [r["name"] for r in rows]

@@ -6,7 +6,7 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import {
 	buildAskArgs, explainFailure, supportsSessions, Mode, parseMessages, parseSessions, parseStreamLine,
-	ResultEvent, withFileMention,
+	ResultEvent, withFileMention, parseSkills, splitSkillCommand,
 } from './cli';
 
 const INSTALL_SH = 'curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh';
@@ -18,6 +18,7 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 	private proc?: childProcess.ChildProcess;
 	private sessionId?: string;
 	private pendingPrompt?: string;
+	private skills: string[] = [];
 
 	constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -29,7 +30,8 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 
 		view.webview.onDidReceiveMessage(async (m) => {
 			switch (m.type) {
-				case 'ready': await this.sendStatus(); await this.sendSessions(); this.flushPending(); break;
+				case 'ready': await this.sendStatus(); await this.sendSessions(); await this.sendSkills(); this.flushPending(); break;
+				case 'files': await this.sendFiles(String(m.query ?? '')); break;
 				case 'send': this.send(String(m.text ?? ''), m.mode === 'plan' ? 'plan' : 'auto', !!m.attachFile); break;
 				case 'cancel': this.cancel(); break;
 				case 'newChat': this.cancel(); this.sessionId = undefined; this.post({ type: 'cleared' }); break;
@@ -105,6 +107,25 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 		return vscode.workspace.asRelativePath(doc.uri, false);
 	}
 
+	private async sendSkills() {
+		const { stdout, code } = await this.run(['skills', '--output', 'json']);
+		const rows = code === 0 ? parseSkills(stdout) : [];
+		this.skills = rows.map(r => r.name);
+		this.post({ type: 'skills', rows });
+	}
+
+	private async sendFiles(query: string) {
+		const q = query.toLowerCase();
+		const found = await vscode.workspace.findFiles('**/*', '**/{node_modules,.git,dist,out,build,.venv,venv,__pycache__}/**', 400);
+		const rels = found.map(u => vscode.workspace.asRelativePath(u, false).replace(/\\/g, '/'));
+		const score = (r: string) => {
+			const name = r.slice(r.lastIndexOf('/') + 1).toLowerCase();
+			return name.startsWith(q) ? 0 : name.includes(q) ? 1 : r.toLowerCase().includes(q) ? 2 : 9;
+		};
+		const files = rels.filter(r => score(r) < 9).sort((a, b) => score(a) - score(b) || a.length - b.length).slice(0, 8);
+		this.post({ type: 'files', query, files });
+	}
+
 	private async sendSessions() {
 		const { stdout, code } = await this.run(['sessions', 'list', '--here', '--output', 'json', '--limit', '30']);
 		this.post({ type: 'sessions', rows: code === 0 ? parseSessions(stdout) : [] });
@@ -149,12 +170,13 @@ export class DevOrchChatViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private send(text: string, mode: Mode, attachFile: boolean) {
-		if (!text.trim() || this.proc) { return; }
+		const cmd = splitSkillCommand(text, this.skills);
+		if ((!text.trim() && !cmd.skill) || this.proc) { return; }
 		const cfg = vscode.workspace.getConfiguration('devorch');
-		const prompt = withFileMention(text.trim(), attachFile ? this.activeFile() : undefined);
+		const prompt = withFileMention(cmd.rest.trim(), attachFile ? this.activeFile() : undefined);
 		const servers = (cfg.get<string>('activeMcpServers') || '').split(',').map(s => s.trim()).filter(Boolean);
 		const args = buildAskArgs({
-			prompt, mode,
+			prompt: prompt.trim(), mode, skill: cmd.skill,
 			sessionId: this.sessionId,
 			provider: cfg.get<string>('defaultProvider') || undefined,
 			model: cfg.get<string>('defaultModel') || undefined,

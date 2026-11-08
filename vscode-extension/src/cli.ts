@@ -11,6 +11,7 @@ export interface AskOptions {
 	model?: string;
 	noMcp?: boolean;
 	mcpServers?: string[];
+	skill?: string;
 }
 
 /** Arguments for one chat turn. A new chat starts with --save-session; later turns --resume it. */
@@ -29,8 +30,9 @@ export function buildAskArgs(o: AskOptions): string[] {
 	} else {
 		for (const s of o.mcpServers ?? []) { args.push('--mcp', s); }
 	}
+	if (o.skill) { args.push('--skill', o.skill); }
 	// the prompt goes last, after `--`, so a message starting with "-" is not read as an option
-	args.push('--', o.prompt);
+	if (o.prompt) { args.push('--', o.prompt); }
 	return args;
 }
 
@@ -130,4 +132,22 @@ export function withFileMention(prompt: string, relPath: string | undefined): st
 /** Does this devorch's `ask --help` list the session options the chat panel relies on? */
 export function supportsSessions(askHelp: string): boolean {
 	return /--save-session/.test(askHelp) && /--resume/.test(askHelp);
+}
+
+export interface SkillRow { name: string; description: string; source: string }
+
+export function parseSkills(stdout: string): SkillRow[] {
+	try {
+		const rows = JSON.parse(stdout);
+		return Array.isArray(rows) ? rows : [];
+	} catch {
+		return [];
+	}
+}
+
+/** "/review focus on security" -> { skill: "review", rest: "focus on security" } when "review" is a known skill. */
+export function splitSkillCommand(text: string, skills: string[]): { skill?: string; rest: string } {
+	const m = /^\/([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
+	if (m && skills.includes(m[1])) { return { skill: m[1], rest: (m[2] ?? '').trim() }; }
+	return { rest: text };
 }

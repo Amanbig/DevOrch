@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert';
-import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt, supportsSessions } from '../cli';
+import { buildAskArgs, parseStreamLine, explainFailure, parseSessions, parseMessages, withFileMention, selectionPrompt, supportsSessions, splitSkillCommand, parseSkills } from '../cli';
 
 test('a new chat saves a session and passes the prompt after --', () => {
 	const a = buildAskArgs({ prompt: '-rf is not an option', mode: 'auto' });
@@ -64,4 +64,21 @@ test('old releases without ask sessions are detected from ask --help', () => {
 	assert.strictEqual(supportsSessions('Options:\n --provider\n --save-session\n --resume -r'), true);
 	assert.strictEqual(supportsSessions('Options:\n --provider\n --model\n --output'), false);
 	assert.strictEqual(supportsSessions(''), false);
+});
+
+test('slash skills: only known skills are treated as commands', () => {
+	const known = ['commit', 'review'];
+	assert.deepStrictEqual(splitSkillCommand('/review focus on security', known), { skill: 'review', rest: 'focus on security' });
+	assert.deepStrictEqual(splitSkillCommand('/commit', known), { skill: 'commit', rest: '' });
+	assert.deepStrictEqual(splitSkillCommand('/usr/bin is a path', known), { rest: '/usr/bin is a path' });
+	assert.deepStrictEqual(splitSkillCommand('/nope x', known), { rest: '/nope x' });
+	assert.deepStrictEqual(splitSkillCommand('please /review', known), { rest: 'please /review' });
+});
+
+test('a skill run may have no prompt, and the prompt still goes after --', () => {
+	const a = buildAskArgs({ prompt: '', mode: 'auto', skill: 'commit' });
+	assert.ok(a.includes('--skill') && !a.includes('--'));
+	const b = buildAskArgs({ prompt: 'focus', mode: 'auto', skill: 'review' });
+	assert.deepStrictEqual(b.slice(-4), ['--skill', 'review', '--', 'focus']);
+	assert.deepStrictEqual(parseSkills('nope'), []);
 });
