@@ -2,7 +2,7 @@
 # DevOrch installer for Linux and macOS.   https://github.com/Amanbig/DevOrch
 #
 #   curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --version 0.5.2
+#   curl -fsSL https://raw.githubusercontent.com/Amanbig/DevOrch/main/install.sh | sh -s -- --version 0.5.3
 #
 # Installs the `devorch` command in its own isolated environment, so it never touches your system Python.
 # It picks the first available of: uv, pipx, or a private virtualenv (needs Python 3.10+). If none of

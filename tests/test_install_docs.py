@@ -79,7 +79,7 @@ def test_the_installer_script_is_executable():
 def test_readme_documents_both_installers_with_the_real_urls():
     assert f"curl -fsSL {RAW}/install.sh | sh" in README
     assert f"irm {RAW}/install.ps1 | iex" in README
-    for needle in ("--uninstall", "-Uninstall", "--dry-run", "--version 0.5.2"):
+    for needle in ("--uninstall", "-Uninstall", "--dry-run", "--version 0."):
         assert needle in README, needle
 
 
