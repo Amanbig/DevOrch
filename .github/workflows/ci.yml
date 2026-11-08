@@ -216,6 +216,9 @@ jobs:
       - name: Type-check, lint and bundle
         run: npm run package
 
+      - name: Unit tests
+        run: npm test
+
       - name: Package the .vsix and check the chat page is inside it
         run: |
           npx --yes @vscode/vsce package --no-dependencies -o devorch-code.vsix
